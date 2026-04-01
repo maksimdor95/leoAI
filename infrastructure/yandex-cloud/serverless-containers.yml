@@ -1,0 +1,124 @@
+# Yandex Cloud Serverless Containers конфигурация
+# Используйте этот файл для создания контейнеров через yc CLI
+
+# User Profile Service
+user-profile-container:
+  name: jack-user-profile
+  description: 'User Profile Service for Jack AI'
+  image-url: 'cr.yandex/YOUR_REGISTRY/jack-ai/user-profile:latest'
+  memory: 512MB
+  cores: 1
+  concurrency: 4
+  timeout: 30s
+  environment:
+    NODE_ENV: production
+    PORT: '8080'
+    JWT_SECRET: '${JWT_SECRET}'
+    DB_HOST: '${DB_HOST}'
+    DB_PORT: '5432'
+    DB_NAME: '${DB_NAME}'
+    DB_USER: '${DB_USER}'
+    DB_PASSWORD: '${DB_PASSWORD}'
+  service-account-id: '${SERVICE_ACCOUNT_ID}'
+
+# Conversation Service
+conversation-container:
+  name: jack-conversation
+  description: 'Conversation Service with WebSocket support'
+  image-url: 'cr.yandex/YOUR_REGISTRY/jack-ai/conversation:latest'
+  memory: 1024MB
+  cores: 1
+  concurrency: 8
+  timeout: 300s # Дольше для WebSocket соединений
+  environment:
+    NODE_ENV: production
+    PORT: '8080'
+    JWT_SECRET: '${JWT_SECRET}'
+    DB_HOST: '${DB_HOST}'
+    DB_PORT: '5432'
+    DB_NAME: '${DB_NAME}'
+    DB_USER: '${DB_USER}'
+    DB_PASSWORD: '${DB_PASSWORD}'
+    REDIS_HOST: '${REDIS_HOST}'
+    REDIS_PORT: '6379'
+    YC_FOLDER_ID: '${YC_FOLDER_ID}'
+    YC_API_KEY: '${YC_API_KEY}'
+  service-account-id: '${SERVICE_ACCOUNT_ID}'
+
+# AI/NLP Service
+ai-nlp-container:
+  name: jack-ai-nlp
+  description: 'AI/NLP Service with YandexGPT integration'
+  image-url: 'cr.yandex/YOUR_REGISTRY/jack-ai/ai-nlp:latest'
+  memory: 1024MB
+  cores: 1
+  concurrency: 4
+  timeout: 120s # Для AI запросов
+  environment:
+    YC_FOLDER_ID: '${YC_FOLDER_ID}'
+    YC_API_KEY: '${YC_API_KEY}'
+    REDIS_HOST: '${REDIS_HOST}'
+    REDIS_PORT: '6379'
+  service-account-id: '${SERVICE_ACCOUNT_ID}'
+
+# Job Matching Service
+job-matching-container:
+  name: jack-job-matching
+  description: 'Job Matching Service with scraping'
+  image-url: 'cr.yandex/YOUR_REGISTRY/jack-ai/job-matching:latest'
+  memory: 1024MB
+  cores: 2
+  concurrency: 2
+  timeout: 300s # Для скрейпинга
+  environment:
+    NODE_ENV: production
+    PORT: '8080'
+    JWT_SECRET: '${JWT_SECRET}'
+    DB_HOST: '${DB_HOST}'
+    DB_PORT: '5432'
+    DB_NAME: '${DB_NAME}'
+    DB_USER: '${DB_USER}'
+    DB_PASSWORD: '${DB_PASSWORD}'
+    REDIS_HOST: '${REDIS_HOST}'
+    REDIS_PORT: '6379'
+  service-account-id: '${SERVICE_ACCOUNT_ID}'
+
+# Email Service
+email-container:
+  name: jack-email
+  description: 'Email Notification Service'
+  image-url: 'cr.yandex/YOUR_REGISTRY/jack-ai/email:latest'
+  memory: 512MB
+  cores: 1
+  concurrency: 4
+  timeout: 60s
+  environment:
+    NODE_ENV: production
+    PORT: '8080'
+    JWT_SECRET: '${JWT_SECRET}'
+    DB_HOST: '${DB_HOST}'
+    DB_PORT: '5432'
+    DB_NAME: '${DB_NAME}'
+    DB_USER: '${DB_USER}'
+    DB_PASSWORD: '${DB_PASSWORD}'
+    SENDGRID_API_KEY: '${SENDGRID_API_KEY}'
+    SENDGRID_FROM_EMAIL: '${SENDGRID_FROM_EMAIL}'
+  service-account-id: '${SERVICE_ACCOUNT_ID}'
+
+# API Gateway
+gateway-container:
+  name: jack-gateway
+  description: 'API Gateway for Jack AI'
+  image-url: 'cr.yandex/YOUR_REGISTRY/jack-ai/gateway:latest'
+  memory: 512MB
+  cores: 1
+  concurrency: 16
+  timeout: 30s
+  environment:
+    JWT_SECRET: '${JWT_SECRET}'
+    USER_PROFILE_SERVICE_URL: 'https://jack-user-profile.${FOLDER_ID}.serverless.yandexcloud.net'
+    CONVERSATION_SERVICE_URL: 'https://jack-conversation.${FOLDER_ID}.serverless.yandexcloud.net'
+    AI_NLP_SERVICE_URL: 'https://jack-ai-nlp.${FOLDER_ID}.serverless.yandexcloud.net'
+    JOB_MATCHING_SERVICE_URL: 'https://jack-job-matching.${FOLDER_ID}.serverless.yandexcloud.net'
+    EMAIL_SERVICE_URL: 'https://jack-email.${FOLDER_ID}.serverless.yandexcloud.net'
+  service-account-id: '${SERVICE_ACCOUNT_ID}'

@@ -1,0 +1,285 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ant Design styles */
+@import '~antd/dist/reset.css';
+
+html {
+  scroll-behavior: smooth;
+  height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+#__next {
+  height: 100%;
+}
+
+/* Fix mobile viewport issues */
+@supports (-webkit-touch-callout: none) {
+  html {
+    height: -webkit-fill-available;
+  }
+  body {
+    height: -webkit-fill-available;
+  }
+  #__next {
+    height: -webkit-fill-available;
+  }
+}
+
+/* Prevent horizontal scroll on mobile */
+* {
+  box-sizing: border-box;
+}
+
+.ant-layout {
+  overflow-x: hidden;
+}
+
+.ant-layout-content {
+  overflow-x: hidden;
+}
+
+.voice-wave {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 3px;
+  height: 72px;
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.voice-wave span {
+  display: block;
+  width: 4px;
+  height: 32px;
+  background: linear-gradient(180deg, #34d399 0%, #22c55e 100%);
+  border-radius: 9999px;
+  animation: voiceWave 1.2s ease-in-out infinite;
+  transform-origin: center bottom;
+  flex: 1;
+  max-width: 6px;
+}
+
+.voice-wave span:nth-child(odd) {
+  animation-duration: 1.1s;
+}
+
+.voice-wave span:nth-child(even) {
+  animation-duration: 1.3s;
+}
+
+.voice-wave span:nth-child(3n) {
+  animation-duration: 0.9s;
+}
+
+.voice-wave span:nth-child(5n) {
+  animation-duration: 1.4s;
+}
+
+.voice-wave--paused span {
+  animation-play-state: paused;
+  opacity: 0.25;
+}
+
+@keyframes voiceWave {
+  0% {
+    transform: scaleY(0.3);
+    opacity: 0.4;
+  }
+  25% {
+    transform: scaleY(0.8);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scaleY(1.2);
+    opacity: 1;
+  }
+  75% {
+    transform: scaleY(0.6);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scaleY(0.3);
+    opacity: 0.4;
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.55);
+}
+
+/* Profile modal scrollbar */
+.ant-modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ant-modal-body::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.ant-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 4px;
+}
+
+.ant-modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.55);
+}
+
+/* Better text wrapping */
+.break-words {
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.overflow-wrap-anywhere {
+  overflow-wrap: anywhere;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.8s ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes gradientText {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient-text {
+  background: linear-gradient(90deg, #ffffff 0%, #22c55e 50%, #ffffff 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientText 5s linear infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translateY(-30px);
+    opacity: 0.5;
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+@keyframes bounceSlow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(10px);
+  }
+}
+
+.animate-bounce-slow {
+  animation: bounceSlow 1.5s ease-in-out infinite;
+}
+
+@keyframes scrollIndicator {
+  0% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(12px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+}
+
+.animate-scroll-indicator {
+  animation: scrollIndicator 1.5s ease-in-out infinite;
+}
+
+/* Улучшенные стили для чата */
+.chat-container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.chat-main-section {
+  min-height: 450px;
+}
+
+.chat-sidebar {
+  max-height: 280px;
+}
+
+/* Предотвращение белых полос и артефактов */
+.ant-layout {
+  overflow-x: hidden;
+}
+
+.ant-layout-content {
+  overflow-x: hidden;
+}
+
+/* Адаптивные размеры для разных экранов */
+@media (max-width: 1024px) {
+  /* Убираем все масштабирование */
+}
+
+@media (max-width: 768px) {
+  /* Убираем все масштабирование */
+}
+

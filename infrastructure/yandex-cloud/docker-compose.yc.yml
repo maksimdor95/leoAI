@@ -1,0 +1,242 @@
+# Docker Compose для локального тестирования с Yandex Cloud сервисами
+# Используйте этот файл для тестирования с реальными облачными сервисами
+
+version: '3.8'
+
+services:
+  # PostgreSQL - заменить на Managed Service for PostgreSQL в проде
+  postgres:
+    image: postgres:15-alpine
+    container_name: jack-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-jack_ai}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - jack-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $POSTGRES_USER']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis - заменить на Managed Service for Redis в проде
+  redis:
+    image: redis:7-alpine
+    container_name: jack-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - jack-network
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway - заменить на Yandex API Gateway в проде
+  gateway:
+    build:
+      context: ../../gateway
+      dockerfile: Dockerfile
+    container_name: jack-gateway
+    restart: unless-stopped
+    ports:
+      - '${GATEWAY_PORT:-8080}:80'
+    environment:
+      - USER_PROFILE_SERVICE_URL=http://user-profile:3001
+      - CONVERSATION_SERVICE_URL=http://conversation:3002
+      - AI_NLP_SERVICE_URL=http://ai-nlp:3003
+      - JOB_MATCHING_SERVICE_URL=http://job-matching:3004
+      - EMAIL_SERVICE_URL=http://email:3005
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret}
+    networks:
+      - jack-network
+    depends_on:
+      - postgres
+      - redis
+      - user-profile
+      - conversation
+      - ai-nlp
+      - job-matching
+      - email
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # User Profile Service - будет развернут в Serverless Container
+  user-profile:
+    build:
+      context: ../../services/user-profile
+      dockerfile: Dockerfile
+    container_name: jack-user-profile
+    restart: unless-stopped
+    ports:
+      - '3001:3001'
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-jack_ai}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret}
+    networks:
+      - jack-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3001/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Conversation Service - будет развернут в Serverless Container
+  conversation:
+    build:
+      context: ../../services/conversation
+      dockerfile: Dockerfile
+    container_name: jack-conversation
+    restart: unless-stopped
+    ports:
+      - '3002:3002'
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-jack_ai}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret}
+      - YC_FOLDER_ID=${YC_FOLDER_ID}
+      - YC_API_KEY=${YC_API_KEY}
+    networks:
+      - jack-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3002/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AI/NLP Service - будет развернут в Serverless Container
+  ai-nlp:
+    build:
+      context: ../../services/ai-nlp
+      dockerfile: Dockerfile
+    container_name: jack-ai-nlp
+    restart: unless-stopped
+    ports:
+      - '3003:3003'
+    environment:
+      - YC_FOLDER_ID=${YC_FOLDER_ID}
+      - YC_API_KEY=${YC_API_KEY}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - jack-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3003/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Job Matching Service - будет развернут в Serverless Container
+  job-matching:
+    build:
+      context: ../../services/job-matching
+      dockerfile: Dockerfile
+    container_name: jack-job-matching
+    restart: unless-stopped
+    ports:
+      - '3004:3004'
+    environment:
+      - NODE_ENV=production
+      - PORT=3004
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-jack_ai}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret}
+    networks:
+      - jack-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3004/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Email Service - будет развернут в Serverless Container
+  email:
+    build:
+      context: ../../services/email
+      dockerfile: Dockerfile
+    container_name: jack-email
+    restart: unless-stopped
+    ports:
+      - '3005:3005'
+    environment:
+      - NODE_ENV=production
+      - PORT=3005
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-jack_ai}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - SENDGRID_FROM_EMAIL=${SENDGRID_FROM_EMAIL}
+    networks:
+      - jack-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3005/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  jack-network:
+    driver: bridge

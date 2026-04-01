@@ -1,0 +1,12 @@
+[
+  {
+    "description": "Delete untagged images older than 24h",
+    "untagged": true,
+    "expire_period": "24h"
+  },
+  {
+    "description": "Keep only 10 latest images with any tag",
+    "tag_regexp": ".*",
+    "retained_top": 10
+  }
+]

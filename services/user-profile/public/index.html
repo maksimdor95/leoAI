@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile Service - Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+            display: none;
+        }
+        .result.success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .result.error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .result pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 12px;
+        }
+        .token-display {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 6px;
+            font-size: 12px;
+            word-break: break-all;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 User Profile Service - Test</h1>
+        
+        <!-- Registration Section -->
+        <div class="section">
+            <h2>1. Регистрация (Register)</h2>
+            <form id="registerForm">
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="registerEmail" required placeholder="user@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Пароль:</label>
+                    <input type="password" id="registerPassword" required placeholder="минимум 6 символов">
+                </div>
+                <div class="form-group">
+                    <label>Имя (необязательно):</label>
+                    <input type="text" id="registerFirstName" placeholder="John">
+                </div>
+                <div class="form-group">
+                    <label>Фамилия (необязательно):</label>
+                    <input type="text" id="registerLastName" placeholder="Doe">
+                </div>
+                <button type="submit">Зарегистрироваться</button>
+            </form>
+            <div class="result" id="registerResult"></div>
+        </div>
+
+        <!-- Login Section -->
+        <div class="section">
+            <h2>2. Авторизация (Login)</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="loginEmail" required placeholder="user@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Пароль:</label>
+                    <input type="password" id="loginPassword" required placeholder="Ваш пароль">
+                </div>
+                <button type="submit">Войти</button>
+            </form>
+            <div class="result" id="loginResult"></div>
+            <div class="token-display" id="tokenDisplay">
+                <strong>Токен:</strong> <span id="tokenValue"></span>
+            </div>
+        </div>
+
+        <!-- Profile Section -->
+        <div class="section">
+            <h2>3. Получить профиль (Get Profile)</h2>
+            <p style="margin-bottom: 15px; color: #666;">Требуется авторизация (токен)</p>
+            <button id="getProfileBtn" type="button">Получить профиль</button>
+            <div class="result" id="profileResult"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3001/api/users';
+        let currentToken = null;
+
+        // Save token to localStorage
+        function saveToken(token) {
+            currentToken = token;
+            localStorage.setItem('token', token);
+            document.getElementById('tokenValue').textContent = token;
+            document.getElementById('tokenDisplay').style.display = 'block';
+        }
+
+        // Load token from localStorage
+        function loadToken() {
+            const token = localStorage.getItem('token');
+            if (token) {
+                currentToken = token;
+                document.getElementById('tokenValue').textContent = token;
+                document.getElementById('tokenDisplay').style.display = 'block';
+            }
+        }
+
+        // Show result
+        function showResult(elementId, data, isSuccess = true) {
+            const element = document.getElementById(elementId);
+            element.className = 'result ' + (isSuccess ? 'success' : 'error');
+            element.style.display = 'block';
+            element.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        }
+
+        // Register form
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                email: document.getElementById('registerEmail').value,
+                password: document.getElementById('registerPassword').value,
+                first_name: document.getElementById('registerFirstName').value || undefined,
+                last_name: document.getElementById('registerLastName').value || undefined
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                showResult('registerResult', result, response.ok);
+                
+                if (response.ok && result.token) {
+                    saveToken(result.token);
+                }
+            } catch (error) {
+                showResult('registerResult', { error: error.message }, false);
+            }
+        });
+
+        // Login form
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                email: document.getElementById('loginEmail').value,
+                password: document.getElementById('loginPassword').value
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                showResult('loginResult', result, response.ok);
+                
+                if (response.ok && result.token) {
+                    saveToken(result.token);
+                }
+            } catch (error) {
+                showResult('loginResult', { error: error.message }, false);
+            }
+        });
+
+        // Get profile
+        async function getProfile() {
+            console.log('🔵 Get profile button clicked');
+            
+            // Try to load token from localStorage if not set
+            if (!currentToken) {
+                const savedToken = localStorage.getItem('token');
+                if (savedToken) {
+                    currentToken = savedToken;
+                    document.getElementById('tokenValue').textContent = savedToken;
+                    document.getElementById('tokenDisplay').style.display = 'block';
+                }
+            }
+            
+            if (!currentToken) {
+                showResult('profileResult', { error: 'Требуется авторизация. Сначала войдите в систему.' }, false);
+                return;
+            }
+
+            console.log('📤 Sending request with token:', currentToken.substring(0, 20) + '...');
+
+            try {
+                const response = await fetch(`${API_URL}/profile`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                console.log('📥 Response status:', response.status);
+                const result = await response.json();
+                console.log('📥 Response data:', result);
+                
+                showResult('profileResult', result, response.ok);
+            } catch (error) {
+                console.error('❌ Get profile error:', error);
+                showResult('profileResult', { error: error.message }, false);
+            }
+        }
+
+        // Add event listener for get profile button
+        document.getElementById('getProfileBtn').addEventListener('click', getProfile);
+
+        // Load token on page load
+        loadToken();
+    </script>
+</body>
+</html>
+

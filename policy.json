@@ -1,0 +1,16 @@
+[
+  {
+    "description": "Очистка старого мусора",
+    "rules": [
+      {
+        "description": "Удалять все образы без тегов через 24 часа",
+        "untagged": true,
+        "expire_period": "24h"
+      },
+      {
+        "description": "Оставлять только 5 последних версий с любыми тегами",
+        "retained_top_count": 5
+      }
+    ]
+  }
+]

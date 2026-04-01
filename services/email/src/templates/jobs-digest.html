@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Подборка вакансий для вас</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 40px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 32px;
+            font-weight: bold;
+            color: #22c55e;
+            margin-bottom: 10px;
+        }
+        h1 {
+            color: #050913;
+            margin: 0;
+            font-size: 24px;
+        }
+        .greeting {
+            margin: 20px 0;
+            color: #555;
+        }
+        .job-card {
+            margin: 25px 0;
+            padding: 20px;
+            background-color: #f9fafb;
+            border-radius: 8px;
+            border-left: 4px solid #22c55e;
+        }
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+        }
+        .job-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #050913;
+            margin: 0;
+        }
+        .job-company {
+            font-size: 16px;
+            color: #555;
+            margin: 5px 0;
+        }
+        .job-location {
+            font-size: 14px;
+            color: #888;
+            margin: 5px 0;
+        }
+        .job-salary {
+            font-size: 16px;
+            font-weight: 600;
+            color: #22c55e;
+        }
+        .job-score {
+            background-color: #22c55e;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .job-description {
+            margin: 15px 0;
+            color: #555;
+            font-size: 14px;
+        }
+        .job-reasons {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #e8f5e9;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        .job-reasons-title {
+            font-weight: 600;
+            color: #050913;
+            margin-bottom: 5px;
+        }
+        .job-reasons-list {
+            margin: 0;
+            padding-left: 20px;
+            color: #555;
+        }
+        .job-button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #22c55e;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            color: #888;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🤖 Jack AI</div>
+            <h1>Подборка вакансий для вас</h1>
+        </div>
+        
+        <div class="greeting">
+            <p>Привет, {{userName}}!</p>
+            <p>Я нашел для вас {{jobs.length}} {{jobs.length === 1 ? 'вакансию' : jobs.length < 5 ? 'вакансии' : 'вакансий'}}, которые могут вам подойти:</p>
+        </div>
+        
+        {{#each jobs}}
+        <div class="job-card">
+            <div class="job-header">
+                <div>
+                    <h2 class="job-title">{{this.title}}</h2>
+                    <div class="job-company">{{this.company}}</div>
+                    <div class="job-location">📍 {{this.location}}</div>
+                    <div class="job-salary">{{this.salary}}</div>
+                </div>
+                <div class="job-score">{{this.score}}%</div>
+            </div>
+            
+            <div class="job-description">
+                {{this.description}}
+            </div>
+            
+            {{#if this.reasons.length}}
+            <div class="job-reasons">
+                <div class="job-reasons-title">Почему эта вакансия вам подходит:</div>
+                <ul class="job-reasons-list">
+                    {{#each this.reasons}}
+                    <li>{{this}}</li>
+                    {{/each}}
+                </ul>
+            </div>
+            {{/if}}
+            
+            <a href="{{this.url}}" class="job-button" target="_blank">Открыть вакансию</a>
+        </div>
+        {{/each}}
+        
+        <div class="footer">
+            <p>Удачного поиска работы!</p>
+            <p style="margin-top: 10px; font-size: 12px;">
+                Если у вас есть вопросы или вы хотите изменить настройки подборки, ответьте на это письмо.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

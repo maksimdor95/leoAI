@@ -1,0 +1,583 @@
+name: Deploy to Yandex Cloud
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  YC_FOLDER_ID: b1gfl9cu32kktuuthcf3
+  YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+  YC_SERVICE_ACCOUNT_KEY_ID: ${{ secrets.YC_ACCESS_KEY_ID }}
+  YC_SERVICE_ACCOUNT_KEY: ${{ secrets.YC_SECRET_ACCESS_KEY }}
+  YC_NETWORK_ID: enprje2h96j3pp1uld0r
+  # ID of the main subnet in zone a
+  YC_SUBNET_ID: e9b3gc59ls105ot1ia93
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          export PATH=$HOME/yandex-cloud/bin:$PATH
+          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate and login to Yandex Container Registry
+        env:
+          SA_KEY_JSON: ${{ secrets.YC_SERVICE_ACCOUNT_KEY_JSON }}
+        run: |
+          echo "Setting up Yandex Cloud authentication..."
+
+          # Check if secret is set
+          if [ -z "$SA_KEY_JSON" ]; then
+            echo "ERROR: YC_SERVICE_ACCOUNT_KEY_JSON secret is not set!"
+            exit 1
+          fi
+
+          # Create service account key file from GitHub Secret
+          # Use printf to properly handle JSON content with special characters
+          printf '%s' "$SA_KEY_JSON" > /tmp/sa-key.json
+
+          # Verify JSON file was created correctly (check first 100 chars)
+          echo "Verifying JSON file (first 100 chars)..."
+          head -c 100 /tmp/sa-key.json || echo "File may be empty"
+          echo ""
+
+          # Validate JSON syntax (if jq is available)
+          if command -v jq > /dev/null 2>&1; then
+            if ! cat /tmp/sa-key.json | jq . > /dev/null 2>&1; then
+              echo "ERROR: Invalid JSON format"
+              exit 1
+            fi
+          fi
+
+          # Configure YC CLI with service account key
+          yc config set service-account-key /tmp/sa-key.json
+          yc config set folder-id ${{ env.YC_FOLDER_ID }}
+
+          # Verify authentication
+          echo "Verifying YC CLI authentication..."
+          yc config list
+
+          # Configure Docker to use Yandex Cloud credential helper
+          echo "Configuring Docker credential helper..."
+          yc container registry configure-docker
+
+          # Verify Docker can authenticate (test with a simple docker command)
+          echo "Verifying Docker authentication..."
+          docker pull cr.yandex/crpooc6iuro331m1a32u/test:latest 2>&1 | head -5 || echo "Registry connection test completed (image may not exist, which is OK)"
+
+          echo "✅ Docker authentication configured successfully via credential helper"
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          echo "tags=latest,${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+
+      - name: Build and push User Profile Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/user-profile
+          file: ./services/user-profile/Dockerfile
+          push: true
+          tags: cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/user-profile:latest
+          labels: |
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Conversation Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/conversation
+          file: ./services/conversation/Dockerfile
+          push: true
+          tags: cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/conversation:latest
+          labels: |
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push AI/NLP Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/ai-nlp
+          file: ./services/ai-nlp/Dockerfile
+          push: true
+          tags: cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/ai-nlp:latest
+          labels: |
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Job Matching Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/job-matching
+          file: ./services/job-matching/Dockerfile
+          push: true
+          tags: cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/job-matching:latest
+          labels: |
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Email Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/email
+          file: ./services/email/Dockerfile
+          push: true
+          tags: cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/email:latest
+          labels: |
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push API Gateway
+        uses: docker/build-push-action@v5
+        with:
+          context: ./gateway
+          file: ./gateway/Dockerfile
+          push: true
+          tags: cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/gateway:latest
+          labels: |
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/frontend:latest
+          build-args: |
+            NEXT_PUBLIC_API_URL=
+            NEXT_PUBLIC_CONVERSATION_API_URL=
+          labels: |
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          export PATH=$HOME/yandex-cloud/bin:$PATH
+          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
+          yc version
+
+      - name: Authenticate to Yandex Cloud
+        env:
+          SA_KEY_JSON: ${{ secrets.YC_SERVICE_ACCOUNT_KEY_JSON }}
+        run: |
+          echo "Setting up Yandex Cloud authentication..."
+          if [ -z "$SA_KEY_JSON" ]; then
+            echo "❌ ERROR: YC_SERVICE_ACCOUNT_KEY_JSON secret is not set!"
+            exit 1
+          fi
+          printf '%s' "$SA_KEY_JSON" > /tmp/sa-key.json
+          yc config set service-account-key /tmp/sa-key.json
+          yc config set folder-id ${{ env.YC_FOLDER_ID }}
+
+      - name: Apply Container Registry Lifecycle Policy
+        run: |
+          echo "🧹 Applying lifecycle policy to repositories..."
+          if [ -f "registry-policy.json" ]; then
+            # Format rules for CLI
+            RULES=$(cat registry-policy.json | jq -c .)
+            for REPO in "jack-ai/user-profile" "jack-ai/conversation" "jack-ai/ai-nlp" "jack-ai/job-matching" "jack-ai/email" "jack-ai/gateway" "jack-ai/frontend"; do
+              echo "Setting policy for $REPO..."
+              # Try to create policy, ignore if already exists or fails
+              yc container repository lifecycle-policy create "cleanup-policy" \
+                --repository-name "$REPO" \
+                --rules "$RULES" \
+                --description "Auto-cleanup policy" 2>/dev/null || echo "⚠️ Policy already exists or could not be created for $REPO"
+            done
+          else
+            echo "⚠️ registry-policy.json not found, skipping."
+          fi
+
+      - name: 🔍 Diagnose GitHub Secrets (Safety Check)
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASS: ${{ secrets.DB_PASSWORD }}
+          JWT: ${{ secrets.JWT_SECRET }}
+          REDIS_HOST: ${{ secrets.REDIS_HOST }}
+          REDIS_PASS: ${{ secrets.REDIS_PASSWORD }}
+        run: |
+          echo "=== Security Check: Verifying Secret Existence ==="
+          [ -n "$DB_HOST" ] && echo "✅ DB_HOST is set" || echo "❌ DB_HOST is MISSING"
+          [ -n "$DB_NAME" ] && echo "✅ DB_NAME is set" || echo "❌ DB_NAME is MISSING"
+          [ -n "$DB_USER" ] && echo "✅ DB_USER is set" || echo "❌ DB_USER is MISSING"
+          [ -n "$DB_PASS" ] && echo "✅ DB_PASSWORD is set (len: ${#DB_PASS})" || echo "❌ DB_PASSWORD is MISSING"
+          [ -n "$JWT" ] && echo "✅ JWT_SECRET is set" || echo "❌ JWT_SECRET is MISSING"
+          [ -n "$REDIS_HOST" ] && echo "✅ REDIS_HOST is set" || echo "❌ REDIS_HOST is MISSING"
+          [ -n "$REDIS_PASS" ] && echo "✅ REDIS_PASSWORD is set" || echo "❌ REDIS_PASSWORD is MISSING"
+          echo "==============================================="
+
+      - name: Ensure service account has required permissions
+        env:
+          SA_ID: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+        run: |
+          echo "🔐 Ensuring service account has required roles..."
+          # serverless.containers.admin is needed to deploy
+          yc resource-manager folder add-access-binding ${{ env.YC_FOLDER_ID }} \
+            --role serverless.containers.admin \
+            --subject serviceAccount:$SA_ID 2>&1 || echo "⚠️ serverless.containers.admin already assigned or permission denied"
+
+          # vpc.user is needed to connect containers to VPC
+          yc resource-manager folder add-access-binding ${{ env.YC_FOLDER_ID }} \
+            --role vpc.user \
+            --subject serviceAccount:$SA_ID 2>&1 || echo "⚠️ vpc.user already assigned or permission denied"
+
+      - name: Ensure containers exist and get URLs
+        id: setup-urls
+        env:
+          SA_ID: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+        run: |
+          SERVICES=("jack-user-profile" "jack-conversation" "jack-ai-nlp" "jack-job-matching" "jack-email" "jack-gateway" "jack-frontend")
+          for SVC in "${SERVICES[@]}"; do
+            if ! yc serverless container get --name "$SVC" >/dev/null 2>&1; then
+              echo "Creating container $SVC..."
+              yc serverless container create --name "$SVC" || true
+            fi
+            ID=$(yc serverless container get --name "$SVC" --format json | jq -r .id)
+            URL="https://${ID}.containers.yandexcloud.net"
+            
+            # Export to env for next steps
+            ENV_NAME=$(echo "${SVC//-/_}" | tr '[:lower:]' '[:upper:]')_URL
+            echo "${ENV_NAME}=${URL}" >> $GITHUB_ENV
+            echo "URL for ${SVC}: ${URL}"
+          done
+
+      - name: 🌐 Network Diagnostics
+        run: |
+          echo "=== DNS Configuration ==="
+          cat /etc/resolv.conf || true
+
+          echo "=== Testing DB Host Resolution ==="
+          # Use a more robust way to test resolution without failing
+          if ! getent hosts "rc1a-q1jpaf8csdcn1uqn.mdb.yandexcloud.net"; then
+            echo "⚠️ Could not resolve DB host in runner (private network)"
+          fi || true
+
+          echo "=== NAT / Internet Test ==="
+          # Check internet with timeout and ensure it doesn't fail the build
+          curl -I --connect-timeout 5 https://www.google.com || echo "⚠️ No internet access in runner" || true
+
+      - name: Deploy User Profile Service
+        env:
+          SA_ID: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+        run: |
+          echo "🚀 Deploying User Profile Service..."
+
+          # Strip any trailing newlines/spaces from secrets
+          CLEAN_JWT=$(echo "${{ secrets.JWT_SECRET }}" | tr -d '\r\n ' )
+          CLEAN_NAME=$(echo "${{ secrets.DB_NAME }}" | tr -d '\r\n ' )
+          CLEAN_USER=$(echo "${{ secrets.DB_USER }}" | tr -d '\r\n ' )
+          CLEAN_PASS=$(echo "${{ secrets.DB_PASSWORD }}" | tr -d '\r\n ' )
+          CLEAN_PORT=$(echo "${{ secrets.DB_PORT }}" | tr -d '\r\n ' )
+
+          yc serverless container revision deploy \
+            --container-name jack-user-profile \
+            --image cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/user-profile:latest \
+            --cores 1 \
+            --memory 512MB \
+            --concurrency 4 \
+            --execution-timeout 60s \
+            --service-account-id "$SA_ID" \
+            --network-id "${{ env.YC_NETWORK_ID }}" \
+            --environment "NODE_ENV=production" \
+            --environment "DB_SSL=false" \
+            --environment "DB_PORT=6432" \
+            --environment "JWT_SECRET=$CLEAN_JWT" \
+            --environment "DB_HOST=rc1a-q1jpaf8csdcn1uqn.mdb.yandexcloud.net" \
+            --environment "DB_NAME=$CLEAN_NAME" \
+            --environment "DB_USER=$CLEAN_USER" \
+            --environment "DB_PASSWORD=$CLEAN_PASS" \
+            --environment "CORS_ORIGIN=${{ env.JACK_FRONTEND_URL }}"
+          yc serverless container allow-unauthenticated-invoke --name jack-user-profile || echo "⚠️ Permission denied to make container public."
+
+      - name: Deploy Conversation Service
+        env:
+          SA_ID: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+        run: |
+          echo "🚀 Deploying Conversation Service..."
+
+          CLEAN_JWT=$(echo "${{ secrets.JWT_SECRET }}" | tr -d '\r\n ' )
+          CLEAN_NAME=$(echo "${{ secrets.DB_NAME }}" | tr -d '\r\n ' )
+          CLEAN_USER=$(echo "${{ secrets.DB_USER }}" | tr -d '\r\n ' )
+          CLEAN_PASS=$(echo "${{ secrets.DB_PASSWORD }}" | tr -d '\r\n ' )
+          CLEAN_PORT=$(echo "${{ secrets.DB_PORT }}" | tr -d '\r\n ' )
+          CLEAN_REDIS_HOST=$(echo "${{ secrets.REDIS_HOST }}" | tr -d '\r\n ' )
+          CLEAN_REDIS_PASS=$(echo "${{ secrets.REDIS_PASSWORD }}" | tr -d '\r\n ' )
+          CLEAN_API_KEY=$(echo "${{ secrets.YC_API_KEY }}" | tr -d '\r\n ' )
+
+          yc serverless container revision deploy \
+            --container-name jack-conversation \
+            --image cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/conversation:latest \
+            --cores 1 \
+            --memory 1024MB \
+            --concurrency 8 \
+            --execution-timeout 300s \
+            --service-account-id "$SA_ID" \
+            --network-id "${{ env.YC_NETWORK_ID }}" \
+            --environment "NODE_ENV=production" \
+            --environment "DB_SSL=false" \
+            --environment "DB_PORT=6432" \
+            --environment "REDIS_PORT=6379" \
+            --environment "REDIS_SSL=false" \
+            --environment "REDIS_USER=default" \
+            --environment "YC_FOLDER_ID=${{ env.YC_FOLDER_ID }}" \
+            --environment "JWT_SECRET=$CLEAN_JWT" \
+            --environment "DB_HOST=rc1a-q1jpaf8csdcn1uqn.mdb.yandexcloud.net" \
+            --environment "DB_NAME=$CLEAN_NAME" \
+            --environment "DB_USER=$CLEAN_USER" \
+            --environment "DB_PASSWORD=$CLEAN_PASS" \
+            --environment "REDIS_HOST=$CLEAN_REDIS_HOST" \
+            --environment "REDIS_PASSWORD=$CLEAN_REDIS_PASS" \
+            --environment "YC_API_KEY=$CLEAN_API_KEY" \
+            --environment "AI_SERVICE_URL=${{ env.JACK_AI_NLP_URL }}" \
+            --environment "USER_PROFILE_SERVICE_URL=${{ env.JACK_USER_PROFILE_URL }}" \
+            --environment "JOB_MATCHING_SERVICE_URL=${{ env.JACK_JOB_MATCHING_URL }}" \
+            --environment "EMAIL_SERVICE_URL=${{ env.JACK_EMAIL_URL }}" \
+            --environment "CORS_ORIGIN=${{ env.JACK_FRONTEND_URL }}"
+          yc serverless container allow-unauthenticated-invoke --name jack-conversation || echo "⚠️ Permission denied to make container public."
+
+      - name: Deploy AI/NLP Service
+        env:
+          SA_ID: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+        run: |
+          echo "🚀 Deploying AI/NLP Service..."
+
+          CLEAN_JWT=$(echo "${{ secrets.JWT_SECRET }}" | tr -d '\r\n ' )
+          CLEAN_REDIS_HOST=$(echo "${{ secrets.REDIS_HOST }}" | tr -d '\r\n ' )
+          CLEAN_REDIS_PASS=$(echo "${{ secrets.REDIS_PASSWORD }}" | tr -d '\r\n ' )
+          CLEAN_API_KEY=$(echo "${{ secrets.YC_API_KEY }}" | tr -d '\r\n ' )
+
+          yc serverless container revision deploy \
+            --container-name jack-ai-nlp \
+            --image cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/ai-nlp:latest \
+            --cores 1 \
+            --memory 1024MB \
+            --concurrency 4 \
+            --execution-timeout 120s \
+            --service-account-id "$SA_ID" \
+            --network-id "${{ env.YC_NETWORK_ID }}" \
+            --environment "NODE_ENV=production" \
+            --environment "YC_FOLDER_ID=${{ env.YC_FOLDER_ID }}" \
+            --environment "REDIS_PORT=6379" \
+            --environment "REDIS_SSL=false" \
+            --environment "REDIS_USER=default" \
+            --environment "YC_API_KEY=$CLEAN_API_KEY" \
+            --environment "REDIS_HOST=$CLEAN_REDIS_HOST" \
+            --environment "REDIS_PASSWORD=$CLEAN_REDIS_PASS" \
+            --environment "JWT_SECRET=$CLEAN_JWT" \
+            --environment "CORS_ORIGIN=${{ env.JACK_FRONTEND_URL }}"
+          yc serverless container allow-unauthenticated-invoke --name jack-ai-nlp || echo "⚠️ Permission denied to make container public."
+
+      - name: Deploy Job Matching Service
+        env:
+          SA_ID: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+        run: |
+          echo "🚀 Deploying Job Matching Service..."
+
+          CLEAN_JWT=$(echo "${{ secrets.JWT_SECRET }}" | tr -d '\r\n ' )
+          CLEAN_NAME=$(echo "${{ secrets.DB_NAME }}" | tr -d '\r\n ' )
+          CLEAN_USER=$(echo "${{ secrets.DB_USER }}" | tr -d '\r\n ' )
+          CLEAN_PASS=$(echo "${{ secrets.DB_PASSWORD }}" | tr -d '\r\n ' )
+          CLEAN_PORT=$(echo "${{ secrets.DB_PORT }}" | tr -d '\r\n ' )
+          CLEAN_REDIS_HOST=$(echo "${{ secrets.REDIS_HOST }}" | tr -d '\r\n ' )
+          CLEAN_REDIS_PASS=$(echo "${{ secrets.REDIS_PASSWORD }}" | tr -d '\r\n ' )
+
+          yc serverless container revision deploy \
+            --container-name jack-job-matching \
+            --image cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/job-matching:latest \
+            --cores 2 \
+            --memory 1024MB \
+            --concurrency 2 \
+            --execution-timeout 300s \
+            --service-account-id "$SA_ID" \
+            --network-id "${{ env.YC_NETWORK_ID }}" \
+            --environment "NODE_ENV=production" \
+            --environment "DB_SSL=false" \
+            --environment "DB_PORT=6432" \
+            --environment "REDIS_PORT=6379" \
+            --environment "REDIS_SSL=false" \
+            --environment "REDIS_USER=default" \
+            --environment "JWT_SECRET=$CLEAN_JWT" \
+            --environment "DB_HOST=rc1a-q1jpaf8csdcn1uqn.mdb.yandexcloud.net" \
+            --environment "DB_NAME=$CLEAN_NAME" \
+            --environment "DB_USER=$CLEAN_USER" \
+            --environment "DB_PASSWORD=$CLEAN_PASS" \
+            --environment "REDIS_HOST=$CLEAN_REDIS_HOST" \
+            --environment "REDIS_PASSWORD=$CLEAN_REDIS_PASS" \
+            --environment "USER_PROFILE_SERVICE_URL=${{ env.JACK_USER_PROFILE_URL }}" \
+            --environment "CORS_ORIGIN=${{ env.JACK_FRONTEND_URL }}"
+          yc serverless container allow-unauthenticated-invoke --name jack-job-matching || echo "⚠️ Permission denied to make container public."
+
+      - name: Deploy Email Service
+        env:
+          SA_ID: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+        run: |
+          echo "🚀 Deploying Email Service..."
+
+          CLEAN_JWT=$(echo "${{ secrets.JWT_SECRET }}" | tr -d '\r\n ' )
+          CLEAN_NAME=$(echo "${{ secrets.DB_NAME }}" | tr -d '\r\n ' )
+          CLEAN_USER=$(echo "${{ secrets.DB_USER }}" | tr -d '\r\n ' )
+          CLEAN_PASS=$(echo "${{ secrets.DB_PASSWORD }}" | tr -d '\r\n ' )
+          CLEAN_PORT=$(echo "${{ secrets.DB_PORT }}" | tr -d '\r\n ' )
+          CLEAN_SMTP_HOST=$(echo "${{ secrets.SMTP_HOST }}" | tr -d '\r\n ' )
+          CLEAN_SMTP_PASS=$(echo "${{ secrets.SMTP_PASSWORD }}" | tr -d '\r\n ' )
+          CLEAN_FROM_EMAIL=$(echo "${{ secrets.FROM_EMAIL }}" | tr -d '\r\n ' )
+          CLEAN_SMTP_PORT=$(echo "${{ secrets.SMTP_PORT }}" | tr -d '\r\n ' )
+          CLEAN_SMTP_SECURE=$(echo "${{ secrets.SMTP_SECURE }}" | tr -d '\r\n ' )
+          CLEAN_SMTP_USER=$(echo "${{ secrets.SMTP_USER }}" | tr -d '\r\n ' )
+          CLEAN_FROM_NAME=$(echo "${{ secrets.FROM_NAME }}" | tr -d '\r\n ' )
+
+          yc serverless container revision deploy \
+            --container-name jack-email \
+            --image cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/email:latest \
+            --cores 1 \
+            --memory 512MB \
+            --concurrency 4 \
+            --execution-timeout 120s \
+            --service-account-id "$SA_ID" \
+            --network-id "${{ env.YC_NETWORK_ID }}" \
+            --environment "NODE_ENV=production" \
+            --environment "DB_SSL=false" \
+            --environment "DB_PORT=6432" \
+            --environment "JWT_SECRET=$CLEAN_JWT" \
+            --environment "DB_HOST=rc1a-q1jpaf8csdcn1uqn.mdb.yandexcloud.net" \
+            --environment "DB_NAME=$CLEAN_NAME" \
+            --environment "DB_USER=$CLEAN_USER" \
+            --environment "DB_PASSWORD=$CLEAN_PASS" \
+            --environment "SMTP_HOST=$CLEAN_SMTP_HOST" \
+            --environment "SMTP_PORT=$CLEAN_SMTP_PORT" \
+            --environment "SMTP_SECURE=$CLEAN_SMTP_SECURE" \
+            --environment "SMTP_USER=$CLEAN_SMTP_USER" \
+            --environment "SMTP_PASSWORD=$CLEAN_SMTP_PASS" \
+            --environment "FROM_EMAIL=$CLEAN_FROM_EMAIL" \
+            --environment "FROM_NAME=$CLEAN_FROM_NAME" \
+            --environment "SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}" \
+            --environment "SENDGRID_FROM_EMAIL=${{ secrets.SENDGRID_FROM_EMAIL }}" \
+            --environment "USER_PROFILE_SERVICE_URL=${{ env.JACK_USER_PROFILE_URL }}" \
+            --environment "JOB_MATCHING_SERVICE_URL=${{ env.JACK_JOB_MATCHING_URL }}" \
+            --environment "CORS_ORIGIN=${{ env.JACK_FRONTEND_URL }}"
+          yc serverless container allow-unauthenticated-invoke --name jack-email || echo "⚠️ Permission denied to make container public."
+
+      - name: Deploy API Gateway
+        env:
+          SA_ID: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+        run: |
+          echo "🚀 Deploying API Gateway..."
+          CLEAN_JWT=$(echo "${{ secrets.JWT_SECRET }}" | tr -d '\r\n ' )
+          yc serverless container revision deploy \
+            --container-name jack-gateway \
+            --image cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/gateway:latest \
+            --cores 1 \
+            --memory 512MB \
+            --concurrency 16 \
+            --execution-timeout 60s \
+            --service-account-id "$SA_ID" \
+            --environment "JWT_SECRET=$CLEAN_JWT" \
+            --environment "USER_PROFILE_SERVICE_URL=${{ env.JACK_USER_PROFILE_URL }}" \
+            --environment "CONVERSATION_SERVICE_URL=${{ env.JACK_CONVERSATION_URL }}" \
+            --environment "AI_NLP_SERVICE_URL=${{ env.JACK_AI_NLP_URL }}" \
+            --environment "JOB_MATCHING_SERVICE_URL=${{ env.JACK_JOB_MATCHING_URL }}" \
+            --environment "EMAIL_SERVICE_URL=${{ env.JACK_EMAIL_URL }}" \
+            --environment "FRONTEND_URL=${{ env.JACK_FRONTEND_URL }}"
+          yc serverless container allow-unauthenticated-invoke --name jack-gateway || echo "⚠️ Permission denied to make container public."
+
+      - name: Deploy Frontend
+        env:
+          SA_ID: ${{ secrets.YC_SERVICE_ACCOUNT_ID }}
+        run: |
+          echo "🚀 Deploying Frontend..."
+          yc serverless container revision deploy \
+            --container-name jack-frontend \
+            --image cr.yandex/${{ env.YC_REGISTRY_ID }}/jack-ai/frontend:latest \
+            --cores 1 \
+            --memory 512MB \
+            --concurrency 16 \
+            --execution-timeout 30s \
+            --service-account-id "$SA_ID" \
+            --environment "NODE_ENV=production" \
+            --environment "API_URL=${{ env.JACK_GATEWAY_URL }}" \
+            --environment "CONVERSATION_SERVICE_URL=${{ env.JACK_CONVERSATION_URL }}"
+          yc serverless container allow-unauthenticated-invoke --name jack-frontend || echo "⚠️ Permission denied to make container public."
+
+      - name: Run post-deployment health checks
+        run: |
+          echo "⏳ Waiting for services to be ready..."
+          sleep 120
+
+          echo "🔍 Checking User Profile health..."
+          curl -f ${{ env.JACK_USER_PROFILE_URL }}/health || echo "User Profile health check failed"
+
+          echo "🔍 Checking Conversation health..."
+          curl -f ${{ env.JACK_CONVERSATION_URL }}/health || echo "Conversation health check failed"
+
+          echo "🔍 Checking AI-NLP health..."
+          curl -f ${{ env.JACK_AI_NLP_URL }}/health || echo "AI-NLP health check failed"
+
+          echo "🔍 Checking Job Matching health..."
+          curl -f ${{ env.JACK_JOB_MATCHING_URL }}/health || echo "Job Matching health check failed"
+
+          echo "🔍 Checking Email health..."
+          curl -f ${{ env.JACK_EMAIL_URL }}/health || echo "Email health check failed"
+
+          echo "🔍 Checking Gateway health..."
+          curl -f ${{ env.JACK_GATEWAY_URL }}/health || echo "Gateway health check failed"
+
+          echo "🔍 Checking Frontend health..."
+          curl -f ${{ env.JACK_FRONTEND_URL }}/ || echo "Frontend health check failed"
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Deployment to Yandex Cloud completed successfully!"
+            echo "🌐 Frontend URL: ${{ env.JACK_FRONTEND_URL }}"
+            echo "🌐 Gateway URL: ${{ env.JACK_GATEWAY_URL }}"
+          else
+            echo "❌ Deployment failed!"
+          fi

@@ -1,0 +1,46 @@
+# Fly.io configuration for API Gateway
+app = "jack-gateway"
+primary_region = "fra"
+
+[build]
+  image = "ghcr.io/your-username/jack-ai/gateway:main"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  JWT_SECRET = "your-jwt-secret"
+  USER_PROFILE_SERVICE_URL = "http://jack-user-profile.fly.dev"
+  CONVERSATION_SERVICE_URL = "http://jack-conversation.fly.dev"
+  AI_NLP_SERVICE_URL = "http://jack-ai-nlp.fly.dev"
+  JOB_MATCHING_SERVICE_URL = "http://jack-job-matching.fly.dev"
+  EMAIL_SERVICE_URL = "http://jack-email.fly.dev"
+
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+
+  [services.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 400
+
+[[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+[[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+    force_https = true
+
+[services.http_checks]
+  interval = 10000
+  timeout = 2000
+  grace_period = "30s"
+  restart_limit = 0
+  method = "get"
+  path = "/health"
+
+
+
