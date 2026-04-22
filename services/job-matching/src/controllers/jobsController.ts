@@ -126,21 +126,6 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
     };
 
     const { matches: matchedJobs, weakMatches, stats } = matchJobs(allJobs, collectedData, prefs);
-    const topWeak = weakMatches.slice(0, WEAK_MATCH_RETURN_LIMIT);
-
-    logger.info(
-      `[match] userId=${userId} jobsInDb=${jobsInDb} scanned=${allJobs.length} ` +
-        `aboveThreshold=${stats.aboveThreshold} weakTierTotal=${stats.weakTierTotal} ` +
-        `weakReturned=${topWeak.length} maxScore=${stats.maxScore} threshold=${MATCH_SCORE_THRESHOLD} ` +
-        `weakFloor=${WEAK_MATCH_SCORE_FLOOR} primaryFamily=${stats.primaryFamily} ` +
-        `familyRelevance=${(stats.familyRelevanceShare * 100).toFixed(1)}%`
-    );
-
-    if (stats.aboveThreshold === 0 && stats.weakTierTotal === 0 && jobsInDb > 0) {
-      logger.warn(
-        `[match] no jobs in recommended or weak tier; maxScore=${stats.maxScore} (floors: weak ${WEAK_MATCH_SCORE_FLOOR}, rec ${MATCH_SCORE_THRESHOLD})`
-      );
-    }
 
     // Диагностика каталога: если пользователь классифицирован, а его семейство
     // и смежные занимают меньше HEALTHY_FAMILY_SHARE от всего каталога —
@@ -157,7 +142,46 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       catalogWarning = 'no_matches';
     }
 
-    const topJobs = matchedJobs.slice(0, 20);
+    const relevantFamily = (m: { familyMatch: 'same' | 'adjacent' | 'unknown' | 'conflict' }) =>
+      m.familyMatch === 'same' || m.familyMatch === 'adjacent';
+
+    const prioritizedRecommended =
+      stats.primaryFamily !== 'unknown'
+        ? (() => {
+            const sameOrAdjacent = matchedJobs.filter(relevantFamily);
+            // Если есть профильные рекомендации, вытесняем unknown, чтобы
+            // каталог после profile-scrape выглядел чище и объяснимее.
+            return sameOrAdjacent.length > 0 ? sameOrAdjacent : matchedJobs;
+          })()
+        : matchedJobs;
+
+    const prioritizedWeak =
+      stats.primaryFamily !== 'unknown' && catalogWarning === 'catalog_family_mismatch'
+        ? (() => {
+            const sameOrAdjacent = weakMatches.filter(relevantFamily);
+            const unknownOnly = weakMatches.filter((m) => m.familyMatch === 'unknown');
+            // При «перекошенном» каталоге показываем сначала профильные роли,
+            // unknown — только добивкой до лимита.
+            return [...sameOrAdjacent, ...unknownOnly];
+          })()
+        : weakMatches;
+
+    const topJobs = prioritizedRecommended.slice(0, 20);
+    const topWeak = prioritizedWeak.slice(0, WEAK_MATCH_RETURN_LIMIT);
+
+    logger.info(
+      `[match] userId=${userId} jobsInDb=${jobsInDb} scanned=${allJobs.length} ` +
+        `aboveThreshold=${stats.aboveThreshold} weakTierTotal=${stats.weakTierTotal} ` +
+        `weakReturned=${topWeak.length} maxScore=${stats.maxScore} threshold=${MATCH_SCORE_THRESHOLD} ` +
+        `weakFloor=${WEAK_MATCH_SCORE_FLOOR} primaryFamily=${stats.primaryFamily} ` +
+        `familyRelevance=${(stats.familyRelevanceShare * 100).toFixed(1)}%`
+    );
+
+    if (stats.aboveThreshold === 0 && stats.weakTierTotal === 0 && jobsInDb > 0) {
+      logger.warn(
+        `[match] no jobs in recommended or weak tier; maxScore=${stats.maxScore} (floors: weak ${WEAK_MATCH_SCORE_FLOOR}, rec ${MATCH_SCORE_THRESHOLD})`
+      );
+    }
 
     res.json({
       jobs: topJobs.map((match) => ({

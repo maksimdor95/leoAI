@@ -48,6 +48,21 @@ export interface CommandItem {
   icon?: string;
 }
 
+export interface ChatScenarioCta {
+  id: string;
+  label: string;
+  action: string;
+}
+
+export interface ChatScenario {
+  id: string;
+  title: string;
+  description: string;
+  starterMessage: string;
+  followUpMessage: string;
+  ctas: ChatScenarioCta[];
+}
+
 export interface InfoCardMessage extends BaseMessage {
   type: typeof MessageType.INFO_CARD;
   title: string;

@@ -534,16 +534,8 @@ app.post('/api/chat/session/:id/resume', authenticateRequest, async (req, res) =
       authToken: token || undefined,
     });
 
-    const assistantMessage: Message = {
-      id: uuidv4(),
-      type: MessageType.TEXT,
-      role: MessageRole.ASSISTANT,
-      timestamp: new Date().toISOString(),
-      sessionId: session.id,
-      content: `Готово! Ниже черновик резюме в формате HH. При необходимости отредактируйте блоки перед отправкой.\n\n${resume}`,
-    };
-
-    await addMessageToSession(session.id, assistantMessage);
+    // По UX показываем только действия (скачать PDF/DOCX), без длинного markdown в чате.
+    // Сам markdown-содержимое сохраняем в metadata.flags.resumeDraft для экспорта.
     const downloadCommand: Message = {
       id: uuidv4(),
       type: MessageType.COMMAND,
@@ -563,20 +555,14 @@ app.post('/api/chat/session/:id/resume', authenticateRequest, async (req, res) =
     };
     await updateSession(session);
 
-    let assistantAudio = null;
-    const ttsText = getSpeakableTextFromAssistantMessage(assistantMessage);
-    if (ttsText) {
-      assistantAudio = await synthesizeAssistantAudio({ text: ttsText, lang: 'ru-RU' });
-    }
-
     const updatedSession = await getSession(session.id);
     res.json({
       sessionId: updatedSession?.id,
       messages: updatedSession?.messages || [],
       metadata: updatedSession?.metadata,
-      assistantMessage,
+      assistantMessage: null,
       downloadCommand,
-      assistantAudio,
+      assistantAudio: null,
       resume,
       format,
     });

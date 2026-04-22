@@ -443,6 +443,18 @@ interface TtsResponse {
   format?: 'mp3' | 'oggopus';
 }
 
+const DEFAULT_TTS_VOICE = 'filipp';
+const DEFAULT_TTS_SPEED = 0.92;
+
+function normalizeTtsText(text: string): string {
+  // Keep message natural for speech synthesis:
+  // collapse whitespace and add lightweight pauses on list separators.
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/([,;:])\s*/g, '$1 ')
+    .trim();
+}
+
 export async function synthesizeAssistantAudio(params: {
   text: string;
   lang?: string;
@@ -450,15 +462,22 @@ export async function synthesizeAssistantAudio(params: {
   speed?: number;
   format?: 'mp3' | 'oggopus';
 }): Promise<AssistantAudio | null> {
-  if (!params.text.trim()) return null;
+  const normalizedText = normalizeTtsText(params.text);
+  if (!normalizedText) return null;
+
+  const configuredSpeed = Number(process.env.TTS_SPEED);
+  const speed =
+    params.speed ??
+    (Number.isFinite(configuredSpeed) && configuredSpeed > 0 ? configuredSpeed : DEFAULT_TTS_SPEED);
+
   try {
     const response = await axios.post<TtsResponse>(
       `${AI_SERVICE_URL}/api/ai/tts`,
       {
-        text: params.text,
+        text: normalizedText,
         lang: params.lang ?? 'ru-RU',
-        voice: params.voice ?? process.env.TTS_VOICE ?? 'filipp',
-        speed: params.speed ?? Number(process.env.TTS_SPEED || 1.15),
+        voice: params.voice ?? process.env.TTS_VOICE ?? DEFAULT_TTS_VOICE,
+        speed,
         format: params.format ?? (process.env.TTS_FORMAT as 'mp3' | 'oggopus' | undefined) ?? 'mp3',
       },
       {

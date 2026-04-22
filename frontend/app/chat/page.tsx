@@ -237,6 +237,8 @@ function ChatPageContent() {
   }, [typingMessage]);
 
   const [currentProduct, setCurrentProduct] = useState<ProductType>('jack');
+  const [pendingStarterMessage, setPendingStarterMessage] = useState<string | null>(null);
+  const autoStarterSentRef = useRef(false);
   const [productSelected, setProductSelected] = useState(false);
   const [isNewChatMode, setIsNewChatMode] = useState(false);
   const [matchedJobs, setMatchedJobs] = useState<MatchedJobItem[]>([]);
@@ -509,7 +511,8 @@ function ChatPageContent() {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text.trim());
       utterance.lang = 'ru-RU';
-      utterance.rate = 1.2;
+      utterance.rate = 0.95;
+      utterance.pitch = 0.9;
       utterance.onstart = () => {
         setIsTtsSpeaking(true);
         ttsBeatAtRef.current = performance.now();
@@ -600,6 +603,7 @@ function ChatPageContent() {
     setMessages([]);
     setSessionId(null);
     setCurrentProduct(product);
+    autoStarterSentRef.current = false;
     setProductSelected(true);
     setMatchedJobs([]);
     setWeakMatchedJobs([]);
@@ -802,10 +806,30 @@ function ChatPageContent() {
   }, [messageApi, router, searchParams, openAuthModal, initializeChat]);
 
   // Handler for product selection
-  const handleProductSelect = useCallback((product: ProductType) => {
+  const handleProductScenarioSelect = useCallback((product: ProductType, starterMessage?: string) => {
     setIsNewChatMode(false);
+    setPendingStarterMessage(starterMessage ?? null);
     initializeChat(product, undefined, true);
   }, [initializeChat]);
+
+  useEffect(() => {
+    if (!pendingStarterMessage || autoStarterSentRef.current) {
+      return;
+    }
+    if (!connected || !chatRef.current || !sessionId) {
+      return;
+    }
+    const hasUserMessages = messages.some((msg) => msg.role === MessageRole.USER);
+    if (hasUserMessages) {
+      autoStarterSentRef.current = true;
+      setPendingStarterMessage(null);
+      return;
+    }
+
+    chatRef.current.sendMessage(pendingStarterMessage);
+    autoStarterSentRef.current = true;
+    setPendingStarterMessage(null);
+  }, [connected, messages, pendingStarterMessage, sessionId]);
 
   const handleTypingComplete = useCallback(() => {
     setTypingMessage((current) => {
@@ -1572,7 +1596,7 @@ function ChatPageContent() {
               {/* Show product selection screen for new chats */}
               {!productSelected && isNewChatMode ? (
                 <div className="flex-1 flex items-center justify-center">
-                  <ProductSelectionScreen onSelect={handleProductSelect} />
+                  <ProductSelectionScreen onSelect={handleProductScenarioSelect} />
                 </div>
               ) : (
                 <>
