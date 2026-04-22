@@ -4,8 +4,16 @@
  */
 
 import axios from 'axios';
+import { buildAuthHeaders } from './authHeaders';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+function normalizeServiceBaseUrl(url: string): string {
+  return url.trim().replace(/\/+$/, '');
+}
+
+// Empty baseURL sends /api/users/* to the Next.js host → 404; same default as chatSocket/chatApi.
+const API_URL = normalizeServiceBaseUrl(
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+);
 
 const api = axios.create({
   baseURL: API_URL,
@@ -25,14 +33,16 @@ api.interceptors.request.use((config) => {
     if (!isPublicEndpoint) {
       const token = localStorage.getItem('token');
       if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+        Object.assign(config.headers, buildAuthHeaders(token));
       }
     }
   }
   return config;
 });
 
-const CONVERSATION_API_URL = process.env.NEXT_PUBLIC_CONVERSATION_API_URL || '';
+const CONVERSATION_API_URL = normalizeServiceBaseUrl(
+  process.env.NEXT_PUBLIC_CONVERSATION_API_URL || 'http://localhost:3002'
+);
 
 const conversationApi = axios.create({
   baseURL: CONVERSATION_API_URL,
@@ -46,7 +56,7 @@ conversationApi.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('token');
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      Object.assign(config.headers, buildAuthHeaders(token));
     }
   }
   return config;

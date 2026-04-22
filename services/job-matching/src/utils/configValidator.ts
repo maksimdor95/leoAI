@@ -55,11 +55,28 @@ export function validateConfig(): ValidationResult {
 
   // Job scraping configuration warnings
   const hhApiKey = process.env.HH_API_KEY;
+  const hhClientId = process.env.HH_CLIENT_ID;
+  const hhClientSecret = process.env.HH_CLIENT_SECRET;
+  const hhAccessToken = process.env.HH_ACCESS_TOKEN;
   const useMockJobs = process.env.USE_MOCK_JOBS === 'true';
 
-  if (!hhApiKey && !useMockJobs) {
+  if (!hhApiKey && !hhAccessToken && !(hhClientId && hhClientSecret) && !useMockJobs) {
     warnings.push(
-      'HH_API_KEY is not set and USE_MOCK_JOBS is false - job scraping may use mock data'
+      'HH auth for scraping is not set (HH_API_KEY / HH_ACCESS_TOKEN / HH_CLIENT_ID+HH_CLIENT_SECRET) and USE_MOCK_JOBS is false - scraping may use mock data'
+    );
+  }
+
+  if (hhClientId && !hhClientSecret) {
+    warnings.push('HH_CLIENT_ID is set but HH_CLIENT_SECRET is missing');
+  }
+
+  if (hhClientSecret && !hhClientId) {
+    warnings.push('HH_CLIENT_SECRET is set but HH_CLIENT_ID is missing');
+  }
+
+  if (!hhAccessToken && !(hhClientId && hhClientSecret)) {
+    warnings.push(
+      'HH salary API is not configured: set HH_ACCESS_TOKEN, HH_API_KEY, or HH_CLIENT_ID + HH_CLIENT_SECRET'
     );
   }
 
@@ -116,9 +133,13 @@ export function validateAndLogConfig(serviceName: string): void {
 
     const useMockJobs = process.env.USE_MOCK_JOBS === 'true';
     const hhApiKey = process.env.HH_API_KEY;
+    const hhSalaryConfigured = Boolean(
+      process.env.HH_ACCESS_TOKEN || (process.env.HH_CLIENT_ID && process.env.HH_CLIENT_SECRET)
+    );
     logger.info(
       `Job Scraping: ${hhApiKey ? 'HH.ru API configured' : 'No API key'}, Mock jobs: ${useMockJobs ? 'enabled' : 'disabled'}`
     );
+    logger.info(`HH Salary API: ${hhSalaryConfigured ? 'configured' : 'not configured'}`);
   }
 
   logger.info('');

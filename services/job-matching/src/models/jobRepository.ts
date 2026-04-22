@@ -85,6 +85,7 @@ export class JobRepository {
    * Get all jobs with optional filters
    */
   async findAll(filters?: {
+    source?: string;
     location?: string[];
     work_mode?: string;
     experience_level?: string;
@@ -94,6 +95,12 @@ export class JobRepository {
     let query = 'SELECT * FROM jobs WHERE 1=1';
     const values: unknown[] = [];
     let paramIndex = 1;
+
+    if (filters?.source) {
+      query += ` AND source = $${paramIndex}`;
+      values.push(filters.source);
+      paramIndex++;
+    }
 
     if (filters?.location && filters.location.length > 0) {
       query += ` AND location @> $${paramIndex}::jsonb`;
@@ -139,10 +146,19 @@ export class JobRepository {
   /**
    * Get count of jobs
    */
-  async count(): Promise<number> {
-    const query = 'SELECT COUNT(*) as count FROM jobs';
+  async count(filters?: { source?: string }): Promise<number> {
+    let query = 'SELECT COUNT(*) as count FROM jobs WHERE 1=1';
+    const values: unknown[] = [];
+    let paramIndex = 1;
+
+    if (filters?.source) {
+      query += ` AND source = $${paramIndex}`;
+      values.push(filters.source);
+      paramIndex++;
+    }
+
     try {
-      const result = await pool.query(query);
+      const result = await pool.query(query, values);
       return parseInt(result.rows[0].count, 10);
     } catch (error: unknown) {
       logger.error('Error counting jobs:', error);

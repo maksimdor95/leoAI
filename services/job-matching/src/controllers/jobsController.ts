@@ -3,13 +3,65 @@
  * Handles HTTP requests for job matching
  */
 
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import jobRepository from '../models/jobRepository';
-import { getUserProfile, getCollectedData } from '../services/userService';
-import { matchJobs } from '../services/matcher';
+import { getUserProfile, getCollectedDataWithFallback } from '../services/userService';
+import {
+  matchJobs,
+  MATCH_SCORE_THRESHOLD,
+  WEAK_MATCH_SCORE_FLOOR,
+  WEAK_MATCH_RETURN_LIMIT,
+  HEALTHY_FAMILY_SHARE,
+} from '../services/matcher';
+import { familyLabelRu } from '../services/roleFamily';
 import { scrapeHHJobs } from '../services/scraper';
+import { triggerScraping } from '../services/scrapingQueue';
+import { deriveScrapeParams } from '../services/scrapeProfileParams';
+import {
+  getSalaryEvaluation,
+  HHSalaryApiError,
+  HH_OPENAPI_REDOC,
+} from '../services/hhSalaryService';
 import { logger } from '../utils/logger';
+
+const CATALOG_MAX_LIMIT = 200;
+
+/**
+ * GET /api/jobs/catalog — list jobs stored in DB (admin / debugging).
+ * Query: source (e.g. superjob.ru), limit (default 50, max 200), offset.
+ */
+export async function listJobCatalog(req: Request, res: Response): Promise<void> {
+  try {
+    const sourceRaw = req.query.source;
+    const source =
+      typeof sourceRaw === 'string' && sourceRaw.trim() ? sourceRaw.trim() : undefined;
+
+    const limitParsed = parseInt(String(req.query.limit ?? '50'), 10);
+    const limit = Math.min(
+      CATALOG_MAX_LIMIT,
+      Math.max(1, Number.isFinite(limitParsed) ? limitParsed : 50)
+    );
+    const offsetParsed = parseInt(String(req.query.offset ?? '0'), 10);
+    const offset = Math.max(0, Number.isFinite(offsetParsed) ? offsetParsed : 0);
+
+    const [jobs, total] = await Promise.all([
+      jobRepository.findAll({ source, limit, offset }),
+      jobRepository.count({ source }),
+    ]);
+
+    res.json({
+      jobs,
+      total,
+      limit,
+      offset,
+      count: jobs.length,
+    });
+  } catch (error: unknown) {
+    logger.error('Error listing job catalog:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
 
 /**
  * Get matched jobs for a user
@@ -37,30 +89,74 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Get collected data from session
-    const collectedData = await getCollectedData(userId);
+    // Get collected data from session (с фолбэком на career-profile, если сессия пуста)
+    const collectedData = await getCollectedDataWithFallback(userId, token);
 
-    // Get all jobs
-    const allJobs = await jobRepository.findAll({
-      limit: 500, // Limit for performance
-    });
+    const [allJobs, jobsInDb] = await Promise.all([
+      jobRepository.findAll({
+        limit: 500, // Limit for performance
+      }),
+      jobRepository.count(),
+    ]);
 
     if (allJobs.length === 0) {
       res.json({
         jobs: [],
         count: 0,
+        totalMatched: 0,
+        jobsInDb,
+        jobsScanned: 0,
+        maxMatchScore: 0,
+        matchThreshold: MATCH_SCORE_THRESHOLD,
+        weakJobs: [],
+        weakCount: 0,
+        weakTierTotal: 0,
+        weakMatchFloor: WEAK_MATCH_SCORE_FLOOR,
+        catalogWarning: 'empty_catalog',
+        profileFamily: null,
+        profileFamilyLabel: null,
         message: 'No jobs available. Please wait for job scraping to complete.',
       });
       return;
     }
 
-    // Match jobs
-    const matchedJobs = matchJobs(allJobs, collectedData, {
+    const prefs = {
       location: userProfile.preferences?.location,
       workMode: userProfile.preferences?.workMode,
-    });
+    };
 
-    // Limit to top 20
+    const { matches: matchedJobs, weakMatches, stats } = matchJobs(allJobs, collectedData, prefs);
+    const topWeak = weakMatches.slice(0, WEAK_MATCH_RETURN_LIMIT);
+
+    logger.info(
+      `[match] userId=${userId} jobsInDb=${jobsInDb} scanned=${allJobs.length} ` +
+        `aboveThreshold=${stats.aboveThreshold} weakTierTotal=${stats.weakTierTotal} ` +
+        `weakReturned=${topWeak.length} maxScore=${stats.maxScore} threshold=${MATCH_SCORE_THRESHOLD} ` +
+        `weakFloor=${WEAK_MATCH_SCORE_FLOOR} primaryFamily=${stats.primaryFamily} ` +
+        `familyRelevance=${(stats.familyRelevanceShare * 100).toFixed(1)}%`
+    );
+
+    if (stats.aboveThreshold === 0 && stats.weakTierTotal === 0 && jobsInDb > 0) {
+      logger.warn(
+        `[match] no jobs in recommended or weak tier; maxScore=${stats.maxScore} (floors: weak ${WEAK_MATCH_SCORE_FLOOR}, rec ${MATCH_SCORE_THRESHOLD})`
+      );
+    }
+
+    // Диагностика каталога: если пользователь классифицирован, а его семейство
+    // и смежные занимают меньше HEALTHY_FAMILY_SHARE от всего каталога —
+    // вероятнее всего scraper собран под другой профиль (например, dev-кейворды
+    // для PM-кандидата). Клиенту вернём warning, чтобы показать плашку
+    // «запустите сбор свежих вакансий по вашему профилю».
+    let catalogWarning: string | null = null;
+    if (
+      stats.primaryFamily !== 'unknown' &&
+      stats.familyRelevanceShare < HEALTHY_FAMILY_SHARE
+    ) {
+      catalogWarning = 'catalog_family_mismatch';
+    } else if (stats.aboveThreshold === 0 && stats.weakTierTotal === 0) {
+      catalogWarning = 'no_matches';
+    }
+
     const topJobs = matchedJobs.slice(0, 20);
 
     res.json({
@@ -68,9 +164,32 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         job: match.job,
         score: match.score,
         reasons: match.reasons,
+        jobFamily: match.jobFamily,
+        familyMatch: match.familyMatch,
       })),
       count: topJobs.length,
       totalMatched: matchedJobs.length,
+      weakJobs: topWeak.map((match) => ({
+        job: match.job,
+        score: match.score,
+        reasons: match.reasons,
+        jobFamily: match.jobFamily,
+        familyMatch: match.familyMatch,
+      })),
+      weakCount: topWeak.length,
+      weakTierTotal: stats.weakTierTotal,
+      weakMatchFloor: WEAK_MATCH_SCORE_FLOOR,
+      jobsInDb,
+      jobsScanned: allJobs.length,
+      maxMatchScore: stats.maxScore,
+      matchThreshold: MATCH_SCORE_THRESHOLD,
+      profileFamily: stats.primaryFamily,
+      profileFamilyLabel:
+        stats.primaryFamily !== 'unknown' ? familyLabelRu(stats.primaryFamily) : null,
+      adjacentFamilies: stats.adjacentFamilies,
+      familyRelevanceShare: Number(stats.familyRelevanceShare.toFixed(3)),
+      familyDistribution: stats.familyDistribution,
+      catalogWarning,
     });
   } catch (error: unknown) {
     logger.error('Error getting matched jobs:', error);
@@ -100,24 +219,24 @@ export async function getJobDetails(req: AuthRequest, res: Response): Promise<vo
 }
 
 /**
- * Trigger job scraping (for development/admin)
+ * Trigger generic job scraping (diverse seed keyword set).
+ * Оставлено для обратной совместимости: admin-кнопка «пересобрать каталог».
+ * Для релевантного пользователю подбора используйте `scrapeForUser`.
  */
 export async function refreshJobs(_req: AuthRequest, res: Response): Promise<void> {
   try {
-    logger.info('Manual job scraping triggered');
+    logger.info('Manual generic job scraping triggered');
 
-    // Trigger scraping in background
     scrapeHHJobs()
       .then((result) => {
         if (result.mockJobsUsed) {
           logger.warn('⚠️  Job scraping completed using MOCK DATA');
-          logger.warn(`   Sources used: ${result.sourcesUsed.join(', ')}`);
-          logger.warn(`   Jobs: ${result.jobsScraped} scraped, ${result.jobsSaved} saved`);
         } else {
           logger.info('✅ Job scraping completed successfully');
-          logger.info(`   Sources used: ${result.sourcesUsed.join(', ')}`);
-          logger.info(`   Jobs: ${result.jobsScraped} scraped, ${result.jobsSaved} saved`);
         }
+        logger.info(
+          `   Sources=${result.sourcesUsed.join(', ')} scraped=${result.jobsScraped} saved=${result.jobsSaved}`
+        );
         if (result.errors.length > 0) {
           logger.warn(`   Errors: ${result.errors.join('; ')}`);
         }
@@ -133,5 +252,159 @@ export async function refreshJobs(_req: AuthRequest, res: Response): Promise<voi
   } catch (error: unknown) {
     logger.error('Error triggering job scraping:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * Trigger per-user scraping: берём профиль пользователя, определяем
+ * role-family и запрашиваем источники по релевантным ключевым словам.
+ *
+ * Защита: вызывать можно только самому пользователю. Внутренние сервисы
+ * (conversation, когда триггерит автосбор на шаге desired_role) проходят
+ * тот же JWT-пайплайн и передают токен пользователя.
+ */
+export async function scrapeForUser(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.params.userId || req.user?.userId;
+    if (!userId) {
+      res.status(400).json({ error: 'userId is required' });
+      return;
+    }
+    if (!req.user || req.user.userId !== userId) {
+      res.status(403).json({ error: 'Forbidden: Cannot trigger scrape for other user' });
+      return;
+    }
+
+    const token = req.headers.authorization?.replace('Bearer ', '') || '';
+    const collectedData = await getCollectedDataWithFallback(userId, token);
+    const params = deriveScrapeParams(collectedData);
+
+    if (params.keywordSource === 'fallback' || params.keywords.length === 0) {
+      logger.warn(
+        `[scrapeForUser] userId=${userId}: profile not yet classified (${params.familyPrimary}); ` +
+          `skipping per-user scrape and using generic seed instead`
+      );
+      await triggerScraping({ origin: 'user-profile', userId });
+      res.json({
+        message: 'Scraping enqueued with default seed (profile too thin to classify)',
+        familyPrimary: params.familyPrimary,
+        usedProfileKeywords: false,
+      });
+      return;
+    }
+
+    await triggerScraping({
+      origin: 'user-profile',
+      userId,
+      keywords: params.keywords,
+      locationId: params.locationId,
+    });
+
+    logger.info(
+      `[scrapeForUser] userId=${userId} family=${params.familyPrimary} ` +
+        `location=${params.locationId} keywords=${params.keywords.length}`
+    );
+
+    res.json({
+      message: 'Profile-driven scraping enqueued',
+      familyPrimary: params.familyPrimary,
+      familyAdjacent: params.familyAdjacent,
+      locationId: params.locationId,
+      keywords: params.keywords,
+      usedProfileKeywords: true,
+    });
+  } catch (error: unknown) {
+    logger.error('Error triggering per-user scraping:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * GET /api/jobs/hh/salary-evaluation/:areaId
+ * Proxy to HH salary bank API with service-side auth.
+ */
+export async function getHHSalaryEvaluation(req: Request, res: Response): Promise<void> {
+  try {
+    const areaId = parseInt(req.params.areaId, 10);
+    if (!Number.isInteger(areaId) || areaId <= 0) {
+      res.status(400).json({
+        source: 'hh.ru',
+        endpoint: '/salary_statistics/paid/salary_evaluation/:areaId',
+        client: {
+          code: 'HH_SALARY_INVALID_AREA_ID',
+          message: 'Параметр areaId в пути должен быть положительным целым числом (код региона в справочнике salary areas HH).',
+        },
+        hints: { openapi_redoc: HH_OPENAPI_REDOC },
+      });
+      return;
+    }
+
+    const safeQuery: Record<string, string | number | boolean> = {};
+    for (const [key, value] of Object.entries(req.query)) {
+      if (typeof value === 'string') {
+        safeQuery[key] = value;
+      } else if (typeof value === 'number' || typeof value === 'boolean') {
+        safeQuery[key] = value;
+      } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'string') {
+        safeQuery[key] = value[0];
+      }
+    }
+
+    // OpenAPI: extend_sources — boolean; из query приходит строка "true" / "false".
+    const ext = safeQuery.extend_sources;
+    if (typeof ext === 'string') {
+      const lower = ext.toLowerCase();
+      if (lower === 'true' || lower === '1') {
+        safeQuery.extend_sources = true;
+      } else if (lower === 'false' || lower === '0') {
+        safeQuery.extend_sources = false;
+      }
+    }
+
+    const data = await getSalaryEvaluation(areaId, safeQuery);
+    res.json({
+      source: 'hh.ru',
+      endpoint: '/salary_statistics/paid/salary_evaluation/:areaId',
+      areaId,
+      data,
+    });
+  } catch (error: unknown) {
+    if (error instanceof HHSalaryApiError) {
+      logger.warn(
+        `HH salary evaluation upstream error: status=${error.statusCode} code=${(error.body.client as { code?: string })?.code ?? 'n/a'}`
+      );
+      res.status(error.statusCode).json(error.body);
+      return;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Error fetching HH salary evaluation:', message);
+
+    if (message.includes('Failed to obtain HH access token')) {
+      res.status(503).json({
+        source: 'hh.ru',
+        endpoint: '/salary_statistics/paid/salary_evaluation/:areaId',
+        areaId: parseInt(req.params.areaId, 10),
+        hh: { status: null },
+        client: {
+          code: 'HH_OAUTH_TOKEN_UNAVAILABLE',
+          message:
+            'Не удалось получить OAuth токен HH (проверьте HH_ACCESS_TOKEN, refresh_token или client_credentials в конфигурации job-matching).',
+        },
+      });
+      return;
+    }
+
+    res.status(502).json({
+      source: 'hh.ru',
+      endpoint: '/salary_statistics/paid/salary_evaluation/:areaId',
+      areaId: parseInt(req.params.areaId, 10),
+      hh: { status: null },
+      client: {
+        code: 'HH_SALARY_GATEWAY_ERROR',
+        message: 'Не удалось обратиться к HH salary API.',
+      },
+      details: message,
+    });
   }
 }

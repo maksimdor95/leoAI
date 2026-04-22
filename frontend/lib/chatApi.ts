@@ -4,6 +4,7 @@
  */
 
 import { getToken } from '@/lib/auth';
+import { buildAuthHeaders } from '@/lib/authHeaders';
 import { Message } from '@/types/chat';
 
 const getApiUrl = () => {
@@ -29,11 +30,53 @@ interface ChatSession {
   sessionId: string;
   messages: Message[];
   metadata: SessionMetadata;
+  assistantAudio?: {
+    audioBase64: string;
+    mimeType?: string;
+    format?: 'mp3' | 'oggopus';
+  } | null;
 }
 
 interface SendMessageResponse extends ChatSession {
   userMessage: Message;
   assistantMessage: Message | null;
+  assistantAudio?: {
+    audioBase64: string;
+    mimeType?: string;
+    format?: 'mp3' | 'oggopus';
+  } | null;
+}
+
+interface MergeCollectedResponse extends ChatSession {
+  assistantMessage: Message | null;
+  assistantAudio?: {
+    audioBase64: string;
+    mimeType?: string;
+    format?: 'mp3' | 'oggopus';
+  } | null;
+}
+
+interface GenerateResumeResponse extends ChatSession {
+  resume: string;
+  format: 'markdown' | 'text' | 'json';
+  assistantMessage: Message | null;
+  downloadCommand?: Message | null;
+  assistantAudio?: {
+    audioBase64: string;
+    mimeType?: string;
+    format?: 'mp3' | 'oggopus';
+  } | null;
+}
+
+interface SendResumeEmailResponse extends ChatSession {
+  success: boolean;
+  email: string;
+  assistantMessage: Message | null;
+  assistantAudio?: {
+    audioBase64: string;
+    mimeType?: string;
+    format?: 'mp3' | 'oggopus';
+  } | null;
 }
 
 class ChatApiClient {
@@ -43,6 +86,7 @@ class ChatApiClient {
   private sessionMetadata: SessionMetadata | null = null;
   private pollingInterval: ReturnType<typeof setInterval> | null = null;
   private lastMessageCount = 0;
+  private requestTimeoutMs = Number(process.env.NEXT_PUBLIC_CHAT_REQUEST_TIMEOUT_MS || 20000);
 
   // Event callbacks
   public onSessionJoined?: (sessionId: string, metadata?: SessionMetadata) => void;
@@ -51,6 +95,12 @@ class ChatApiClient {
   public onError?: (error: { message: string }) => void;
   public onConnected?: () => void;
   public onDisconnected?: () => void;
+  public onAssistantAudio?: (payload: {
+    messageId: string;
+    audioBase64: string;
+    mimeType?: string;
+    format?: 'mp3' | 'oggopus';
+  }) => void;
 
   constructor(baseUrl?: string) {
     this.baseUrl = baseUrl || getApiUrl();
@@ -62,23 +112,34 @@ class ChatApiClient {
       throw new Error('Токен не найден. Пользователь должен быть авторизован.');
     }
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     const url = `${this.baseUrl}${endpoint}`;
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        // Use X-Auth-Token instead of Authorization to bypass Yandex IAM validation
-        'X-Auth-Token': `Bearer ${token}`,
-        ...options.headers,
-      },
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildAuthHeaders(token, true),
+          ...options.headers,
+        },
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Request failed' }));
       throw new Error(error.error || `HTTP ${response.status}`);
     }
 
-    return response.json();
+    try {
+      return await response.json();
+    } catch {
+      throw new Error('Некорректный JSON-ответ от сервера');
+    }
   }
 
   /**
@@ -110,6 +171,20 @@ class ChatApiClient {
 
       this.onConnected?.();
       this.onSessionJoined?.(session.sessionId, session.metadata);
+
+      if (session.assistantAudio?.audioBase64) {
+        const lastAssistant = [...session.messages]
+          .reverse()
+          .find((msg) => msg.role === 'assistant');
+        if (lastAssistant) {
+          this.onAssistantAudio?.({
+            messageId: lastAssistant.id,
+            audioBase64: session.assistantAudio.audioBase64,
+            mimeType: session.assistantAudio.mimeType,
+            format: session.assistantAudio.format,
+          });
+        }
+      }
 
       if (session.messages.length > 0) {
         this.onHistory?.(session.messages);
@@ -156,6 +231,10 @@ class ChatApiClient {
         }
       );
 
+      if (response.metadata) {
+        this.sessionMetadata = response.metadata;
+      }
+
       // Emit user message
       if (response.userMessage) {
         this.onMessage?.(response.userMessage);
@@ -163,6 +242,14 @@ class ChatApiClient {
 
       // Emit assistant message
       if (response.assistantMessage) {
+        if (response.assistantAudio?.audioBase64) {
+          this.onAssistantAudio?.({
+            messageId: response.assistantMessage.id,
+            audioBase64: response.assistantAudio.audioBase64,
+            mimeType: response.assistantAudio.mimeType,
+            format: response.assistantAudio.format,
+          });
+        }
         this.onMessage?.(response.assistantMessage);
       }
 
@@ -170,6 +257,48 @@ class ChatApiClient {
     } catch (error) {
       this.onError?.({
         message: error instanceof Error ? error.message : 'Failed to send message',
+      });
+    }
+  }
+
+  /**
+   * Объединить импортированные поля профиля (после загрузки резюме) и получить следующий шаг диалога.
+   */
+  async mergeCollectedData(collectedData: Record<string, unknown>): Promise<void> {
+    if (!this.sessionId) {
+      this.onError?.({ message: 'Сессия не инициализирована' });
+      return;
+    }
+
+    try {
+      const response = await this.request<MergeCollectedResponse>(
+        `/api/chat/session/${this.sessionId}/merge-collected`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ collectedData }),
+        }
+      );
+
+      if (response.metadata) {
+        this.sessionMetadata = response.metadata;
+      }
+
+      if (response.assistantMessage) {
+        if (response.assistantAudio?.audioBase64) {
+          this.onAssistantAudio?.({
+            messageId: response.assistantMessage.id,
+            audioBase64: response.assistantAudio.audioBase64,
+            mimeType: response.assistantAudio.mimeType,
+            format: response.assistantAudio.format,
+          });
+        }
+        this.onMessage?.(response.assistantMessage);
+      }
+
+      this.lastMessageCount = response.messages.length;
+    } catch (error) {
+      this.onError?.({
+        message: error instanceof Error ? error.message : 'Failed to merge profile data',
       });
     }
   }
@@ -192,6 +321,10 @@ class ChatApiClient {
         }
       );
 
+      if (response.metadata) {
+        this.sessionMetadata = response.metadata;
+      }
+
       // Check for new messages
       if (response.messages.length > this.lastMessageCount) {
         const newMessages = response.messages.slice(this.lastMessageCount);
@@ -206,6 +339,98 @@ class ChatApiClient {
     }
   }
 
+  async generateResume(): Promise<{ resume: string; format: 'markdown' | 'text' | 'json' }> {
+    if (!this.sessionId) {
+      throw new Error('Сессия не инициализирована');
+    }
+
+    const response = await this.request<GenerateResumeResponse>(
+      `/api/chat/session/${this.sessionId}/resume`,
+      { method: 'POST' }
+    );
+
+    if (response.metadata) {
+      this.sessionMetadata = response.metadata;
+    }
+
+    if (response.assistantMessage) {
+      if (response.assistantAudio?.audioBase64) {
+        this.onAssistantAudio?.({
+          messageId: response.assistantMessage.id,
+          audioBase64: response.assistantAudio.audioBase64,
+          mimeType: response.assistantAudio.mimeType,
+          format: response.assistantAudio.format,
+        });
+      }
+      this.onMessage?.(response.assistantMessage);
+    }
+    if (response.downloadCommand) {
+      this.onMessage?.(response.downloadCommand);
+    }
+
+    this.lastMessageCount = response.messages.length;
+    return { resume: response.resume, format: response.format };
+  }
+
+  async downloadResumeFile(
+    format: 'pdf' | 'docx'
+  ): Promise<{ blob: Blob; fileName: string; mimeType: string }> {
+    if (!this.sessionId) {
+      throw new Error('Сессия не инициализирована');
+    }
+    const token = this.token || getToken();
+    if (!token) {
+      throw new Error('Токен не найден. Пользователь должен быть авторизован.');
+    }
+    const response = await fetch(
+      `${this.baseUrl}/api/chat/session/${this.sessionId}/resume-file?format=${encodeURIComponent(format)}`,
+      {
+        method: 'GET',
+        headers: buildAuthHeaders(token, true),
+      }
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get('Content-Disposition') || '';
+    const fileNameMatch = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
+    const fileName = fileNameMatch?.[1] || `resume.${format}`;
+    const mimeType = response.headers.get('Content-Type') || blob.type || 'application/octet-stream';
+    return { blob, fileName, mimeType };
+  }
+
+  async sendResumeEmail(): Promise<{ success: boolean; email: string }> {
+    if (!this.sessionId) {
+      throw new Error('Сессия не инициализирована');
+    }
+
+    const response = await this.request<SendResumeEmailResponse>(
+      `/api/chat/session/${this.sessionId}/resume-email`,
+      { method: 'POST' }
+    );
+
+    if (response.metadata) {
+      this.sessionMetadata = response.metadata;
+    }
+
+    if (response.assistantMessage) {
+      if (response.assistantAudio?.audioBase64) {
+        this.onAssistantAudio?.({
+          messageId: response.assistantMessage.id,
+          audioBase64: response.assistantAudio.audioBase64,
+          mimeType: response.assistantAudio.mimeType,
+          format: response.assistantAudio.format,
+        });
+      }
+      this.onMessage?.(response.assistantMessage);
+    }
+
+    this.lastMessageCount = response.messages.length;
+    return { success: response.success, email: response.email };
+  }
+
   /**
    * Poll for new messages (fallback for real-time)
    */
@@ -218,6 +443,10 @@ class ChatApiClient {
 
       try {
         const session = await this.request<ChatSession>(`/api/chat/session/${this.sessionId}`);
+
+        if (session.metadata) {
+          this.sessionMetadata = session.metadata;
+        }
 
         // Check for new messages
         if (session.messages.length > this.lastMessageCount) {
@@ -253,6 +482,18 @@ class ChatApiClient {
 
   get product(): ProductType | undefined {
     return this.sessionMetadata?.product;
+  }
+
+  /**
+   * Разбор интервью (оценка, рекомендации, вопросы) без PDF — для карточек на экране завершения.
+   */
+  async fetchReportPreview(): Promise<Record<string, unknown>> {
+    if (!this.sessionId) {
+      throw new Error('Сессия не инициализирована');
+    }
+    return this.request<Record<string, unknown>>(
+      `/api/chat/session/${this.sessionId}/report-preview`
+    );
   }
 
   /**
@@ -318,6 +559,12 @@ export function createChatApi(
     onSessionJoined?: (payload: { sessionId: string; metadata?: SessionMetadata }) => void;
     onHistory?: (payload: { messages: Message[] }) => void;
     onMessage?: (payload: { message: Message }) => void;
+    onAssistantAudio?: (payload: {
+      messageId: string;
+      audioBase64: string;
+      mimeType?: string;
+      format?: 'mp3' | 'oggopus';
+    }) => void;
     onError?: (payload: { message: string }) => void;
   } = {}
 ) {
@@ -335,6 +582,9 @@ export function createChatApi(
   if (config.onMessage) {
     client.onMessage = (message) => config.onMessage?.({ message });
   }
+  if (config.onAssistantAudio) {
+    client.onAssistantAudio = config.onAssistantAudio;
+  }
   if (config.onError) client.onError = config.onError;
 
   return {
@@ -347,7 +597,12 @@ export function createChatApi(
       }),
     disconnect: () => client.disconnect(),
     sendMessage: (content: string) => client.sendMessage(content),
+    mergeCollectedData: (data: Record<string, unknown>) => client.mergeCollectedData(data),
     executeCommand: (commandId: string, action: string) => client.executeCommand(commandId, action),
+    generateResume: () => client.generateResume(),
+    sendResumeEmail: () => client.sendResumeEmail(),
+    downloadResumeFile: (format: 'pdf' | 'docx') => client.downloadResumeFile(format),
+    fetchReportPreview: () => client.fetchReportPreview(),
     requestReport: () => client.requestReport(),
     get sessionId() {
       return client.currentSessionId;

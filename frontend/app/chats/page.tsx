@@ -4,10 +4,21 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Card, Empty, Layout, Spin, Typography, message as antdMessage, Modal } from 'antd';
-import { PlusOutlined, MessageOutlined, CalendarOutlined, DeleteOutlined } from '@ant-design/icons';
+import {
+  PlusOutlined,
+  MessageOutlined,
+  CalendarOutlined,
+  DeleteOutlined,
+  RocketOutlined,
+} from '@ant-design/icons';
 import { conversationAPI, ConversationPreview } from '@/lib/api';
 import { isAuthenticated } from '@/lib/auth';
 import Link from 'next/link';
+import {
+  CareerOnboardingProgress,
+  onboardingStepTitles,
+  readCareerOnboardingProgress,
+} from '@/lib/careerOnboardingProgress';
 
 const { Title, Text } = Typography;
 const { Content } = Layout;
@@ -16,6 +27,7 @@ export default function ChatsPage() {
   const router = useRouter();
   const { openAuthModal } = useAuth();
   const [conversations, setConversations] = useState<ConversationPreview[]>([]);
+  const [onboardingProgress, setOnboardingProgress] = useState<CareerOnboardingProgress | null>(null);
   const [loading, setLoading] = useState(true);
   const [messageApi, contextHolder] = antdMessage.useMessage();
 
@@ -28,6 +40,7 @@ export default function ChatsPage() {
     }
 
     loadConversations();
+    setOnboardingProgress(readCareerOnboardingProgress());
   }, [router, messageApi]);
 
   const loadConversations = async () => {
@@ -116,7 +129,7 @@ export default function ChatsPage() {
             <div className="flex h-64 items-center justify-center">
               <Spin size="large" />
             </div>
-          ) : conversations.length === 0 ? (
+          ) : conversations.length === 0 && !onboardingProgress ? (
             <Card className="border-white/10 bg-white/[0.04] backdrop-blur">
               <Empty
                 description={
@@ -141,6 +154,48 @@ export default function ChatsPage() {
             </Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {onboardingProgress && (
+                <Link href="/career/onboarding">
+                  <Card
+                    hoverable
+                    className="h-full border-white/10 bg-white/[0.04] backdrop-blur transition-all hover:bg-white/[0.08] hover:shadow-lg"
+                  >
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-300">
+                              onboarding
+                            </span>
+                          </div>
+                          <Title level={4} style={{ color: 'white', marginBottom: 8, fontSize: 18 }}>
+                            AI Career Onboarding
+                          </Title>
+                          <Text
+                            type="secondary"
+                            className="line-clamp-2 text-sm"
+                            style={{ color: 'rgba(148, 163, 184, 0.8)' }}
+                          >
+                            {onboardingProgress.completed
+                              ? 'Завершено. Можно открыть результаты AI Readiness.'
+                              : `Текущий шаг: ${onboardingStepTitles[onboardingProgress.step]}`}
+                          </Text>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-slate-400">
+                        <div className="flex items-center gap-1">
+                          <RocketOutlined />
+                          <span>{onboardingProgress.completed ? 'Завершено' : 'В процессе'}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <CalendarOutlined />
+                          <span>{formatDate(onboardingProgress.updatedAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
+              )}
               {conversations.map((conversation) => (
                 <div key={conversation.id} className="relative group">
                   <Link href={`/chat?sessionId=${conversation.id}`}>
@@ -159,7 +214,7 @@ export default function ChatsPage() {
                                     : 'bg-green-500/30 text-green-300'
                                 }`}
                               >
-                                {conversation.product === 'wannanew' ? 'wannanew' : 'LEO'}
+                                {conversation.product === 'wannanew' ? 'Leo' : 'LEO'}
                               </span>
                             </div>
                             <Title

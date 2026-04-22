@@ -26,8 +26,16 @@ import {
   analyzeProfile,
   checkContext,
   generateFreeChatResponse,
+  retrieveContext,
+  ValidationResult,
 } from './aiClient';
+import {
+  parsePositionsCountAnswer,
+  parseTotalExperienceYearsFromText,
+  resolveCollectValueForStep,
+} from '../utils/numericStepAnswers';
 import { logger } from '../utils/logger';
+import { triggerProfileDrivenScrape } from './integrationService';
 
 // ============================================
 // РЕГИСТР СЦЕНАРИЕВ
@@ -54,6 +62,7 @@ const COMPLETION_GAP_FIELDS_KEY = 'completionGapFields';
 const CLARIFY_PREVIOUS_STEP_KEY = 'clarifyPreviousStep';
 const CLARIFY_ATTEMPTS_KEY = 'clarifyAttempts';
 const MAX_CLARIFY_ATTEMPTS = 2; // Максимальное количество попыток уточнения для одного вопроса
+const RESUME_CONTENT_LIST_KEY = '__resumeContentList';
 
 /**
  * Get scenario by ID, fallback to default (Jack)
@@ -86,8 +95,208 @@ function getStep(scenarioId: string | undefined, stepId: string | undefined | nu
   return STEP_CACHE.get(`${effectiveScenarioId}:${stepId}`);
 }
 
-function getStepSentFlagKey(stepId: string): string {
+export function getStepSentFlagKey(stepId: string): string {
   return `${STEP_FLAG_SENT_PREFIX}${stepId}`;
+}
+
+function isCollectedFilledForImport(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'number') return !Number.isNaN(value);
+  if (typeof value === 'boolean') return true;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value as object).length > 0;
+  return false;
+}
+
+function shouldSkipStepOnResumeImport(
+  step: ScenarioStep,
+  collected: Record<string, unknown>
+): boolean {
+  if (step.id === 'clarify' || step.id === 'completion_gap') {
+    return true;
+  }
+  if (step.id === 'pause_reminder') {
+    const r = collected.readyToStart;
+    const s = typeof r === 'string' ? r.toLowerCase().trim() : '';
+    const paused =
+      s.includes('нет') || s.includes('позже') || s.includes('не готов');
+    return !paused;
+  }
+  return false;
+}
+
+function recomputeCompletedQuestionSteps(
+  scenario: ScenarioDefinition,
+  collected: Record<string, unknown>
+): string[] {
+  const done: string[] = [];
+  for (const step of scenario.steps) {
+    if (
+      step.type === 'question' &&
+      step.collectKey &&
+      isCollectedFilledForImport(collected[step.collectKey])
+    ) {
+      done.push(step.id);
+    }
+  }
+  return done;
+}
+
+/**
+ * Находит первый шаг сценария, который ещё нужно пройти после импорта данных из резюме.
+ */
+export function findFirstIncompleteStepIdAfterImport(
+  scenario: ScenarioDefinition,
+  collected: Record<string, unknown>,
+  completedSteps: string[]
+): string | null {
+  const completed = new Set(completedSteps);
+  for (const step of scenario.steps) {
+    if (shouldSkipStepOnResumeImport(step, collected)) {
+      continue;
+    }
+    if (step.type === 'question' && step.collectKey) {
+      if (!isCollectedFilledForImport(collected[step.collectKey])) {
+        return step.id;
+      }
+      continue;
+    }
+    if (step.type === 'info_card') {
+      if (!completed.has(step.id)) {
+        return step.id;
+      }
+      continue;
+    }
+    if (step.type === 'command' && !completed.has(step.id)) {
+      return step.id;
+    }
+  }
+  return null;
+}
+
+/**
+ * Объединяет импортированные поля в collectedData, пересчитывает шаги и формирует следующее сообщение ассистента.
+ */
+export async function applyImportedCollectedData(
+  session: ConversationSession,
+  imported: Record<string, unknown>
+): Promise<PreparedStepResult> {
+  const scenarioUpdates = ensureScenarioMetadata(session);
+  const scenarioId = session.metadata.scenarioId;
+  const scenario = getScenario(scenarioId);
+
+  session.metadata.collectedData = {
+    ...session.metadata.collectedData,
+    ...imported,
+  };
+
+  const fromData = recomputeCompletedQuestionSteps(scenario, session.metadata.collectedData);
+  session.metadata.completedSteps = Array.from(
+    new Set([...(session.metadata.completedSteps || []), ...fromData])
+  );
+
+  const nextStepId = findFirstIncompleteStepIdAfterImport(
+    scenario,
+    session.metadata.collectedData,
+    session.metadata.completedSteps
+  );
+
+  if (!nextStepId) {
+    return {
+      message: null,
+      metadataUpdates: {
+        ...scenarioUpdates,
+        collectedData: session.metadata.collectedData,
+        completedSteps: session.metadata.completedSteps,
+      },
+    };
+  }
+
+  session.metadata.currentStepId = nextStepId;
+
+  for (const step of scenario.steps) {
+    if (step.id === nextStepId) {
+      break;
+    }
+    session.metadata.flags = {
+      ...session.metadata.flags,
+      [getStepSentFlagKey(step.id)]: true,
+    };
+  }
+
+  const nextStep = getStep(scenarioId, nextStepId);
+  if (!nextStep) {
+    return {
+      message: null,
+      metadataUpdates: {
+        ...scenarioUpdates,
+        collectedData: session.metadata.collectedData,
+        completedSteps: session.metadata.completedSteps,
+        currentStepId: nextStepId,
+      },
+    };
+  }
+
+  session.metadata.flags = {
+    ...session.metadata.flags,
+    [getStepSentFlagKey(nextStep.id)]: true,
+  };
+
+  if (nextStep.type === 'question') {
+    const message = await buildQuestionMessage(session, nextStep);
+    return {
+      message,
+      metadataUpdates: {
+        ...scenarioUpdates,
+        collectedData: session.metadata.collectedData,
+        completedSteps: session.metadata.completedSteps,
+        currentStepId: nextStepId,
+        flags: { ...session.metadata.flags },
+      },
+      nextStepId,
+    };
+  }
+
+  if (nextStep.type === 'info_card') {
+    const message = buildInfoCardMessage(session, nextStep);
+    return {
+      message,
+      metadataUpdates: {
+        ...scenarioUpdates,
+        collectedData: session.metadata.collectedData,
+        completedSteps: session.metadata.completedSteps,
+        currentStepId: nextStepId,
+        flags: { ...session.metadata.flags },
+      },
+      nextStepId,
+    };
+  }
+
+  if (nextStep.type === 'command') {
+    const message = buildCommandMessage(session, nextStep);
+    return {
+      message,
+      metadataUpdates: {
+        ...scenarioUpdates,
+        collectedData: session.metadata.collectedData,
+        completedSteps: session.metadata.completedSteps,
+        currentStepId: nextStepId,
+        flags: { ...session.metadata.flags },
+      },
+      nextStepId,
+    };
+  }
+
+  return {
+    message: null,
+    metadataUpdates: {
+      ...scenarioUpdates,
+      collectedData: session.metadata.collectedData,
+      completedSteps: session.metadata.completedSteps,
+      currentStepId: nextStepId,
+    },
+  };
 }
 
 /**
@@ -513,7 +722,7 @@ function buildInfoCardMessage(
     };
   }
 
-  return {
+  const msg: InfoCardMessage = {
     id: uuidv4(),
     type: MessageType.INFO_CARD,
     role: MessageRole.ASSISTANT,
@@ -522,6 +731,100 @@ function buildInfoCardMessage(
     title: step.title,
     description: step.description,
     cards: step.cards,
+  };
+  if (step.commands && step.commands.length > 0) {
+    msg.commands = step.commands;
+  }
+  return msg;
+}
+
+/**
+ * После clarify: собрать ответ ассистента для следующего шага (question / info_card / command).
+ * Совпадает с логикой основного потока после сохранения ответа на вопрос.
+ */
+async function prepareAssistantMessageForStepId(
+  session: ConversationSession,
+  scenarioId: string,
+  nextStepId: string,
+  baseMetadata: PreparedStepResult['metadataUpdates']
+): Promise<PreparedStepResult> {
+  const nextStep = getStep(scenarioId, nextStepId);
+  if (!nextStep) {
+    logger.error(`prepareAssistantMessageForStepId: step ${nextStepId} not found`);
+    return {
+      message: {
+        id: uuidv4(),
+        type: MessageType.TEXT,
+        role: MessageRole.ASSISTANT,
+        timestamp: new Date().toISOString(),
+        sessionId: session.id,
+        content: 'Понял, продолжаем дальше.',
+      },
+      metadataUpdates: { ...(baseMetadata || {}), currentStepId: nextStepId },
+      nextStepId: null,
+    };
+  }
+
+  const metadataUpdates: PreparedStepResult['metadataUpdates'] = {
+    ...(baseMetadata || {}),
+    currentStepId: nextStepId,
+  };
+  session.metadata.currentStepId = nextStepId;
+
+  if (nextStep.type === 'question') {
+    const message = await buildQuestionMessage(session, nextStep);
+    const sentFlagKey = getStepSentFlagKey(nextStep.id);
+    metadataUpdates.flags = {
+      ...(metadataUpdates.flags || {}),
+      [sentFlagKey]: true,
+    };
+    session.metadata.flags = {
+      ...(session.metadata.flags || {}),
+      [sentFlagKey]: true,
+    };
+    return { message, metadataUpdates, nextStepId };
+  }
+
+  if (nextStep.type === 'info_card') {
+    const message = buildInfoCardMessage(session, nextStep);
+    const sentFlagKey = getStepSentFlagKey(nextStep.id);
+    metadataUpdates.flags = {
+      ...(metadataUpdates.flags || {}),
+      [sentFlagKey]: true,
+    };
+    session.metadata.flags = {
+      ...(session.metadata.flags || {}),
+      [sentFlagKey]: true,
+    };
+    if (nextStep.id === 'profile_snapshot') {
+      return { message, metadataUpdates };
+    }
+    const infoCardNextStepId = resolveNextStep(nextStep.next, session.metadata.collectedData);
+    return {
+      message,
+      metadataUpdates,
+      nextStepId: infoCardNextStepId ?? undefined,
+    };
+  }
+
+  if (nextStep.type === 'command') {
+    const message = buildCommandMessage(session, nextStep);
+    const sentFlagKey = getStepSentFlagKey(nextStep.id);
+    metadataUpdates.flags = {
+      ...(metadataUpdates.flags || {}),
+      [sentFlagKey]: true,
+    };
+    session.metadata.flags = {
+      ...(session.metadata.flags || {}),
+      [sentFlagKey]: true,
+    };
+    return { message, metadataUpdates, nextStepId };
+  }
+
+  return {
+    message: null,
+    metadataUpdates,
+    nextStepId: nextStepId ?? null,
   };
 }
 
@@ -666,10 +969,15 @@ export async function prepareEntryStep(session: ConversationSession): Promise<Pr
 
 export async function handleUserReply(
   session: ConversationSession,
-  userMessageContent: string
+  userMessageContent: string,
+  authToken?: string
 ): Promise<PreparedStepResult> {
   const scenarioUpdates = ensureScenarioMetadata(session);
-  const { currentStepId, scenarioId } = session.metadata;
+  const scenarioId = session.metadata.scenarioId;
+  const currentStepId = session.metadata.currentStepId;
+  if (!scenarioId || !currentStepId) {
+    return { message: null, metadataUpdates: scenarioUpdates };
+  }
   const currentStep = getStep(scenarioId, currentStepId);
 
   if (!currentStep) {
@@ -873,13 +1181,28 @@ export async function handleUserReply(
         const currentAttempts = currentAttemptsStr ? parseInt(currentAttemptsStr, 10) || 0 : 0;
         const newAttempts = currentAttempts + 1;
 
-        // Validate the clarified answer
-        const validation = await validateAnswer({
-          question: previousStep.label,
-          answer: userMessageContent,
-          collectedData: session.metadata.collectedData,
-          stepId: previousStep.id,
-        });
+        // Validate the clarified answer (числовые шаги — без LLM, см. IMPROVEMENT_PLAN P0.1)
+        let validation: ValidationResult;
+        if (previousStep.collectKey === 'positionsCount') {
+          const n = parsePositionsCountAnswer(userMessageContent);
+          if (n !== null) {
+            validation = { quality: 'good', reason: 'positionsCount fast path (clarify)' };
+          } else {
+            validation = await validateAnswer({
+              question: previousStep.label,
+              answer: userMessageContent,
+              collectedData: session.metadata.collectedData,
+              stepId: previousStep.id,
+            });
+          }
+        } else {
+          validation = await validateAnswer({
+            question: previousStep.label,
+            answer: userMessageContent,
+            collectedData: session.metadata.collectedData,
+            stepId: previousStep.id,
+          });
+        }
 
         logger.info(
           `🔍 Clarify validation for step ${previousStepId}: quality=${validation.quality}, attempts=${newAttempts}/${MAX_CLARIFY_ATTEMPTS}`
@@ -950,11 +1273,14 @@ export async function handleUserReply(
           );
           // Save the answer as-is (even if it's not ideal) and continue
           if (previousStep.collectKey) {
-            const trimmedValue = userMessageContent.trim();
+            const collectValue = resolveCollectValueForStep(
+              previousStep.collectKey,
+              userMessageContent
+            );
             const metadataUpdates: PreparedStepResult['metadataUpdates'] = {
               ...scenarioUpdates,
               collectedData: {
-                [previousStep.collectKey]: trimmedValue,
+                [previousStep.collectKey]: collectValue,
               },
               completedSteps: [previousStep.id],
               flags: {
@@ -963,21 +1289,14 @@ export async function handleUserReply(
                 [clarifyAttemptsKey]: undefined, // Clear attempts counter
               },
             };
-            // Continue to next step
+            session.metadata.collectedData = {
+              ...session.metadata.collectedData,
+              [previousStep.collectKey]: collectValue,
+            };
+            // Continue to next step (в т.ч. info_card «Интервью завершено», не только question)
             const nextStepId = resolveNextStep(previousStep.next, session.metadata.collectedData);
             if (nextStepId) {
-              const nextStep = getStep(scenarioId, nextStepId);
-              if (nextStep && nextStep.type === 'question') {
-                const nextMessage = await buildQuestionMessage(session, nextStep);
-                return {
-                  message: nextMessage,
-                  metadataUpdates: {
-                    ...metadataUpdates,
-                    currentStepId: nextStepId,
-                  },
-                  nextStepId,
-                };
-              }
+              return prepareAssistantMessageForStepId(session, scenarioId, nextStepId, metadataUpdates);
             }
             // If no next step, return with completed step
             return {
@@ -1001,12 +1320,17 @@ export async function handleUserReply(
           `✅ Clarify successful! Saving answer to ${previousStep.collectKey} and continuing.`
         );
         if (previousStep.collectKey) {
-          const trimmedValue = userMessageContent.trim();
-          logger.info(`💾 Saving clarified answer: ${previousStep.collectKey} = "${trimmedValue}"`);
+          const collectValue = resolveCollectValueForStep(
+            previousStep.collectKey,
+            userMessageContent
+          );
+          logger.info(
+            `💾 Saving clarified answer: ${previousStep.collectKey} = ${JSON.stringify(collectValue)}`
+          );
           const metadataUpdates: PreparedStepResult['metadataUpdates'] = {
             ...scenarioUpdates,
             collectedData: {
-              [previousStep.collectKey]: trimmedValue,
+              [previousStep.collectKey]: collectValue,
             },
             completedSteps: [previousStep.id],
             flags: {
@@ -1018,41 +1342,19 @@ export async function handleUserReply(
 
           session.metadata.collectedData = {
             ...session.metadata.collectedData,
-            [previousStep.collectKey]: trimmedValue,
+            [previousStep.collectKey]: collectValue,
           };
 
-          // Resolve next step from previous step
+          // Resolve next step from previous step (в т.ч. report_ready info_card)
           const nextStepId = resolveNextStep(previousStep.next, session.metadata.collectedData);
-          metadataUpdates.currentStepId = nextStepId ?? undefined;
-          session.metadata.currentStepId = nextStepId ?? undefined;
-
-          if (nextStepId) {
-            const nextStep = getStep(scenarioId, nextStepId);
-            if (nextStep && nextStep.type === 'question') {
-              const message = await buildQuestionMessage(session, nextStep);
-              const sentFlagKey = getStepSentFlagKey(nextStep.id);
-              metadataUpdates.flags = {
-                ...(metadataUpdates.flags || {}),
-                [sentFlagKey]: true,
-              };
-              session.metadata.flags = {
-                ...(session.metadata.flags || {}),
-                [sentFlagKey]: true,
-              };
-
-              return {
-                message,
-                metadataUpdates,
-                nextStepId,
-              };
-            }
+          if (!nextStepId) {
+            return {
+              message: null,
+              metadataUpdates,
+              nextStepId: null,
+            };
           }
-
-          return {
-            message: null,
-            metadataUpdates,
-            nextStepId: nextStepId ?? null,
-          };
+          return prepareAssistantMessageForStepId(session, scenarioId, nextStepId, metadataUpdates);
         }
       }
     }
@@ -1106,12 +1408,27 @@ export async function handleUserReply(
     currentStep.id !== 'completion_gap' &&
     currentStep.id !== 'pause_reminder'
   ) {
-    const validation = await validateAnswer({
-      question: currentStep.label,
-      answer: userMessageContent,
-      collectedData: session.metadata.collectedData,
-      stepId: currentStep.id,
-    });
+    let validation: ValidationResult;
+    if (currentStep.collectKey === 'positionsCount') {
+      const n = parsePositionsCountAnswer(userMessageContent);
+      if (n !== null) {
+        validation = { quality: 'good', reason: 'positionsCount fast path' };
+      } else {
+        validation = await validateAnswer({
+          question: currentStep.label,
+          answer: userMessageContent,
+          collectedData: session.metadata.collectedData,
+          stepId: currentStep.id,
+        });
+      }
+    } else {
+      validation = await validateAnswer({
+        question: currentStep.label,
+        answer: userMessageContent,
+        collectedData: session.metadata.collectedData,
+        stepId: currentStep.id,
+      });
+    }
 
     // If answer quality is poor, redirect to clarify
     if (validation.quality === 'unclear' || validation.quality === 'irrelevant') {
@@ -1192,6 +1509,7 @@ export async function handleUserReply(
   if (currentStep.type === 'question') {
     if (currentStep.collectKey) {
       const trimmedValue = userMessageContent.trim();
+      const collectValue = resolveCollectValueForStep(currentStep.collectKey, userMessageContent);
 
       // Special handling for skills: merge additional skills with existing ones
       if (currentStep.collectKey === 'skillsAdditional' && session.metadata.collectedData.skills) {
@@ -1217,19 +1535,63 @@ export async function handleUserReply(
         };
       } else {
         metadataUpdates.collectedData = {
-          [currentStep.collectKey]: trimmedValue,
+          [currentStep.collectKey]: collectValue,
         };
         session.metadata.collectedData = {
           ...session.metadata.collectedData,
-          [currentStep.collectKey]: trimmedValue,
+          [currentStep.collectKey]: collectValue,
         };
-        logger.info(`Saved answer to ${currentStep.collectKey}: "${trimmedValue}"`);
+        logger.info(
+          `Saved answer to ${currentStep.collectKey}: ${JSON.stringify(collectValue)}`
+        );
+      }
+
+      // Когда пользователь сообщил желаемую должность, у нас впервые появляется
+      // достаточно сигнала, чтобы scraper собрал релевантные вакансии.
+      // Триггерим фоновый per-user скрейп — он не должен блокировать ответ ассистента.
+      if (
+        currentStep.collectKey === 'desired_role' &&
+        session.userId &&
+        authToken
+      ) {
+        triggerProfileDrivenScrape(session.userId, authToken).catch((err) => {
+          logger.warn(`Profile-driven scrape trigger failed: ${String(err)}`);
+        });
       }
     }
   }
 
   // Resolve next step using conditional logic
-  const nextStepId = resolveNextStep(currentStep.next, session.metadata.collectedData);
+  let nextStepId: string | null = resolveNextStep(currentStep.next, session.metadata.collectedData);
+
+  // Jack: если в ответе на «карьерный путь» уже есть «N лет», не дублировать шаг total_experience
+  if (
+    currentStep.type === 'question' &&
+    currentStep.id === 'career_overview' &&
+    session.metadata.collectedData.careerSummary !== undefined
+  ) {
+    const years = parseTotalExperienceYearsFromText(
+      String(session.metadata.collectedData.careerSummary)
+    );
+    if (years !== null) {
+      session.metadata.collectedData.totalExperience = years;
+      metadataUpdates.collectedData = {
+        ...(metadataUpdates.collectedData || {}),
+        totalExperience: years,
+      };
+      const totalStep = getStep(scenarioId, 'total_experience');
+      if (totalStep?.type === 'question' && totalStep.next !== undefined) {
+        nextStepId = resolveNextStep(totalStep.next, session.metadata.collectedData);
+      }
+      metadataUpdates.completedSteps = Array.from(
+        new Set([...(metadataUpdates.completedSteps || []), 'total_experience'])
+      );
+      logger.info(
+        `📌 Parsed totalExperience=${years} from career_overview answer; skipping question total_experience, next=${nextStepId}`
+      );
+    }
+  }
+
   logger.info(
     `Resolved next step for ${currentStep.id}: ${nextStepId} (collectedData: ${JSON.stringify(session.metadata.collectedData)})`
   );
@@ -1273,8 +1635,42 @@ export async function handleUserReply(
           .join(', ');
 
         const completionGapMessage = await buildQuestionMessage(session, completionGapStep);
+        const contentList =
+          typeof session.metadata.collectedData[RESUME_CONTENT_LIST_KEY] === 'object' &&
+          session.metadata.collectedData[RESUME_CONTENT_LIST_KEY] !== null
+            ? (session.metadata.collectedData[RESUME_CONTENT_LIST_KEY] as {
+                docId?: string;
+                chunks: Array<{
+                  chunkId: string;
+                  type: 'text';
+                  text: string;
+                  page?: number;
+                  section?: string;
+                  tags?: string[];
+                  confidence?: number;
+                  lang?: 'ru' | 'en' | 'unknown';
+                }>;
+              })
+            : undefined;
+        const retrieval = await retrieveContext({
+          sessionId: session.id,
+          scenarioId,
+          query: `Критичные пробелы профиля: ${missingFieldsText}`,
+          topK: 3,
+          collectedData: session.metadata.collectedData,
+          contentList,
+          authToken,
+        });
+        const retrievalHints = retrieval.items
+          .slice(0, 2)
+          .map((item) => item.text.replace(/^.+?:\s*/, '').slice(0, 140))
+          .filter((v) => v.length > 0);
         // Modify question text to include missing fields
-        completionGapMessage.question = `Я вижу, что мы не обсудили ${missingFieldsText}. Хотите заполнить их сейчас или продолжить как есть?`;
+        completionGapMessage.question = `Я вижу, что мы не обсудили ${missingFieldsText}. Хотите заполнить их сейчас или продолжить как есть?${
+          retrievalHints.length > 0
+            ? `\n\nЧто уже вижу в вашем профиле:\n- ${retrievalHints.join('\n- ')}`
+            : ''
+        }`;
 
         const gapMetadataUpdates: PreparedStepResult['metadataUpdates'] = {
           ...metadataUpdates,
@@ -1315,9 +1711,42 @@ export async function handleUserReply(
           content: 'content' in msg ? String(msg.content) : '',
         }));
 
-      const freeChatResponse = await generateFreeChatResponse({
-        message: userMessageContent,
+      const contentList =
+        typeof session.metadata.collectedData[RESUME_CONTENT_LIST_KEY] === 'object' &&
+        session.metadata.collectedData[RESUME_CONTENT_LIST_KEY] !== null
+          ? (session.metadata.collectedData[RESUME_CONTENT_LIST_KEY] as {
+              docId?: string;
+              chunks: Array<{
+                chunkId: string;
+                type: 'text';
+                text: string;
+                page?: number;
+                section?: string;
+                tags?: string[];
+                confidence?: number;
+                lang?: 'ru' | 'en' | 'unknown';
+              }>;
+            })
+          : undefined;
+      const retrieval = await retrieveContext({
+        sessionId: session.id,
+        scenarioId,
+        query: userMessageContent,
+        topK: 3,
         collectedData: session.metadata.collectedData,
+        contentList,
+        authToken,
+      });
+      const contextText = retrieval.items.map((item) => `- ${item.text}`).join('\n');
+      const enrichedMessage =
+        contextText.length > 0
+          ? `${userMessageContent}\n\nРелевантный контекст профиля:\n${contextText}`
+          : userMessageContent;
+
+      const freeChatResponse = await generateFreeChatResponse({
+        message: enrichedMessage,
+        collectedData: session.metadata.collectedData,
+        authToken,
         conversationHistory,
       });
 
@@ -1357,9 +1786,42 @@ export async function handleUserReply(
           content: 'content' in msg ? String(msg.content) : '',
         }));
 
-      const freeChatResponse = await generateFreeChatResponse({
-        message: userMessageContent,
+      const contentList =
+        typeof session.metadata.collectedData[RESUME_CONTENT_LIST_KEY] === 'object' &&
+        session.metadata.collectedData[RESUME_CONTENT_LIST_KEY] !== null
+          ? (session.metadata.collectedData[RESUME_CONTENT_LIST_KEY] as {
+              docId?: string;
+              chunks: Array<{
+                chunkId: string;
+                type: 'text';
+                text: string;
+                page?: number;
+                section?: string;
+                tags?: string[];
+                confidence?: number;
+                lang?: 'ru' | 'en' | 'unknown';
+              }>;
+            })
+          : undefined;
+      const retrieval = await retrieveContext({
+        sessionId: session.id,
+        scenarioId,
+        query: userMessageContent,
+        topK: 3,
         collectedData: session.metadata.collectedData,
+        contentList,
+        authToken,
+      });
+      const contextText = retrieval.items.map((item) => `- ${item.text}`).join('\n');
+      const enrichedMessage =
+        contextText.length > 0
+          ? `${userMessageContent}\n\nРелевантный контекст профиля:\n${contextText}`
+          : userMessageContent;
+
+      const freeChatResponse = await generateFreeChatResponse({
+        message: enrichedMessage,
+        collectedData: session.metadata.collectedData,
+        authToken,
         conversationHistory,
       });
 

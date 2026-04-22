@@ -29,55 +29,11 @@ export class UserController {
   static async register(req: Request, res: Response) {
     try {
       logger.info('Register request received');
-      // #region agent log
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const fs = require('fs');
-      const logPath = 'c:\\Users\\Marina\\Desktop\\AIheroes\\.cursor\\debug.log';
-      const logEntry =
-        JSON.stringify({
-          location: 'userController.ts:29',
-          message: 'Backend: Register controller entry',
-          data: {
-            bodyType: typeof req.body,
-            bodyIsArray: Array.isArray(req.body),
-            bodyStringified: JSON.stringify(req.body),
-            bodyRaw: req.body,
-            contentType: req.headers['content-type'],
-            contentLength: req.headers['content-length'],
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          runId: 'run1',
-          hypothesisId: 'C',
-        }) + '\n';
-      try {
-        fs.appendFileSync(logPath, logEntry, 'utf8');
-      } catch (e) {
-        // Ignore file write errors in production
-      }
-      // #endregion
 
       // Check validation errors
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         logger.warn('Validation errors:', errors.array());
-        // #region agent log
-        const errorLog =
-          JSON.stringify({
-            location: 'userController.ts:38',
-            message: 'Backend: Validation errors',
-            data: { errors: errors.array(), body: req.body },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            runId: 'run1',
-            hypothesisId: 'C',
-          }) + '\n';
-        try {
-          fs.appendFileSync(logPath, errorLog, 'utf8');
-        } catch (e) {
-          // Ignore file write errors in production
-        }
-        // #endregion
         return res.status(400).json({ errors: errors.array() });
       }
 

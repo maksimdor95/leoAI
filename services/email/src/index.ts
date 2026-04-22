@@ -13,8 +13,8 @@ import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { getHealthStatus } from './utils/healthCheck';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables from local .env and allow overriding inherited shell vars.
+dotenv.config({ override: true });
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '8080', 10);
@@ -44,9 +44,6 @@ app.use(express.urlencoded({ extended: true }));
 // Request logging middleware
 app.use((req, _res, next) => {
   logger.info(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  if (req.body && Object.keys(req.body).length > 0) {
-    logger.info('Request body:', JSON.stringify(req.body, null, 2));
-  }
   next();
 });
 

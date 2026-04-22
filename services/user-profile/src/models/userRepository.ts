@@ -35,7 +35,7 @@ export class UserRepository {
       );
 
       CREATE INDEX IF NOT EXISTS idx_users_email ON jack.users(email);
-      GRANT ALL ON SCHEMA jack TO jack_user;
+      GRANT ALL ON SCHEMA jack TO CURRENT_USER;
     `;
 
     try {

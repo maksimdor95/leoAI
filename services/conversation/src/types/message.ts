@@ -60,6 +60,13 @@ export interface InfoCardMessage extends BaseMessage {
     content: string;
     icon?: string;
   }>;
+  /** Кнопки сценария (например «Скачать PDF» на шаге report_ready) */
+  commands?: Array<{
+    id: string;
+    label: string;
+    action: string;
+    icon?: string;
+  }>;
 }
 
 /**

@@ -21,6 +21,7 @@ import {
   getUserSessions,
   addMessageToSession,
   updateSessionMetadata,
+  updateSession,
   deleteSession,
 } from './services/sessionService';
 import { ConversationSession } from './types/session';
@@ -28,7 +29,18 @@ import { Message, MessageType, MessageRole } from './types/message';
 import { SocketAuth } from './types/socket';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from './utils/logger';
-import { handleUserReply, prepareEntryStep, handleCommand } from './services/dialogueEngine';
+import {
+  handleUserReply,
+  prepareEntryStep,
+  handleCommand,
+  applyImportedCollectedData,
+} from './services/dialogueEngine';
+import {
+  generateFreeChatResponse,
+  generateResumeFromCollectedData,
+  synthesizeAssistantAudio,
+} from './services/aiClient';
+import { generateResumeDocxBuffer, generateResumePdfBuffer } from './services/resumeExport';
 import { handleConversationCompletion } from './services/integrationService';
 import { validateAndLogConfig } from './utils/configValidator';
 import { getHealthStatus } from './utils/healthCheck';
@@ -42,10 +54,50 @@ const PORT = parseInt(process.env.PORT || '8080', 10);
 
 const publicDir = path.resolve(__dirname, '..', 'public');
 
+function isLocalLoopbackOrigin(origin: string): boolean {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === 'localhost' || hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+const corsExplicitOrigins = new Set(
+  (process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+);
+
+function corsOriginChecker(
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean) => void
+): void {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+  if (corsExplicitOrigins.has(origin)) {
+    callback(null, true);
+    return;
+  }
+  if (origin === 'http://localhost:3000' || origin === 'http://127.0.0.1:3000') {
+    callback(null, true);
+    return;
+  }
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  if (nodeEnv !== 'production' && isLocalLoopbackOrigin(origin)) {
+    callback(null, true);
+    return;
+  }
+  callback(null, false);
+}
+
 // Socket.io setup
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: corsOriginChecker,
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -61,9 +113,13 @@ app.use(
         styleSrc: ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com'],
         connectSrc: [
           "'self'",
-          process.env.CORS_ORIGIN || 'http://localhost:3000',
+          ...(process.env.CORS_ORIGIN
+            ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim())
+            : ['http://localhost:3000', 'http://127.0.0.1:3000']),
           'ws://localhost:3002',
           'http://localhost:3002',
+          'ws://127.0.0.1:3002',
+          'http://127.0.0.1:3002',
           // Allow Yandex Cloud domains
           'https://*.yandexcloud.net',
           'wss://*.yandexcloud.net',
@@ -76,7 +132,7 @@ app.use(
 );
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: corsOriginChecker,
     credentials: true,
   })
 );
@@ -136,6 +192,29 @@ async function authenticateRequest(
     logger.error('Request authentication failed:', error);
     res.status(401).json({ error: 'Unauthorized: Authentication failed' });
   }
+}
+
+function extractBearerToken(
+  headerValue: string | string[] | undefined
+): string | null {
+  if (!headerValue) return null;
+  const value = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  if (!value) return null;
+  return value.startsWith('Bearer ') ? value.substring(7) : value;
+}
+
+function getSpeakableTextFromAssistantMessage(message: Message | null): string {
+  if (!message || message.role !== MessageRole.ASSISTANT) return '';
+  if (message.type === MessageType.TEXT && 'content' in message) return String(message.content || '');
+  if (message.type === MessageType.QUESTION && 'question' in message) return String(message.question || '');
+  if (message.type === MessageType.SYSTEM && 'content' in message) return String(message.content || '');
+  if (message.type === MessageType.INFO_CARD && 'title' in message) {
+    const description = 'description' in message && typeof message.description === 'string'
+      ? message.description
+      : '';
+    return `${message.title}. ${description}`.trim();
+  }
+  return '';
 }
 
 // API Routes
@@ -233,6 +312,7 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
 
     // Prepare entry step if needed
     const hydratedSession = await getSession(session.id);
+    let assistantAudio: Awaited<ReturnType<typeof synthesizeAssistantAudio>> = null;
     if (hydratedSession) {
       const entryStepResult = await prepareEntryStep(hydratedSession);
       if (entryStepResult.metadataUpdates) {
@@ -240,6 +320,10 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
       }
       if (entryStepResult.message) {
         await addMessageToSession(hydratedSession.id, entryStepResult.message);
+        const ttsText = getSpeakableTextFromAssistantMessage(entryStepResult.message);
+        if (ttsText) {
+          assistantAudio = await synthesizeAssistantAudio({ text: ttsText, lang: 'ru-RU' });
+        }
       }
     }
 
@@ -249,6 +333,7 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
       sessionId: finalSession?.id,
       messages: finalSession?.messages || [],
       metadata: finalSession?.metadata,
+      assistantAudio,
     });
   } catch (error: unknown) {
     logger.error('Error creating/getting chat session:', error);
@@ -311,16 +396,56 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
     await addMessageToSession(session.id, userMessage);
 
     // Process reply
-    const replyResult = await handleUserReply(session, content.trim());
+    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const token = extractBearerToken(
+      typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
+        ? rawAuthHeader
+        : undefined
+    );
+    const replyResult = await handleUserReply(session, content.trim(), token || undefined);
 
     if (replyResult.metadataUpdates) {
       await updateSessionMetadata(session.id, replyResult.metadataUpdates);
     }
 
     let assistantMessage = null;
+    let assistantAudio: Awaited<ReturnType<typeof synthesizeAssistantAudio>> = null;
     if (replyResult.message) {
       await addMessageToSession(session.id, replyResult.message);
       assistantMessage = replyResult.message;
+      const ttsText = getSpeakableTextFromAssistantMessage(replyResult.message);
+      if (ttsText) {
+        assistantAudio = await synthesizeAssistantAudio({ text: ttsText, lang: 'ru-RU' });
+      }
+    }
+
+    // Mirror WebSocket behavior: trigger completion integration on REST path too.
+    if (!replyResult.nextStepId && replyResult.metadataUpdates?.currentStepId === undefined) {
+      const updatedSessionForCompletion = await getSession(session.id);
+      if (updatedSessionForCompletion) {
+        const completedSteps = updatedSessionForCompletion.metadata.completedSteps || [];
+        if (completedSteps.length > 5) {
+          const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
+          const token = extractBearerToken(
+            typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
+              ? rawAuthHeader
+              : undefined
+          );
+
+          if (token) {
+            handleConversationCompletion({
+              sessionId: updatedSessionForCompletion.id,
+              userId: updatedSessionForCompletion.userId,
+              email: user.email || '',
+              token,
+              product: updatedSessionForCompletion.metadata.product,
+              scenarioId: updatedSessionForCompletion.metadata.scenarioId,
+            }).catch((err) => {
+              logger.error('Error in REST conversation completion integration:', err);
+            });
+          }
+        }
+      }
     }
 
     // Return updated session
@@ -328,6 +453,7 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
     res.json({
       userMessage,
       assistantMessage,
+      assistantAudio,
       sessionId: updatedSession?.id,
       messages: updatedSession?.messages || [],
       metadata: updatedSession?.metadata,
@@ -335,6 +461,266 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
   } catch (error: unknown) {
     logger.error('Error sending chat message:', error);
     res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+/**
+ * Импорт полей профиля из резюме (после извлечения текста и AI на ai-nlp).
+ * Полностью обновляет сессию в Redis и добавляет следующее сообщение ассистента.
+ */
+app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (req, res) => {
+  try {
+    const user = (req as express.Request & { user: { userId: string; email: string } }).user;
+    const sessionId = req.params.id;
+    const { collectedData } = req.body as { collectedData?: Record<string, unknown> };
+
+    if (!collectedData || typeof collectedData !== 'object' || Array.isArray(collectedData)) {
+      res.status(400).json({ error: 'collectedData (object) is required' });
+      return;
+    }
+
+    const session = await getSession(sessionId);
+    if (!session || session.userId !== user.userId) {
+      res.status(404).json({ error: 'Session not found or unauthorized' });
+      return;
+    }
+
+    const result = await applyImportedCollectedData(session, collectedData);
+    await updateSession(session);
+
+    let assistantMessage = null;
+    let assistantAudio: Awaited<ReturnType<typeof synthesizeAssistantAudio>> = null;
+    if (result.message) {
+      await addMessageToSession(session.id, result.message);
+      assistantMessage = result.message;
+      const ttsText = getSpeakableTextFromAssistantMessage(result.message);
+      if (ttsText) {
+        assistantAudio = await synthesizeAssistantAudio({ text: ttsText, lang: 'ru-RU' });
+      }
+    }
+
+    const updatedSession = await getSession(session.id);
+    res.json({
+      sessionId: updatedSession?.id,
+      messages: updatedSession?.messages || [],
+      metadata: updatedSession?.metadata,
+      assistantMessage,
+      assistantAudio,
+    });
+  } catch (error: unknown) {
+    logger.error('Error merging collected data:', error);
+    res.status(500).json({ error: 'Failed to merge collected data' });
+  }
+});
+
+app.post('/api/chat/session/:id/resume', authenticateRequest, async (req, res) => {
+  try {
+    const user = (req as express.Request & { user: { userId: string; email: string } }).user;
+    const sessionId = req.params.id;
+    const session = await getSession(sessionId);
+    if (!session || session.userId !== user.userId) {
+      res.status(404).json({ error: 'Session not found or unauthorized' });
+      return;
+    }
+
+    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const token = extractBearerToken(
+      Array.isArray(rawAuthHeader) ? rawAuthHeader[0] : (rawAuthHeader as string | undefined)
+    );
+
+    const { resume, format } = await generateResumeFromCollectedData({
+      collectedData: session.metadata.collectedData || {},
+      format: 'markdown',
+      authToken: token || undefined,
+    });
+
+    const assistantMessage: Message = {
+      id: uuidv4(),
+      type: MessageType.TEXT,
+      role: MessageRole.ASSISTANT,
+      timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      content: `Готово! Ниже черновик резюме в формате HH. При необходимости отредактируйте блоки перед отправкой.\n\n${resume}`,
+    };
+
+    await addMessageToSession(session.id, assistantMessage);
+    const downloadCommand: Message = {
+      id: uuidv4(),
+      type: MessageType.COMMAND,
+      role: MessageRole.ASSISTANT,
+      timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      commands: [
+        { id: 'resume_pdf', label: 'Скачать PDF', action: 'download_resume_pdf' },
+        { id: 'resume_docx', label: 'Скачать DOCX', action: 'download_resume_docx' },
+      ],
+    };
+    await addMessageToSession(session.id, downloadCommand);
+    session.metadata.flags = {
+      ...(session.metadata.flags || {}),
+      resumeDraft: resume,
+      resumeDraftFormat: format,
+    };
+    await updateSession(session);
+
+    let assistantAudio = null;
+    const ttsText = getSpeakableTextFromAssistantMessage(assistantMessage);
+    if (ttsText) {
+      assistantAudio = await synthesizeAssistantAudio({ text: ttsText, lang: 'ru-RU' });
+    }
+
+    const updatedSession = await getSession(session.id);
+    res.json({
+      sessionId: updatedSession?.id,
+      messages: updatedSession?.messages || [],
+      metadata: updatedSession?.metadata,
+      assistantMessage,
+      downloadCommand,
+      assistantAudio,
+      resume,
+      format,
+    });
+  } catch (error: unknown) {
+    logger.error('Error generating resume draft:', error);
+    res.status(500).json({ error: 'Failed to generate resume draft' });
+  }
+});
+
+app.get('/api/chat/session/:id/resume-file', authenticateRequest, async (req, res) => {
+  try {
+    const user = (req as express.Request & { user: { userId: string; email: string } }).user;
+    const sessionId = req.params.id;
+    const format = String(req.query.format || 'pdf').toLowerCase();
+    if (format !== 'pdf' && format !== 'docx') {
+      res.status(400).json({ error: 'Unsupported format. Use pdf or docx.' });
+      return;
+    }
+
+    const session = await getSession(sessionId);
+    if (!session || session.userId !== user.userId) {
+      res.status(404).json({ error: 'Session not found or unauthorized' });
+      return;
+    }
+
+    const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const token = extractBearerToken(
+      Array.isArray(authHeader) ? authHeader[0] : (authHeader as string | undefined)
+    );
+
+    const cachedDraft =
+      typeof session.metadata.flags?.resumeDraft === 'string'
+        ? session.metadata.flags.resumeDraft
+        : '';
+    const resumeText =
+      cachedDraft ||
+      (
+        await generateResumeFromCollectedData({
+          collectedData: session.metadata.collectedData || {},
+          format: 'markdown',
+          authToken: token || undefined,
+        })
+      ).resume;
+
+    const fileName = `resume-${session.id}.${format}`;
+    if (format === 'pdf') {
+      const pdfBuffer = await generateResumePdfBuffer(resumeText);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.send(pdfBuffer);
+      return;
+    }
+
+    const docxBuffer = await generateResumeDocxBuffer(resumeText);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(docxBuffer);
+  } catch (error: unknown) {
+    logger.error('Error generating resume file:', error);
+    res.status(500).json({ error: 'Failed to generate resume file' });
+  }
+});
+
+app.post('/api/chat/session/:id/resume-email', authenticateRequest, async (req, res) => {
+  try {
+    const user = (req as express.Request & { user: { userId: string; email: string } }).user;
+    const sessionId = req.params.id;
+    const session = await getSession(sessionId);
+    if (!session || session.userId !== user.userId) {
+      res.status(404).json({ error: 'Session not found or unauthorized' });
+      return;
+    }
+
+    const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const token = extractBearerToken(
+      Array.isArray(authHeader) ? authHeader[0] : (authHeader as string | undefined)
+    );
+    const bearer = token ? `Bearer ${token}` : '';
+
+    const { resume } = await generateResumeFromCollectedData({
+      collectedData: session.metadata.collectedData || {},
+      format: 'markdown',
+      authToken: token || undefined,
+    });
+
+    const coverLetter = await generateFreeChatResponse({
+      message:
+        'Сгенерируй короткое сопроводительное письмо на русском (5-7 предложений) к отклику на релевантную вакансию, с акцентом на опыт кандидата и конкретную пользу для работодателя.',
+      collectedData: session.metadata.collectedData || {},
+      conversationHistory: [],
+    });
+
+    const emailServiceUrl = process.env.EMAIL_SERVICE_URL || 'http://localhost:3005';
+    const axios = (await import('axios')).default;
+    await axios.post(
+      `${emailServiceUrl}/api/email/send-resume-package`,
+      {
+        resume,
+        coverLetter,
+      },
+      {
+        headers: {
+          Authorization: bearer,
+          'X-Auth-Token': bearer,
+          'Content-Type': 'application/json',
+        },
+        timeout: 15000,
+      }
+    );
+
+    const assistantMessage: Message = {
+      id: uuidv4(),
+      type: MessageType.TEXT,
+      role: MessageRole.ASSISTANT,
+      timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      content:
+        `Готово! Отправил резюме и сопроводительное письмо на вашу почту: ${user.email}. ` +
+        'Проверьте входящие и папку "Спам".',
+    };
+
+    await addMessageToSession(session.id, assistantMessage);
+    let assistantAudio = null;
+    const ttsText = getSpeakableTextFromAssistantMessage(assistantMessage);
+    if (ttsText) {
+      assistantAudio = await synthesizeAssistantAudio({ text: ttsText, lang: 'ru-RU' });
+    }
+
+    const updatedSession = await getSession(session.id);
+    res.json({
+      sessionId: updatedSession?.id,
+      messages: updatedSession?.messages || [],
+      metadata: updatedSession?.metadata,
+      assistantMessage,
+      assistantAudio,
+      success: true,
+      email: user.email,
+    });
+  } catch (error: unknown) {
+    logger.error('Error sending resume package email:', error);
+    res.status(500).json({ error: 'Failed to send resume package email' });
   }
 });
 
@@ -382,6 +768,62 @@ app.post('/api/chat/session/:id/report', authenticateRequest, async (req, res) =
   } catch (error: unknown) {
     logger.error('Error generating report:', error);
     res.status(500).json({ error: 'Failed to generate report' });
+  }
+});
+
+// JSON preview for interview completion cards (proxy to Report Service)
+app.get('/api/chat/session/:id/report-preview', authenticateRequest, async (req, res) => {
+  try {
+    const user = (req as express.Request & { user: { userId: string; email: string } }).user;
+    const sessionId = req.params.id;
+
+    const session = await getSession(sessionId);
+    if (!session || session.userId !== user.userId) {
+      res.status(404).json({ error: 'Session not found or unauthorized' });
+      return;
+    }
+
+    if (session.metadata.product !== 'wannanew') {
+      res.status(400).json({ error: 'Report preview is only available for interview sessions' });
+      return;
+    }
+
+    const reportServiceUrl = process.env.REPORT_SERVICE_URL || 'http://localhost:3007';
+    const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
+
+    try {
+      const axios = (await import('axios')).default;
+      const bearer =
+        typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+          ? authHeader
+          : `Bearer ${String(authHeader || '').replace(/^Bearer\s+/i, '')}`;
+
+      // Report не дергает conversation по сети — передаём collectedData после проверки сессии здесь.
+      const response = await axios.post(
+        `${reportServiceUrl}/api/report/preview-compute`,
+        { collectedData: session.metadata.collectedData || {} },
+        {
+          headers: {
+            Authorization: bearer,
+            'X-Auth-Token': bearer,
+            'Content-Type': 'application/json',
+          },
+          timeout: 20000,
+        }
+      );
+
+      res.json(response.data);
+    } catch (reportError: unknown) {
+      const err = reportError as { response?: { status?: number; data?: { error?: string } } };
+      logger.error('Error calling Report Service preview:', (reportError as Error)?.message);
+      const status = err.response?.status === 404 ? 404 : 500;
+      res.status(status).json({
+        error: err.response?.data?.error || 'Failed to load report preview',
+      });
+    }
+  } catch (error: unknown) {
+    logger.error('Error loading report preview:', error);
+    res.status(500).json({ error: 'Failed to load report preview' });
   }
 });
 
@@ -487,7 +929,6 @@ app.post('/api/chat/session/:id/command', authenticateRequest, async (req, res) 
 io.use(async (socket, next) => {
   try {
     logger.info(`WebSocket handshake attempt from ${socket.handshake.address}`);
-    logger.info(`Auth data:`, JSON.stringify(socket.handshake.auth, null, 2));
 
     const token = socket.handshake.auth?.token as string | undefined;
     if (!token) {
@@ -503,7 +944,7 @@ io.use(async (socket, next) => {
     }
 
     socket.data.user = user;
-    logger.info(`WebSocket authenticated for user: ${user.userId} (${user.email})`);
+    logger.info(`WebSocket authenticated for user: ${user.userId}`);
     next();
   } catch (error: unknown) {
     logger.error('Socket authentication failed:', error);
@@ -524,13 +965,17 @@ io.on('connection', async (socket) => {
   // Check if specific sessionId is provided in auth
   const requestedSessionId = socket.handshake.auth?.sessionId as string | undefined;
   const createNew = socket.handshake.auth?.createNew === true;
+  const requestedProduct = (socket.handshake.auth as SocketAuth | undefined)?.product;
 
   let hydratedSession: ConversationSession | null = null;
 
   // If createNew is true, always create a new session
   if (createNew) {
     logger.info(`User requested new session (createNew=true)`);
-    const newSession = await createSession({ userId: user.userId });
+    const newSession = await createSession({
+      userId: user.userId,
+      product: requestedProduct || 'jack',
+    });
     hydratedSession = await getSession(newSession.id);
     if (!hydratedSession) {
       logger.error('Failed to create new session for user:', user.userId);
@@ -538,7 +983,7 @@ io.on('connection', async (socket) => {
       socket.disconnect();
       return;
     }
-    logger.info(`Created new session: ${hydratedSession.id}`);
+    logger.info(`Created new session: ${hydratedSession.id}, product: ${requestedProduct || 'jack'}`);
   }
   // If sessionId is provided and createNew is false, try to use it
   else if (requestedSessionId) {
@@ -632,7 +1077,9 @@ io.on('connection', async (socket) => {
       await addMessageToSession(sessionSnapshot.id, userMessage);
       io.to(`session:${sessionSnapshot.id}`).emit('message:received', { message: userMessage });
 
-      const replyResult = await handleUserReply(sessionSnapshot, content.trim());
+      const socketToken =
+        typeof socket.handshake.auth?.token === 'string' ? socket.handshake.auth.token : undefined;
+      const replyResult = await handleUserReply(sessionSnapshot, content.trim(), socketToken);
 
       if (replyResult.metadataUpdates) {
         await updateSessionMetadata(sessionSnapshot.id, replyResult.metadataUpdates);
@@ -659,6 +1106,7 @@ io.on('connection', async (socket) => {
               // For Jack: job matching → email
               // For wannanew: placeholder for report generation
               handleConversationCompletion({
+                sessionId: updatedSession.id,
                 userId: updatedSession.userId,
                 email: (socket.handshake.auth as SocketAuth)?.email || '',
                 token,

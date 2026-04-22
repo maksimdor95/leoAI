@@ -6,8 +6,12 @@
 
 import nodemailer from 'nodemailer';
 import sgMail from '@sendgrid/mail';
+import dotenv from 'dotenv';
 import { logger } from '../utils/logger';
 import { compileTemplate, TemplateName } from './templateService';
+
+// Ensure env is loaded before reading SMTP/SendGrid vars at module load time.
+dotenv.config({ override: true });
 
 // SMTP Configuration (Yandex Mail)
 const SMTP_HOST = process.env.SMTP_HOST || '';
@@ -190,6 +194,44 @@ export async function sendJobsDigestEmail(
     logger.error('Failed to send jobs digest email:', error);
     return false;
   }
+}
+
+export async function sendResumePackageEmail(params: {
+  userEmail: string;
+  userName?: string;
+  resume: string;
+  coverLetter: string;
+}): Promise<boolean> {
+  const { userEmail, userName, resume, coverLetter } = params;
+  const safeName = userName?.trim() || 'кандидат';
+  const resumeHtml = resume
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br/>');
+  const coverLetterHtml = coverLetter
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br/>');
+
+  const html = `
+  <div style="font-family:Inter,Arial,sans-serif;line-height:1.5;color:#0f172a;max-width:760px;margin:0 auto;">
+    <h2 style="margin:0 0 12px;">Резюме и сопроводительное письмо</h2>
+    <p style="margin:0 0 20px;">Здравствуйте, ${safeName}! Ниже материалы, сгенерированные LEO на основе вашего профиля.</p>
+
+    <h3 style="margin:20px 0 8px;">Сопроводительное письмо</h3>
+    <div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px;background:#f8fafc;">${coverLetterHtml}</div>
+
+    <h3 style="margin:20px 0 8px;">Резюме (черновик)</h3>
+    <div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px;background:#f8fafc;">${resumeHtml}</div>
+  </div>`;
+
+  return sendEmail({
+    to: userEmail,
+    subject: 'Ваше резюме и сопроводительное письмо от LEO',
+    html,
+  });
 }
 
 /**

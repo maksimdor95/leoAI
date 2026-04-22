@@ -21,4 +21,10 @@ router.post('/send-jobs', authenticateToken, emailController.sendJobs);
  */
 router.post('/send-welcome', authenticateToken, emailController.sendWelcome);
 
+/**
+ * POST /api/email/send-resume-package
+ * Send resume + cover letter email
+ */
+router.post('/send-resume-package', authenticateToken, emailController.sendResumePackage);
+
 export default router;

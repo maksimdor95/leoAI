@@ -4,7 +4,7 @@
   "description": "Job Matching Service for Jack AI - job scraping and matching",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "PORT=3004 ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest",

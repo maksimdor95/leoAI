@@ -10,6 +10,20 @@ import { logger } from '../utils/logger';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:3003';
 
+function buildAuthHeaders(token?: string): Record<string, string> {
+  if (!token) return {};
+  return {
+    Authorization: `Bearer ${token}`,
+    'X-Auth-Token': `Bearer ${token}`,
+  };
+}
+
+export type AssistantAudio = {
+  audioBase64: string;
+  mimeType: string;
+  format?: 'mp3' | 'oggopus';
+};
+
 interface AIProcessMessageResponse {
   status: 'success';
   sessionId: string;
@@ -282,6 +296,7 @@ export async function checkContext(params: CheckContextRequest): Promise<Context
 interface FreeChatRequest {
   message: string;
   collectedData?: Record<string, unknown>;
+  authToken?: string;
   conversationHistory?: Array<{
     role: 'user' | 'assistant';
     content: string;
@@ -304,6 +319,7 @@ export async function generateFreeChatResponse(params: FreeChatRequest): Promise
       },
       {
         timeout: 15000,
+        headers: buildAuthHeaders(params.authToken),
       }
     );
 
@@ -316,5 +332,151 @@ export async function generateFreeChatResponse(params: FreeChatRequest): Promise
     logger.warn('Error generating free chat response, using fallback:', error);
     // Fallback message
     return 'Извините, не могу ответить на этот вопрос. Могу помочь с поиском работы или карьерными вопросами.';
+  }
+}
+
+type RetrieveContextRequest = {
+  query: string;
+  topK?: number;
+  sessionId?: string;
+  scenarioId?: string;
+  collectedData?: Record<string, unknown>;
+  contentList?: {
+    docId?: string;
+    chunks: Array<{
+      chunkId: string;
+      type: 'text';
+      text: string;
+      page?: number;
+      section?: string;
+      tags?: string[];
+      confidence?: number;
+      lang?: 'ru' | 'en' | 'unknown';
+    }>;
+  };
+  authToken?: string;
+};
+
+export type RetrievedContextItem = {
+  chunkId: string;
+  text: string;
+  score: number;
+  reason: string;
+  metadata?: {
+    docId?: string;
+    page?: number;
+    tags?: string[];
+    source?: 'content_list' | 'collected_data';
+  };
+};
+
+export async function retrieveContext(
+  params: RetrieveContextRequest
+): Promise<{ items: RetrievedContextItem[] }> {
+  try {
+    const response = await axios.post<{
+      status: 'success';
+      items: RetrievedContextItem[];
+    }>(
+      `${AI_SERVICE_URL}/api/ai/retrieve-context`,
+      {
+        sessionId: params.sessionId,
+        scenarioId: params.scenarioId,
+        query: params.query,
+        topK: params.topK ?? 5,
+        collectedData: params.collectedData ?? {},
+        contentList: params.contentList,
+      },
+      {
+        timeout: 8000,
+        headers: buildAuthHeaders(params.authToken),
+      }
+    );
+
+    if (response.data.status !== 'success') {
+      throw new Error('AI retrieve-context returned non-success status');
+    }
+    return { items: response.data.items || [] };
+  } catch (error: unknown) {
+    logger.warn('Error retrieving context, fallback to empty result:', error);
+    return { items: [] };
+  }
+}
+
+interface GenerateResumeResponse {
+  status: 'success';
+  resume: string;
+  format: 'markdown' | 'text' | 'json';
+}
+
+export async function generateResumeFromCollectedData(params: {
+  collectedData: Record<string, unknown>;
+  format?: 'markdown' | 'text' | 'json';
+  authToken?: string;
+}): Promise<{ resume: string; format: 'markdown' | 'text' | 'json' }> {
+  const response = await axios.post<GenerateResumeResponse>(
+    `${AI_SERVICE_URL}/api/ai/generate-resume`,
+    {
+      collectedData: params.collectedData,
+      format: params.format ?? 'markdown',
+    },
+    {
+      timeout: 30000,
+      headers: buildAuthHeaders(params.authToken),
+    }
+  );
+
+  if (response.data.status !== 'success' || !response.data.resume) {
+    throw new Error('AI generate-resume returned non-success status');
+  }
+
+  return {
+    resume: response.data.resume,
+    format: response.data.format ?? (params.format ?? 'markdown'),
+  };
+}
+
+interface TtsResponse {
+  status: 'success';
+  audioBase64: string;
+  mimeType: string;
+  format?: 'mp3' | 'oggopus';
+}
+
+export async function synthesizeAssistantAudio(params: {
+  text: string;
+  lang?: string;
+  voice?: string;
+  speed?: number;
+  format?: 'mp3' | 'oggopus';
+}): Promise<AssistantAudio | null> {
+  if (!params.text.trim()) return null;
+  try {
+    const response = await axios.post<TtsResponse>(
+      `${AI_SERVICE_URL}/api/ai/tts`,
+      {
+        text: params.text,
+        lang: params.lang ?? 'ru-RU',
+        voice: params.voice ?? process.env.TTS_VOICE ?? 'filipp',
+        speed: params.speed ?? Number(process.env.TTS_SPEED || 1.15),
+        format: params.format ?? (process.env.TTS_FORMAT as 'mp3' | 'oggopus' | undefined) ?? 'mp3',
+      },
+      {
+        timeout: 25000,
+      }
+    );
+
+    if (response.data.status !== 'success' || !response.data.audioBase64) {
+      return null;
+    }
+
+    return {
+      audioBase64: response.data.audioBase64,
+      mimeType: response.data.mimeType || 'audio/mpeg',
+      format: response.data.format,
+    };
+  } catch (error: unknown) {
+    logger.warn('Failed to synthesize assistant audio, fallback to text-only response:', error);
+    return null;
   }
 }

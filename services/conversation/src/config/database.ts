@@ -8,6 +8,8 @@ import { logger } from '../utils/logger';
 
 dotenv.config();
 
+const allowInsecureRedisTls = process.env.REDIS_TLS_ALLOW_INSECURE === 'true';
+
 let connectionAttempts = 0;
 const MAX_CONNECTION_ATTEMPTS = 3;
 const CONNECTION_RETRY_DELAY = 5000; // 5 seconds
@@ -17,7 +19,10 @@ const redisClient = createClient({
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379'),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tls: process.env.REDIS_SSL === 'true' ? ({ rejectUnauthorized: false } as any) : undefined,
+    tls:
+      process.env.REDIS_SSL === 'true'
+        ? ({ rejectUnauthorized: !allowInsecureRedisTls } as any)
+        : undefined,
     connectTimeout: 10000,
     reconnectStrategy: (retries) => {
       if (retries > 10) {

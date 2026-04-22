@@ -8,14 +8,7 @@ import jwt, { JwtPayload } from 'jsonwebtoken';
 import { logger } from '../utils/logger';
 
 const USER_PROFILE_SERVICE_URL = process.env.USER_PROFILE_SERVICE_URL || 'http://localhost:3001';
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-
-// Log JWT_SECRET info on module load (only first few chars for security)
-if (JWT_SECRET && JWT_SECRET !== 'your-secret-key-change-in-production') {
-  logger.info(`JWT_SECRET is set (length: ${JWT_SECRET.length}, starts with: ${JWT_SECRET.substring(0, 4)}...)`);
-} else {
-  logger.warn('JWT_SECRET is using default value - this is insecure!');
-}
+const JWT_SECRET = process.env.JWT_SECRET;
 
 /**
  * Verify JWT token
@@ -30,6 +23,11 @@ export async function verifyToken(
   token: string
 ): Promise<{ userId: string; email: string } | null> {
   try {
+    if (!JWT_SECRET || JWT_SECRET === 'your-secret-key-change-in-production') {
+      logger.error('JWT_SECRET is not configured for conversation service');
+      return null;
+    }
+
     // Remove 'Bearer ' prefix if present
     const cleanToken = token.replace(/^Bearer\s+/, '');
 

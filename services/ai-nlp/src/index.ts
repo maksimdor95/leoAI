@@ -11,16 +11,21 @@ import { processMessage } from './controllers/aiController';
 import { generateStepMessage, freeChat, generateProfileSummary, generateResume } from './controllers/generationController';
 import { validateAnswer } from './controllers/validationController';
 import { analyzeProfile } from './controllers/profileController';
+import { extractProfileFromResume } from './controllers/resumeExtractController';
+import { synthesizeTts } from './controllers/ttsController';
 import { checkContext } from './controllers/contextController';
+import { retrieveContext } from './controllers/retrieveContextController';
 import { logger } from './utils/logger';
 import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { requireAuth } from './middleware/auth';
+import { aiRateLimit } from './middleware/rateLimit';
 import { getHealthStatus } from './utils/healthCheck';
 
 dotenv.config();
 
 const app = express();
-const PORT = Number(process.env.PORT || 8080);
+const PORT = Number(process.env.PORT || 3003);
 
 app.use(helmet());
 app.use(
@@ -29,7 +34,8 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '2mb' }));
+app.use('/api/ai', aiRateLimit);
 
 app.use((req, _res, next) => {
   logger.info(`${new Date().toISOString()} - ${req.method} ${req.path}`);
@@ -42,15 +48,18 @@ app.get('/health', async (_req, res) => {
   res.status(statusCode).json(health);
 });
 
-app.post('/api/ai/process-message', processMessage);
-app.post('/api/ai/generate-step', generateStepMessage);
-app.post('/api/ai/validate-answer', validateAnswer);
-app.post('/api/ai/analyze-profile', analyzeProfile);
-app.post('/api/ai/check-context', checkContext);
-app.post('/api/ai/free-chat', freeChat);
+app.post('/api/ai/process-message', requireAuth, processMessage);
+app.post('/api/ai/generate-step', requireAuth, generateStepMessage);
+app.post('/api/ai/validate-answer', requireAuth, validateAnswer);
+app.post('/api/ai/analyze-profile', requireAuth, analyzeProfile);
+app.post('/api/ai/extract-profile-from-resume', requireAuth, extractProfileFromResume);
+app.post('/api/ai/check-context', requireAuth, checkContext);
+app.post('/api/ai/retrieve-context', requireAuth, retrieveContext);
+app.post('/api/ai/free-chat', requireAuth, freeChat);
+app.post('/api/ai/tts', requireAuth, synthesizeTts);
 // Новые эндпоинты для генерации профиля и резюме
-app.post('/api/ai/generate-summary', generateProfileSummary);
-app.post('/api/ai/generate-resume', generateResume);
+app.post('/api/ai/generate-summary', requireAuth, generateProfileSummary);
+app.post('/api/ai/generate-resume', requireAuth, generateResume);
 
 // 404 handler (must be before error handler)
 app.use(notFoundHandler);
@@ -79,6 +88,7 @@ async function start() {
       logger.info('Endpoint: POST /api/ai/analyze-profile');
       logger.info('Endpoint: POST /api/ai/check-context');
       logger.info('Endpoint: POST /api/ai/free-chat');
+      logger.info('Endpoint: POST /api/ai/tts');
       logger.info('Endpoint: POST /api/ai/generate-summary (NEW)');
       logger.info('Endpoint: POST /api/ai/generate-resume (NEW)');
     });

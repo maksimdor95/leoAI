@@ -53,70 +53,406 @@ body {
   overflow-x: hidden;
 }
 
-.voice-wave {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 3px;
-  height: 72px;
+/* Голос: широкая волна + ядро и кольца */
+.voice-orb-wrap {
+  padding-top: 0.5rem;
+  padding-bottom: 0.25rem;
+}
+
+@media (min-width: 1024px) {
+  .voice-orb-wrap {
+    padding-top: 1rem;
+    padding-bottom: 0.5rem;
+  }
+}
+
+.voice-stage {
+  position: relative;
   width: 100%;
-  max-width: 680px;
+  max-width: min(100%, 72rem);
   margin: 0 auto;
+  min-height: 6.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
 }
 
-.voice-wave span {
+@media (min-width: 640px) {
+  .voice-stage {
+    min-height: 7.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .voice-stage {
+    min-height: 7.75rem;
+    max-width: min(100%, 88rem);
+  }
+}
+
+/* Только волна (без шара): компактнее по высоте */
+.voice-stage--wave-only {
+  min-height: 5.5rem;
+}
+@media (min-width: 640px) {
+  .voice-stage--wave-only {
+    min-height: 6.25rem;
+  }
+}
+@media (min-width: 1024px) {
+  .voice-stage--wave-only {
+    min-height: 7rem;
+  }
+}
+
+/* rAF движет `d` и stroke-dashoffset; отключаем transform-анимации путей */
+.voice-stage--raf .voice-waveline-path--mirror,
+.voice-stage--raf .voice-waveline-path--glow,
+.voice-stage--raf .voice-waveline-path--ribbon {
+  animation: none !important;
+}
+
+.voice-stage--raf .voice-waveline-path--ribbon-center {
+  stroke-dasharray: 95 905;
+}
+
+.voice-stage-wave {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 5.25rem;
+  display: flex;
+  align-items: center;
+}
+
+@media (min-width: 640px) {
+  .voice-stage-wave {
+    height: 6rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .voice-stage-wave {
+    height: 6.75rem;
+  }
+}
+
+.voice-stage--listening-canvas .voice-stage-wave {
+  overflow: hidden;
+}
+
+.voice-listening-canvas-wrap {
+  width: 100%;
+  height: 100%;
+  min-height: 4.5rem;
+}
+
+.voice-listening-canvas {
   display: block;
-  width: 4px;
-  height: 32px;
-  background: linear-gradient(180deg, #34d399 0%, #22c55e 100%);
-  border-radius: 9999px;
-  animation: voiceWave 1.2s ease-in-out infinite;
-  transform-origin: center bottom;
-  flex: 1;
-  max-width: 6px;
+  width: 100%;
+  height: 100%;
 }
 
-.voice-wave span:nth-child(odd) {
-  animation-duration: 1.1s;
+.voice-stage-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: min(70%, 16rem);
+  height: min(70%, 16rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
 }
 
-.voice-wave span:nth-child(even) {
-  animation-duration: 1.3s;
+.voice-waveline {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  /* Иначе дочерние path наследуют fill: black и зигзаг превращается в чёрный «гребень» */
+  fill: none;
 }
 
-.voice-wave span:nth-child(3n) {
-  animation-duration: 0.9s;
+.voice-waveline-path {
+  fill: none !important;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transform-origin: 50% 50%;
 }
 
-.voice-wave span:nth-child(5n) {
-  animation-duration: 1.4s;
+.voice-waveline-path--mirror {
+  stroke: rgba(52, 211, 153, 0.22);
+  stroke-width: 1.35;
+  animation: voiceWavePulseMirror 2.35s ease-in-out infinite;
 }
 
-.voice-wave--paused span {
-  animation-play-state: paused;
-  opacity: 0.25;
+.voice-waveline-path--glow {
+  stroke-width: 5.4;
+  filter: blur(5px);
+  animation: voiceWavePulse 2.05s ease-in-out infinite 0.12s;
 }
 
-@keyframes voiceWave {
+.voice-waveline-path--ribbon {
+  stroke-dashoffset: 0;
+}
+
+.voice-waveline-path--ribbon-center {
+  filter: drop-shadow(0 0 12px rgba(52, 211, 153, 0.55)) drop-shadow(0 0 22px rgba(16, 185, 129, 0.22));
+  stroke-dasharray: 95 905;
+  stroke-dashoffset: 0;
+}
+
+.voice-waveline-node {
+  fill: rgba(74, 222, 128, 0.35);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: voiceNodeHalo 2.05s ease-in-out infinite;
+}
+
+.voice-waveline-node-core {
+  fill: #ecfdf5;
+  filter: drop-shadow(0 0 6px rgba(167, 243, 208, 0.85));
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: voiceNodeCore 2.05s ease-in-out infinite 0.08s;
+}
+
+.voice-orb-ambient {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 55%;
+  height: 55%;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(134, 239, 172, 0.22) 0%,
+    rgba(34, 197, 94, 0.12) 42%,
+    transparent 72%
+  );
+  filter: blur(28px);
+  pointer-events: none;
+}
+
+.voice-orb-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 32%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid rgba(74, 222, 128, 0.28);
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.08);
+  animation: voiceOrbRipple 2.75s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.voice-orb-core {
+  position: relative;
+  z-index: 2;
+  width: 2.65rem;
+  height: 2.65rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, #bbf7d0 0%, #4ade80 28%, #22c55e 52%, #166534 120%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset,
+    0 0 28px rgba(34, 197, 94, 0.45),
+    0 4px 20px rgba(0, 0, 0, 0.35);
+  animation: voiceOrbCore 2.4s ease-in-out infinite;
+}
+
+@media (min-width: 640px) {
+  .voice-orb-core {
+    width: 3rem;
+    height: 3rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .voice-orb-core {
+    width: 3.35rem;
+    height: 3.35rem;
+  }
+}
+
+.voice-orb-core-highlight {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 28% 22%,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.08) 22%,
+    transparent 48%
+  );
+  pointer-events: none;
+}
+
+.voice-orb--paused .voice-orb-ring {
+  animation: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.voice-orb--paused .voice-orb-core {
+  animation-play-state: paused !important;
+  filter: brightness(0.62) saturate(0.88);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 0 14px rgba(34, 197, 94, 0.2);
+}
+
+.voice-orb--paused .voice-orb-ambient {
+  opacity: 0.45;
+}
+
+.voice-orb--paused .voice-waveline-path--mirror {
+  animation: none;
+  opacity: 0.12;
+}
+
+.voice-orb--paused .voice-waveline-path--glow {
+  animation: none;
+  opacity: 0.12;
+  filter: blur(2px);
+}
+
+.voice-orb--paused .voice-waveline-path--ribbon {
+  animation: none;
+  opacity: 0.28;
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 0;
+}
+
+.voice-orb--paused .voice-waveline-path--ribbon-center {
+  opacity: 0.38;
+}
+
+.voice-orb--paused .voice-waveline-node {
+  animation: none;
+  opacity: 0.35;
+}
+
+.voice-orb--paused .voice-waveline-node-core {
+  animation: none;
+  opacity: 0.55;
+  filter: drop-shadow(0 0 4px rgba(74, 222, 128, 0.25));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-orb-ring,
+  .voice-orb-core,
+  .voice-waveline-path,
+  .voice-waveline-node,
+  .voice-waveline-node-core {
+    animation: none !important;
+  }
+
+  .voice-waveline-path--ribbon-center {
+    stroke-dasharray: 1000 !important;
+    stroke-dashoffset: 0 !important;
+  }
+
+  .voice-orb-ring {
+    opacity: 0.18;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes voiceOrbRipple {
   0% {
-    transform: scaleY(0.3);
-    opacity: 0.4;
+    transform: translate(-50%, -50%) scale(0.45);
+    opacity: 0;
   }
-  25% {
-    transform: scaleY(0.8);
-    opacity: 0.7;
-  }
-  50% {
-    transform: scaleY(1.2);
-    opacity: 1;
-  }
-  75% {
-    transform: scaleY(0.6);
-    opacity: 0.8;
+  8% {
+    opacity: 0.5;
   }
   100% {
-    transform: scaleY(0.3);
-    opacity: 0.4;
+    transform: translate(-50%, -50%) scale(2.35);
+    opacity: 0;
+  }
+}
+
+@keyframes voiceOrbCore {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  45% {
+    transform: scale(1.06);
+    filter: brightness(1.08);
+  }
+  70% {
+    transform: scale(0.98);
+    filter: brightness(0.96);
+  }
+}
+
+@keyframes voiceWavePulse {
+  0%,
+  100% {
+    transform: scaleY(0.9);
+    opacity: 0.58;
+  }
+  22% {
+    transform: scaleY(1.04);
+    opacity: 0.9;
+  }
+  48% {
+    transform: scaleY(1.14);
+    opacity: 1;
+  }
+  72% {
+    transform: scaleY(0.96);
+    opacity: 0.82;
+  }
+}
+
+@keyframes voiceWavePulseMirror {
+  0%,
+  100% {
+    transform: scaleY(0.94);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scaleY(1.06);
+    opacity: 0.55;
+  }
+}
+
+@keyframes voiceWaveDash {
+  to {
+    stroke-dashoffset: -1000;
+  }
+}
+
+@keyframes voiceNodeHalo {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes voiceNodeCore {
+  0%,
+  100% {
+    opacity: 0.88;
+    transform: scale(0.92);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.08);
   }
 }
 
@@ -281,5 +617,80 @@ body {
 
 @media (max-width: 768px) {
   /* Убираем все масштабирование */
+}
+
+/* Чат: Ant Design перебивает Tailwind для placeholder — фиксируем белый текст */
+.chat-footer-input-wrap textarea.ant-input,
+.chat-footer-input-wrap textarea {
+  color: #ffffff !important;
+}
+.chat-footer-input-wrap textarea.ant-input::placeholder,
+.chat-footer-input-wrap textarea::placeholder {
+  color: rgba(255, 255, 255, 0.5) !important;
+  opacity: 1 !important;
+}
+
+/*
+ * Разбор интервью — тот же приём, что у основной колонки чата:
+ * полупрозрачный светлый слой на #050913, без отдельного «угольного» блока.
+ * + фикс фона у нативной кнопки (Ant reset).
+ */
+.interview-report-scope .interview-report-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+}
+.interview-report-scope .interview-report-card:hover {
+  border-color: rgba(52, 211, 153, 0.28);
+  background: rgba(255, 255, 255, 0.07);
+}
+.interview-report-scope .interview-report-card--open {
+  border-color: rgba(74, 222, 128, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 0 rgba(74, 222, 128, 0.12),
+    0 0 0 1px rgba(34, 197, 94, 0.08);
+}
+.interview-report-scope button.interview-report-card-trigger {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: inherit;
+}
+.interview-report-scope button.interview-report-card-trigger:hover {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Модалка редактирования профиля: контраст в тёмной теме */
+.profile-edit-modal .ant-form-item-label > label {
+  color: rgba(226, 232, 240, 0.88) !important;
+  font-size: 12px;
+}
+
+.profile-edit-modal .ant-input,
+.profile-edit-modal .ant-input-textarea textarea.ant-input {
+  color: #f8fafc !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.profile-edit-modal .ant-input::placeholder,
+.profile-edit-modal .ant-input-textarea textarea.ant-input::placeholder {
+  color: rgba(148, 163, 184, 0.9) !important;
+}
+
+.profile-edit-modal .ant-input:hover,
+.profile-edit-modal .ant-input-textarea:hover textarea.ant-input {
+  border-color: rgba(148, 163, 184, 0.45) !important;
+}
+
+.profile-edit-modal .ant-input:focus,
+.profile-edit-modal .ant-input-focused,
+.profile-edit-modal .ant-input-textarea textarea.ant-input:focus,
+.profile-edit-modal .ant-input-textarea-focused textarea.ant-input {
+  border-color: rgba(74, 222, 128, 0.7) !important;
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.18) !important;
 }
 

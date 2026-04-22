@@ -93,10 +93,12 @@ export interface CandidateProfile {
 /**
  * Собранные данные (обратная совместимость + новый профиль)
  */
-export interface CollectedData extends CandidateProfile {
+export interface CollectedData extends Omit<CandidateProfile, 'skills'> {
   email?: string;
   name?: string;
   preferences?: Record<string, unknown>;
+  /** В анкете часто копится плоский список строк; профиль позже нормализуется в SkillsInfo */
+  skills?: SkillsInfo | string[];
   [key: string]: unknown;
 }
 

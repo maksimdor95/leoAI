@@ -44,6 +44,11 @@ export interface ScenarioInfoCardStep extends ScenarioStepBase {
     content: string;
     icon?: string;
   }>;
+  commands?: Array<{
+    id: string;
+    label: string;
+    action: string;
+  }>;
 }
 
 export interface ScenarioCommandStep extends ScenarioStepBase {

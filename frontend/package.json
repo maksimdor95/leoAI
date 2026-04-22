@@ -4,9 +4,14 @@
   "description": "Frontend for Jack AI Service",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
+    "dev": "npm run clean && WATCHPACK_POLLING=true next dev",
+    "dev:fast": "WATCHPACK_POLLING=true next dev",
+    "dev:clean": "npm run clean && next dev",
     "build": "next build",
+    "build:static": "NEXT_STATIC_EXPORT=1 next build",
     "start": "next start",
+    "start:static": "npx --yes serve@14 out -l 3000",
     "lint": "next lint"
   },
   "dependencies": {

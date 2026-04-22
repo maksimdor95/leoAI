@@ -76,3 +76,6 @@ sa-key.json
 # Husky (pre-commit hooks)
 .husky/_/
 
+# Загруженные резюме (user-profile, RESUME_UPLOAD_DIR)
+**/data/uploads/
+

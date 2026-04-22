@@ -13,18 +13,32 @@ const CONVERSATION_SERVICE_URL = process.env.CONVERSATION_SERVICE_URL || 'http:/
 // Interview questions mapping
 const INTERVIEW_QUESTIONS: Record<string, { question: string; category: string }> = {
   interviewAnswer1: {
-    question: 'Как ты приоритизируешь задачи, когда у тебя много запросов от разных стейкхолдеров?',
+    question:
+      'Как ты приоритизируешь задачи и фичи в бэклоге? Какие фреймворки используешь и почему?',
     category: 'Приоритизация',
   },
   interviewAnswer2: {
-    question: 'Какие метрики ты отслеживаешь для оценки успеха продукта?',
+    question:
+      'Как ты определяешь, что продукт успешен? Какие метрики отслеживаешь и как принимаешь решения на их основе?',
     category: 'Метрики',
   },
   interviewAnswer3: {
-    question: 'Как ты работаешь со стейкхолдерами, которые имеют противоречивые требования?',
+    question:
+      'Расскажи о сложной ситуации со стейкхолдерами: конфликт интересов, несогласие по приоритетам. Как ты это разрешил?',
     category: 'Работа со стейкхолдерами',
   },
 };
+
+function normalizeTargetRole(raw: string | undefined): keyof typeof TYPICAL_QUESTIONS {
+  if (!raw) return 'Middle';
+  const lower = String(raw).toLowerCase();
+  if (lower.includes('junior')) return 'Junior';
+  if (lower.includes('middle')) return 'Middle';
+  if (lower.includes('senior')) return 'Senior';
+  if (lower.includes('lead')) return 'Lead';
+  if (lower.includes('vp') || lower.includes('vice')) return 'VP';
+  return 'Middle';
+}
 
 // Typical PM interview questions by level
 const TYPICAL_QUESTIONS: Record<string, string[]> = {
@@ -65,30 +79,24 @@ const TYPICAL_QUESTIONS: Record<string, string[]> = {
   ],
 };
 
+export type GenerateReportDataOptions = {
+  /** Bearer-токен пользователя — нужен для GET /api/chat/session (иначе conversation не отдаёт сессию). */
+  authorization?: string;
+};
+
 export const reportGenerator = {
-  async generateReportData(
-    sessionId: string,
-    userId: string,
-    email?: string
-  ): Promise<ReportData> {
-    // Fetch session data from Conversation Service
-    const sessionData = await this.fetchSessionData(sessionId);
-    const collectedData = sessionData.metadata?.collectedData || {};
+  /**
+   * Сборка отчёта из уже известных полей сессии (без HTTP к conversation) — для превью из chat-сервиса.
+   */
+  buildReportDataFromCollected(collectedData: CollectedData, email?: string): ReportData {
+    logger.info('Building report from collected data', { keys: Object.keys(collectedData) });
 
-    logger.info('Generating report from collected data', { sessionId, keys: Object.keys(collectedData) });
-
-    // Extract interview answers
     const interviewAnswers = this.extractInterviewAnswers(collectedData);
-
-    // Generate evaluation
     const evaluation = this.generateEvaluation(collectedData, interviewAnswers);
-
-    // Get typical questions for the level
-    const targetRole = collectedData.targetRole || 'Middle';
-    const typicalQuestions = TYPICAL_QUESTIONS[targetRole] || TYPICAL_QUESTIONS.Middle;
-
-    // Generate recommendations
-    const recommendations = this.generateRecommendations(evaluation, targetRole);
+    const targetRoleKey = normalizeTargetRole(collectedData.targetRole);
+    const typicalQuestions = TYPICAL_QUESTIONS[targetRoleKey] || TYPICAL_QUESTIONS.Middle;
+    const targetRole = collectedData.targetRole || targetRoleKey;
+    const recommendations = this.generateRecommendations(evaluation, targetRoleKey);
 
     return {
       candidateName: email?.split('@')[0] || 'Кандидат',
@@ -105,21 +113,43 @@ export const reportGenerator = {
     };
   },
 
-  async fetchSessionData(sessionId: string): Promise<any> {
+  async generateReportData(
+    sessionId: string,
+    userId: string,
+    email?: string,
+    fetchOptions?: GenerateReportDataOptions
+  ): Promise<ReportData> {
+    const sessionData = await this.fetchSessionData(sessionId, fetchOptions);
+    const collectedData = (sessionData.metadata?.collectedData || {}) as CollectedData;
+    return this.buildReportDataFromCollected(collectedData, email);
+  },
+
+  async fetchSessionData(
+    sessionId: string,
+    options?: GenerateReportDataOptions
+  ): Promise<any> {
     try {
+      const headers: Record<string, string> = {};
+      if (options?.authorization) {
+        const a = options.authorization.trim();
+        headers.Authorization = a.startsWith('Bearer ') ? a : `Bearer ${a}`;
+      } else {
+        headers['X-Internal-Service'] = 'report-service';
+      }
       const response = await axios.get(
         `${CONVERSATION_SERVICE_URL}/api/chat/session/${sessionId}`,
         {
-          headers: {
-            'X-Internal-Service': 'report-service',
-          },
+          headers,
           timeout: 10000,
         }
       );
       return response.data;
     } catch (error) {
       logger.error('Failed to fetch session data', { sessionId, error: (error as Error).message });
-      // Return empty data if fetch fails
+      // С пользовательским токеном не подставляем пустые данные — вызывающий код вернёт 404.
+      if (options?.authorization) {
+        throw error;
+      }
       return { metadata: { collectedData: {} } };
     }
   },

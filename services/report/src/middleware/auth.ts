@@ -20,7 +20,8 @@ export function authMiddleware(
   next: NextFunction
 ): void {
   try {
-    const authHeader = req.headers.authorization;
+    const raw = req.headers['x-auth-token'] || req.headers.authorization;
+    const authHeader = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0] : '';
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       res.status(401).json({ error: 'Authorization header required' });
@@ -28,7 +29,12 @@ export function authMiddleware(
     }
 
     const token = authHeader.substring(7);
-    const secret = process.env.JWT_SECRET || 'dev-secret-key';
+    const secret = process.env.JWT_SECRET;
+    if (!secret || secret === 'your-secret-key-change-in-production' || secret === 'dev-secret-key') {
+      logger.error('JWT_SECRET is not configured for report service');
+      res.status(500).json({ error: 'Server auth is not configured' });
+      return;
+    }
 
     const decoded = jwt.verify(token, secret) as JWTPayload;
 

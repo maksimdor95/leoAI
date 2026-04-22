@@ -6,6 +6,7 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import Redis from 'ioredis';
+import { ioredisTlsOptions } from '../utils/redisTls';
 
 const USER_PROFILE_SERVICE_URL = process.env.USER_PROFILE_SERVICE_URL || 'http://localhost:3001';
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
@@ -22,7 +23,7 @@ const redis = new Redis({
     ? { username: process.env.REDIS_USER }
     : {}),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tls: process.env.REDIS_SSL === 'true' ? ({ rejectUnauthorized: false } as any) : undefined,
+  tls: ioredisTlsOptions() as any,
   retryStrategy: (times: number) => {
     const delay = Math.min(times * 50, 2000);
     return delay;
@@ -99,6 +100,73 @@ export async function getCollectedData(userId: string): Promise<CollectedData | 
     logger.error('Failed to get collected data:', error);
     return null;
   }
+}
+
+/**
+ * Фолбэк: если Redis-сессия пустая / истекла, собираем CollectedData
+ * из CareerProfile в user-profile сервисе. Это даёт шанс матчеру
+ * работать даже после рестарта Redis / выхода пользователя и возвращения.
+ *
+ * Здесь мы получаем только базовые поля (target_role / current_role / experience_years),
+ * чего достаточно для role-family классификации и выбора ключевых слов.
+ */
+export async function getCollectedDataFromCareerProfile(
+  userId: string,
+  token: string
+): Promise<CollectedData | null> {
+  try {
+    const response = await axios.get(
+      `${USER_PROFILE_SERVICE_URL}/api/career/career-profile/${userId}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 5000,
+      }
+    );
+    const payload = response.data ?? {};
+    const profile = payload?.careerProfile ?? payload?.profile ?? payload;
+    if (!profile || typeof profile !== 'object') return null;
+
+    const record = profile as Record<string, unknown>;
+    const collected: CollectedData = {};
+
+    if (typeof record.target_role === 'string' && record.target_role.trim()) {
+      collected.desiredRole = record.target_role as string;
+      collected.desired_role = record.target_role as string;
+    }
+    if (typeof record.current_role === 'string' && record.current_role.trim()) {
+      collected.position_1_role = record.current_role as string;
+    }
+    if (typeof record.experience_years === 'number') {
+      collected.totalExperience = record.experience_years as number;
+    }
+
+    return Object.keys(collected).length > 0 ? collected : null;
+  } catch (error) {
+    logger.warn(`Failed to fetch career profile fallback for user ${userId}: ${String(error)}`);
+    return null;
+  }
+}
+
+/**
+ * Собирает CollectedData с приоритетом Redis-сессии, но использует
+ * career-profile как фолбэк. Матчер всегда должен пытаться дать результат
+ * хотя бы на основе CareerProfile — иначе пользователь после logout получает
+ * «нерелевантный каталог» без объяснения.
+ */
+export async function getCollectedDataWithFallback(
+  userId: string,
+  token: string
+): Promise<CollectedData | null> {
+  const fromSession = await getCollectedData(userId);
+  if (fromSession && Object.keys(fromSession).length > 0) return fromSession;
+
+  const fromCareer = await getCollectedDataFromCareerProfile(userId, token);
+  if (fromCareer) {
+    logger.info(
+      `[collectedData] Falling back to CareerProfile for user ${userId}; session is empty or expired`
+    );
+  }
+  return fromCareer;
 }
 
 /**

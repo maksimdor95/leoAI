@@ -17,7 +17,7 @@ services:
     networks:
       - jack-network
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U $POSTGRES_USER']
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -39,6 +39,23 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Resume Parser (pdfplumber fallback)
+  resume-parser:
+    build:
+      context: ./services/resume-parser
+      dockerfile: Dockerfile
+    container_name: jack-resume-parser
+    restart: unless-stopped
+    ports:
+      - '${RESUME_PARSER_PORT:-3011}:3011'
+    networks:
+      - jack-network
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:3011/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
 
   # pgAdmin (опционально, для управления базой данных)
   pgadmin:

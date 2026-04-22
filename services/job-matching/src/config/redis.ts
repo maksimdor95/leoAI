@@ -6,6 +6,7 @@
 import Redis from 'ioredis';
 import dotenv from 'dotenv';
 import { logger } from '../utils/logger';
+import { ioredisTlsOptions } from '../utils/redisTls';
 
 dotenv.config();
 
@@ -19,7 +20,7 @@ const redisConfig = {
     ? { username: process.env.REDIS_USER }
     : {}),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tls: process.env.REDIS_SSL === 'true' ? ({ rejectUnauthorized: false } as any) : undefined,
+  tls: ioredisTlsOptions() as any,
   retryStrategy: (times: number) => {
     const delay = Math.min(times * 50, 2000);
     return delay;

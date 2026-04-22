@@ -4,9 +4,14 @@
  */
 
 import jwt, { JwtPayload } from 'jsonwebtoken';
+import dotenv from 'dotenv';
 import { logger } from '../utils/logger';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+// Must run before JWT_SECRET is read (index.ts dotenv.config runs after imports).
+dotenv.config({ override: true });
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const DEFAULT_PLACEHOLDER = 'your-secret-key-change-in-production';
 
 /**
  * Verify JWT token
@@ -21,6 +26,11 @@ export async function verifyToken(
   token: string
 ): Promise<{ userId: string; email: string } | null> {
   try {
+    if (!JWT_SECRET || JWT_SECRET === DEFAULT_PLACEHOLDER) {
+      logger.error('JWT_SECRET is not configured for job-matching service');
+      return null;
+    }
+
     // Remove 'Bearer ' prefix if present
     const cleanToken = token.replace(/^Bearer\s+/, '');
 

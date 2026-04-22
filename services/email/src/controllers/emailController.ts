@@ -5,7 +5,11 @@
 
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { sendWelcomeEmail, sendJobsDigestEmail } from '../services/emailService';
+import {
+  sendWelcomeEmail,
+  sendJobsDigestEmail,
+  sendResumePackageEmail,
+} from '../services/emailService';
 import { getUserProfile } from '../services/userService';
 import { getJobsByIds } from '../services/jobService';
 import { logger } from '../utils/logger';
@@ -117,6 +121,55 @@ export async function sendWelcome(req: AuthRequest, res: Response): Promise<void
     }
   } catch (error: unknown) {
     logger.error('Error sending welcome email:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function sendResumePackage(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const { resume, coverLetter } = req.body as { resume?: string; coverLetter?: string };
+    if (!resume || typeof resume !== 'string') {
+      res.status(400).json({ error: 'resume is required' });
+      return;
+    }
+    if (!coverLetter || typeof coverLetter !== 'string') {
+      res.status(400).json({ error: 'coverLetter is required' });
+      return;
+    }
+
+    const token = req.headers.authorization?.replace('Bearer ', '') || '';
+    let userName: string | undefined;
+    try {
+      const userProfile = await getUserProfile(token);
+      userName = userProfile.name;
+    } catch (error: unknown) {
+      logger.warn('Failed to get user profile for resume package email:', error);
+    }
+
+    const success = await sendResumePackageEmail({
+      userEmail: user.email,
+      userName,
+      resume,
+      coverLetter,
+    });
+
+    if (success) {
+      res.json({
+        success: true,
+        email: user.email,
+        message: 'Resume package email sent successfully',
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to send resume package email' });
+    }
+  } catch (error: unknown) {
+    logger.error('Error sending resume package email:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

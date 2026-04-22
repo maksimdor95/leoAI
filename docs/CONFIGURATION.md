@@ -1,14 +1,10 @@
-# Руководство по конфигурации Jack AI
+# Руководство по конфигурации LEO AI
 
 Это руководство описывает все переменные окружения, используемые в Jack AI, и их назначение.
 
 ## Быстрая настройка
 
-1. Скопируйте `env.example` в `.env`:
-
-   ```bash
-   cp env.example .env
-   ```
+1. Убедитесь, что в корне проекта есть файл `.env` (локальный, не коммитится в Git).
 
 2. Заполните обязательные переменные (см. разделы ниже)
 
@@ -26,16 +22,17 @@
 
 ### Ports (по сервисам)
 
-Каждый сервис может использовать свою переменную `PORT`, но можно задать индивидуально:
+Сервисы слушают **`process.env.PORT`** (иначе дефолт в коде, часто `8080`). В локальной разработке порт задаётся в **`package.json` → `scripts.dev`** (`PORT=3001` … `PORT=3007` для report). Общий корневой `.env` через symlink не может задать разный `PORT` на процесс — URL сервисов друг на друга задаются через `*_SERVICE_URL`.
 
-| Переменная          | Сервис                     | Значение по умолчанию |
-| ------------------- | -------------------------- | --------------------- |
-| `USER_PROFILE_PORT` | User Profile Service       | `3001`                |
-| `CONVERSATION_PORT` | Conversation Service       | `3002`                |
-| `AI_NLP_PORT`       | AI/NLP Service             | `3003`                |
-| `JOB_MATCHING_PORT` | Job Matching Service       | `3004`                |
-| `EMAIL_PORT`        | Email Notification Service | `3005`                |
-| `FRONTEND_PORT`     | Frontend                   | `3000`                |
+| Сервис              | Типичный порт при `npm run dev` |
+| ------------------- | ------------------------------- |
+| User Profile        | `3001`                          |
+| Conversation        | `3002`                          |
+| AI/NLP              | `3003`                          |
+| Job Matching        | `3004`                          |
+| Email               | `3005`                          |
+| Report              | `3007`                          |
+| Frontend (`next`)   | `3000`                          |
 
 ## База данных
 
@@ -74,6 +71,10 @@ DB_SSL=false
 | `REDIS_PASSWORD` | Пароль (опционально) | -                     | Нет         |
 | `REDIS_DB`       | Номер базы данных    | `0`                   | Нет         |
 | `REDIS_PREFIX`   | Префикс для ключей   | -                     | Нет         |
+| `REDIS_SSL`      | TLS к Redis (`true` / `false`) | `false`        | Нет         |
+| `REDIS_TLS_ALLOW_INSECURE` | При `REDIS_SSL=true`: не проверять сертификат (только dev, self-signed) | `false` | Нет |
+
+`conversation`, `job-matching` и `ai-nlp` используют одну политику: при `REDIS_SSL=true` по умолчанию `rejectUnauthorized: true`; в staging/prod **не** выставлять `REDIS_TLS_ALLOW_INSECURE` (остаётся `false`).
 
 **Пример:**
 
@@ -82,6 +83,8 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=
 REDIS_DB=0
+# REDIS_SSL=true
+# REDIS_TLS_ALLOW_INSECURE=true   # только локально при self-signed
 ```
 
 ## AI/NLP Service
@@ -227,6 +230,7 @@ SENDGRID_API_KEY=SG.xxxxxxxxxxxxxxxxxxxxxxxxx
 - Используйте длинный случайный ключ (минимум 32 символа)
 - Генерируйте разные ключи для разных окружений
 - Никогда не коммитьте реальные ключи в Git
+- В `conversation` и `report` больше нет безопасного fallback секрета: при отсутствии `JWT_SECRET` сервис вернёт ошибку конфигурации.
 
 **Генерация ключа:**
 
@@ -238,18 +242,53 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 
 ### Job Scraping
 
-| Переменная      | Описание                 | Обязательно |
-| --------------- | ------------------------ | ----------- |
-| `HH_API_KEY`    | API ключ HeadHunter.ru   | Нет         |
-| `HH_API_URL`    | URL API HH.ru            | Нет         |
-| `USE_MOCK_JOBS` | Использовать mock данные | Нет         |
+Скрейпер поддерживает два источника вакансий: **HeadHunter** и **SuperJob**.  
+Достаточно настроить хотя бы один из них; оба могут работать одновременно.
+
+| Переменная            | Описание                                | Обязательно |
+| --------------------- | --------------------------------------- | ----------- |
+| `HH_API_KEY`          | API ключ HeadHunter.ru                  | Нет*        |
+| `HH_API_URL`          | URL API HH.ru                           | Нет         |
+| `HH_TOKEN_URL`        | URL OAuth token endpoint HH             | Нет (`https://api.hh.ru/token`) |
+| `HH_USER_AGENT`       | User-Agent для HH API (обязателен для запросов к HH) | Да** |
+| `HH_CLIENT_ID`        | OAuth Client ID HH (salary API)         | Нет***      |
+| `HH_CLIENT_SECRET`    | OAuth Client Secret HH (salary API)     | Нет***      |
+| `HH_ACCESS_TOKEN`     | Готовый Bearer token HH (если не хотите OAuth-обмен в сервисе) | Нет |
+| `HH_REFRESH_TOKEN`    | Refresh token HH для автообновления токена | Нет |
+| `SUPERJOB_API_KEY`    | Secret key приложения SuperJob          | Нет*        |
+| `SUPERJOB_APP_ID`     | ID приложения SuperJob (для справки)    | Нет         |
+| `SUPERJOB_API_URL`    | URL API SuperJob                        | Нет         |
+| `SUPERJOB_TOWN`       | ID одного города SuperJob (по умолчанию **4** = Москва; не смешивать с area id HH) | Нет         |
+| `SUPERJOB_TOWN_IDS`   | Несколько городов через запятую, напр. `4,14` — в API уходит массив `t[]` | Нет         |
+| `SUPERJOB_KEYWORD_LIMIT` | Сколько ключевых слов из списка скрейпера обработать (1–50, по умолчанию **10**) | Нет      |
+| `SUPERJOB_PAGE_SIZE`  | `count` на страницу (1–100, по умолчанию **100**) | Нет         |
+| `SUPERJOB_MAX_PAGES`  | Макс. номер страницы +1 на ключевое слово (1–500, по умолчанию **5**) | Нет         |
+| `SUPERJOB_MAX_VACANCIES_PER_KEYWORD` | Жёсткий потолок вакансий с ключа; `0` = `maxPages × pageSize` | Нет         |
+| `SUPERJOB_REQUEST_DELAY_MS` | Пауза между запросами страниц (мс), по умолчанию **550** (~лимит 120 запросов/мин с IP) | Нет         |
+| `SUPERJOB_ACCESS_TOKEN` | OAuth Bearer, если нужны расширенные поля | Нет         |
+| `USE_MOCK_JOBS`       | Использовать mock данные                | Нет         |
+| `JOB_CATALOG_TOKEN`   | Токен доступа к debug/admin endpoint-ам `GET /api/jobs/catalog` и `GET /api/jobs/hh/salary-evaluation/:areaId` | Да в production |
+
+> \* Должен быть задан хотя бы один из `HH_API_KEY` или `SUPERJOB_API_KEY` для получения реальных вакансий.
+>
+> \** Для HH API требуется корректный `User-Agent` заголовок.
+>
+> \*** Для salary endpoint используйте либо `HH_ACCESS_TOKEN`, либо пару `HH_CLIENT_ID` + `HH_CLIENT_SECRET` (и при необходимости `HH_REFRESH_TOKEN`).
 
 **USE_MOCK_JOBS:**
 
 - `true` - всегда использовать mock данные (только для тестирования)
 - `false` - пытаться использовать реальный скрейпинг (по умолчанию)
 
-**Пример:**
+**Пример (SuperJob):**
+
+```env
+SUPERJOB_API_KEY=v3.r.XXXXX.YYYYY.ZZZZZ
+SUPERJOB_APP_ID=4262
+USE_MOCK_JOBS=false
+```
+
+**Пример (HeadHunter):**
 
 ```env
 HH_API_KEY=your_hh_api_key_here
@@ -257,7 +296,19 @@ HH_API_URL=https://api.hh.ru
 USE_MOCK_JOBS=false
 ```
 
-**Примечание:** Если `HH_API_KEY` не задан, и `USE_MOCK_JOBS=false`, в development режиме будут использоваться mock данные как fallback. В production без API ключа скрейпинг не будет работать.
+**Как получить ключ SuperJob:**
+
+1. Зарегистрируйтесь на [SuperJob](https://www.superjob.ru/)
+2. Перейдите на [api.superjob.ru](https://api.superjob.ru/) → «Зарегистрировать приложение»
+3. Скопируйте **Secret key** в `SUPERJOB_API_KEY`
+4. Авторизация для поиска вакансий не требуется — достаточно `X-Api-App-Id`
+
+**Логика работы:**
+
+1. Если есть `HH_API_KEY` — скрейпит HH.ru
+2. Если есть `SUPERJOB_API_KEY` — скрейпит SuperJob
+3. Если оба настроены — вакансии объединяются
+4. Если ни один не настроен и `USE_MOCK_JOBS=false` — в development используются mock-данные как fallback; в production скрейпинг не будет работать
 
 ## Service URLs
 
@@ -283,6 +334,7 @@ USE_MOCK_JOBS=false
 | Переменная                             | Описание                           | Значение по умолчанию   |
 | -------------------------------------- | ---------------------------------- | ----------------------- |
 | `NEXT_PUBLIC_API_URL`                  | URL User Profile Service           | `http://localhost:3001` |
+| `NEXT_PUBLIC_JOB_MATCHING_URL`         | URL Job Matching (подбор вакансий в браузере); если не задан — из `NEXT_PUBLIC_API_URL` с заменой порта `3001`→`3004`, иначе `http://localhost:3004` | — |
 | `NEXT_PUBLIC_CONVERSATION_API_URL`     | URL Conversation Service API       | `http://localhost:3002` |
 | `NEXT_PUBLIC_CONVERSATION_SERVICE_URL` | URL Conversation Service WebSocket | `http://localhost:3002` |
 
@@ -302,6 +354,14 @@ USE_MOCK_JOBS=false
 | ------------ | ------------------------------------------- | --------------------- |
 | `LOG_LEVEL`  | Уровень логирования (debug/info/warn/error) | `info`                |
 | `LOG_FORMAT` | Формат логов (json/text)                    | `json`                |
+
+### Security policy for logs (staging/prod)
+
+- Не логировать сырые payload-ы запросов (`req.body`) в runtime и error middleware.
+- Не логировать `Authorization` заголовок, JWT/token (даже частично), пароли и PII (`email`, `phone`, `resume`).
+- Для ошибок логировать безопасный минимум: `method`, `path`, `statusCode`, код/сообщение ошибки без чувствительных полей.
+- В `development` допускается расширенная диагностика только через redaction/маскирование чувствительных ключей.
+- Любые временные debug-вставки (в т.ч. file-write hooks) должны быть удалены до staging/prod.
 
 ## Мониторинг
 
@@ -330,6 +390,8 @@ USE_MOCK_JOBS=false
 | ------------------------- | ---------------------------------- | --------------------- |
 | `RATE_LIMIT_WINDOW_MS`    | Окно rate limiting в миллисекундах | `900000` (15 минут)   |
 | `RATE_LIMIT_MAX_REQUESTS` | Максимальное количество запросов   | `100`                 |
+| `AI_RATE_LIMIT_WINDOW_MS` | Окно rate limiting для `/api/ai/*` | `60000`               |
+| `AI_RATE_LIMIT_MAX_REQUESTS` | Лимит запросов на клиент/минуту для AI | `120`         |
 
 ## Проверка конфигурации
 
@@ -346,7 +408,6 @@ USE_MOCK_JOBS=false
    ❌ DB_PASSWORD is required but not set or using default value
 
 Please set the required environment variables and restart the service.
-See env.example for reference.
 ```
 
 ## Production Checklist
@@ -356,7 +417,8 @@ See env.example for reference.
 - [ ] Все обязательные переменные установлены
 - [ ] `JWT_SECRET` - длинный случайный ключ (минимум 32 символа)
 - [ ] `NODE_ENV=production`
-- [ ] Настроены реальные API ключи (YandexGPT, HH.ru)
+- [ ] Настроены реальные API ключи (YandexGPT, HH.ru и/или SuperJob)
+- [ ] Для production задан `JOB_CATALOG_TOKEN` (если используются admin/debug endpoints job-catalog)
 - [ ] Настроен SMTP для Email Service (SMTP_HOST, SMTP_USER, SMTP_PASSWORD) или SendGrid API ключ
 - [ ] `USE_MOCK_JOBS=false`
 - [ ] Настроены реальные URL для межсервисного взаимодействия
@@ -405,12 +467,13 @@ See env.example for reference.
 
 ### Проблема: Jobs не скрейпятся
 
-1. Проверьте, что `HH_API_KEY` установлен или `USE_MOCK_JOBS=true`
-2. Проверьте логи Job Matching Service
+1. Проверьте, что хотя бы один из `HH_API_KEY` / `SUPERJOB_API_KEY` установлен, или `USE_MOCK_JOBS=true`
+2. Проверьте логи Job Matching Service — там указано, какие источники использовались
 3. Убедитесь, что Redis доступен для очередей
+4. SuperJob: лимит 120 запросов/мин с одного IP; HH.ru: rate-limit зависит от типа ключа
 
 ## Дополнительная информация
 
-- Полный список переменных: см. `env.example`
+- Полный список переменных: см. этот документ и `.env` в локальной среде
 - Настройка Docker: см. `infrastructure/DOCKER_GUIDE.md`
 - Архитектура: см. `docs/ARCHITECTURE.md`

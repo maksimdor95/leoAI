@@ -16,11 +16,7 @@ export interface AuthRequest extends Request {
  * Middleware to verify JWT token
  */
 export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
-  logger.info('Authenticating token...');
-  const authorizationHeader = req.headers['authorization'];
-  if (authorizationHeader) {
-    logger.info(`Authorization header: ${authorizationHeader.substring(0, 30)}...`);
-  }
+  logger.info('Authenticating token');
 
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
@@ -32,12 +28,14 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
 
   try {
     const payload = verifyToken(token);
-    logger.info(`Token verified for user: ${payload.userId}`);
+    logger.info('Token verified');
     req.userId = payload.userId;
     req.userEmail = payload.email;
     return next();
   } catch (error: unknown) {
-    logger.error('Token verification failed:', error);
+    logger.error('Token verification failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
     return res.status(403).json({ error: 'Invalid or expired token' });
   }
 }

@@ -167,6 +167,8 @@ type ResumeUploadStepProps = {
   onChooseNoResume: () => void;
   onSubmit: () => Promise<void> | void;
   loading: boolean;
+  /** Серверная загрузка PDF/DOCX и извлечение текста */
+  onResumeFile?: (file: File) => Promise<void>;
 };
 
 export function ResumeUploadStep({
@@ -175,12 +177,28 @@ export function ResumeUploadStep({
   onChooseNoResume,
   onSubmit,
   loading,
+  onResumeFile,
 }: ResumeUploadStepProps) {
   const uploadProps: UploadProps = {
     name: 'file',
     multiple: false,
-    disabled: true,
-    showUploadList: false,
+    accept: '.pdf,.docx',
+    showUploadList: true,
+    maxCount: 1,
+    customRequest: async (options) => {
+      const { file, onError, onSuccess } = options;
+      const f = file as File;
+      if (!onResumeFile) {
+        onError?.(new Error('Загрузка не настроена'));
+        return;
+      }
+      try {
+        await onResumeFile(f);
+        onSuccess?.('ok');
+      } catch (e) {
+        onError?.(e as Error);
+      }
+    },
   };
 
   return (
@@ -201,9 +219,10 @@ export function ResumeUploadStep({
 
         <div className="grid gap-6 lg:grid-cols-2">
           <div>
-            <Paragraph className="!text-slate-200 !mb-2">Загрузка файла (скоро)</Paragraph>
+            <Paragraph className="!text-slate-200 !mb-2">Загрузка файла</Paragraph>
             <Dragger
               {...uploadProps}
+              disabled={!onResumeFile || loading}
               className="!bg-transparent !border-dashed !border-white/20 !text-slate-300"
             >
               <p className="ant-upload-drag-icon">
@@ -213,7 +232,7 @@ export function ResumeUploadStep({
                 Перетащите файл резюме сюда или нажмите, чтобы выбрать
               </p>
               <p className="ant-upload-hint text-slate-400">
-                Поддержка PDF/DOCX появится позже; сейчас можно просто вставить текст резюме ниже.
+                PDF или DOCX. Текст будет извлечён на сервере и подставлен в поле ниже.
               </p>
             </Dragger>
           </div>

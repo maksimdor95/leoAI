@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Layout, Typography, message, Spin } from 'antd';
+import Link from 'next/link';
+import { Button, Layout, Typography, message, Spin } from 'antd';
 import { useAuth } from '@/contexts/AuthContext';
 import { isAuthenticated } from '@/lib/auth';
 import { OnboardingStepper, OnboardingStepKey } from '@/components/career/OnboardingStepper';
@@ -20,6 +21,11 @@ import {
   saveResume,
   submitInterviewAnswers,
 } from '@/lib/careerOnboardingMock';
+import {
+  readCareerOnboardingProgress,
+  saveCareerOnboardingProgress,
+} from '@/lib/careerOnboardingProgress';
+import { uploadResumeFile } from '@/lib/resumeProfileImport';
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -54,10 +60,23 @@ export default function CareerOnboardingPage() {
       router.replace('/');
       return;
     }
+
+    const savedProgress = readCareerOnboardingProgress();
+    if (savedProgress && !savedProgress.completed) {
+      setCurrentStep(savedProgress.step);
+    }
   }, [router, openAuthModal, messageApi]);
 
   useEffect(() => {
     setScoreData(null);
+  }, [currentStep]);
+
+  useEffect(() => {
+    saveCareerOnboardingProgress({
+      step: currentStep,
+      updatedAt: new Date().toISOString(),
+      completed: currentStep === 'readinessScore',
+    });
   }, [currentStep]);
 
   const handleSaveCareerField = async (field: keyof CareerBasicsPayload, value: string | number) => {
@@ -80,6 +99,21 @@ export default function CareerOnboardingPage() {
     } catch (error) {
       const text = error instanceof Error ? error.message : 'Не удалось сохранить данные';
       messageApi.error(text);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResumeFileUpload = async (file: File) => {
+    setLoading(true);
+    try {
+      const { extractedText } = await uploadResumeFile(file);
+      setResumeText(extractedText);
+      messageApi.success('Текст резюме извлечён из файла');
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'Не удалось загрузить файл';
+      messageApi.error(text);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -152,22 +186,31 @@ export default function CareerOnboardingPage() {
   return (
     <Layout className="min-h-screen bg-[#050913] text-white">
       {contextHolder}
-      <Content className="flex flex-col px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
-        <div className="mx-auto w-full max-w-4xl flex-1 flex flex-col gap-6 sm:gap-8">
-          <header className="flex flex-col gap-2 sm:gap-3">
-            <Text className="text-xs uppercase tracking-[0.35em] text-green-300/80">
-              Stage 1 · AI Career Learning
-            </Text>
-            <Title
-              level={2}
-              className="!m-0 !text-white text-2xl sm:text-3xl lg:text-4xl leading-tight"
-            >
-              AI Career Onboarding
-            </Title>
-            <Text className="text-sm sm:text-base text-slate-300 max-w-2xl">
-              Мы зададим несколько вопросов про вашу карьеру, опыт и цели, попросим резюме или
-              проведём короткое интервью — и покажем первый AI Readiness Score.
-            </Text>
+      <Content className="flex flex-col h-screen px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <div className="mx-auto w-full max-w-[1400px] flex-1 flex flex-col gap-6 sm:gap-8">
+          <header className="flex flex-col gap-3 sm:gap-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-2 sm:gap-3">
+                <Text className="text-xs uppercase tracking-[0.35em] text-green-300/80">
+                  Stage 1 · AI Career Learning
+                </Text>
+                <Title
+                  level={2}
+                  className="!m-0 !text-white text-2xl sm:text-3xl lg:text-4xl leading-tight"
+                >
+                  AI Career Onboarding
+                </Title>
+                <Text className="text-sm sm:text-base text-slate-300 max-w-2xl">
+                  Мы зададим несколько вопросов про вашу карьеру, опыт и цели, попросим резюме или
+                  проведём короткое интервью — и покажем первый AI Readiness Score.
+                </Text>
+              </div>
+              <Link href="/chats" className="shrink-0">
+                <Button type="text" className="!text-slate-200 hover:!text-white">
+                  Мои чаты
+                </Button>
+              </Link>
+            </div>
           </header>
 
           <OnboardingStepper currentStep={currentStep} />
@@ -221,6 +264,7 @@ export default function CareerOnboardingPage() {
                 onChooseNoResume={handleNoResume}
                 onSubmit={handleResumeSubmit}
                 loading={loading}
+                onResumeFile={handleResumeFileUpload}
               />
             )}
 

@@ -8,11 +8,69 @@ import { JobInput } from '../models/job';
 import jobRepository from '../models/jobRepository';
 import { logger } from '../utils/logger';
 import { retry, isRetryableError } from '../utils/retry';
+import { getHHUserAgent, hasHHAuthConfig } from './hhAuthService';
 
 const HH_API_URL = process.env.HH_API_URL || 'https://api.hh.ru';
-const SCRAPER_USER_AGENT =
-  process.env.SCRAPER_USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+const SUPERJOB_API_URL = process.env.SUPERJOB_API_URL || 'https://api.superjob.ru/2.0';
+const SCRAPER_USER_AGENT = process.env.SCRAPER_USER_AGENT || getHHUserAgent();
 const USE_MOCK_JOBS = process.env.USE_MOCK_JOBS === 'true';
+
+/** Москва в справочнике SuperJob `/towns/` (не путать с area id HeadHunter). */
+const SUPERJOB_DEFAULT_TOWN_ID = 4;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Город(а) для поиска SuperJob: SUPERJOB_TOWN_IDS="4,14" → параметр `t[]`,
+ * иначе SUPERJOB_TOWN или дефолт Москва.
+ */
+function getSuperJobLocationParams(): Record<string, string | number | number[]> {
+  const raw = process.env.SUPERJOB_TOWN_IDS?.trim();
+  if (raw) {
+    const ids = raw
+      .split(/[,;\s]+/)
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (ids.length === 0) {
+      return { town: SUPERJOB_DEFAULT_TOWN_ID };
+    }
+    if (ids.length === 1) {
+      return { town: ids[0] };
+    }
+    return { t: ids };
+  }
+  const single = parseInt(process.env.SUPERJOB_TOWN || String(SUPERJOB_DEFAULT_TOWN_ID), 10);
+  return { town: Number.isFinite(single) && single > 0 ? single : SUPERJOB_DEFAULT_TOWN_ID };
+}
+
+function getSuperJobScraperLimits(): {
+  keywordLimit: number;
+  pageSize: number;
+  maxPages: number;
+  delayMs: number;
+  maxVacanciesPerKeyword: number;
+} {
+  const keywordLimit = Math.min(
+    50,
+    Math.max(1, parseInt(process.env.SUPERJOB_KEYWORD_LIMIT || '10', 10) || 10)
+  );
+  const pageSize = Math.min(
+    100,
+    Math.max(1, parseInt(process.env.SUPERJOB_PAGE_SIZE || '100', 10) || 100)
+  );
+  const maxPages = Math.min(
+    500,
+    Math.max(1, parseInt(process.env.SUPERJOB_MAX_PAGES || '5', 10) || 5)
+  );
+  const delayMs = Math.max(0, parseInt(process.env.SUPERJOB_REQUEST_DELAY_MS || '550', 10) || 550);
+  const rawCap = parseInt(process.env.SUPERJOB_MAX_VACANCIES_PER_KEYWORD || '0', 10);
+  const maxVacanciesPerKeyword =
+    Number.isFinite(rawCap) && rawCap > 0 ? rawCap : maxPages * pageSize;
+
+  return { keywordLimit, pageSize, maxPages, delayMs, maxVacanciesPerKeyword };
+}
 
 export interface ScrapeResult {
   success: boolean;
@@ -24,12 +82,31 @@ export interface ScrapeResult {
 }
 
 /**
- * Scrape jobs from HeadHunter.ru
- * Supports multiple sources with fallback to mock data if explicitly enabled
+ * Диверсифицированный дефолтный набор ключевых слов — используется только если
+ * scraper вызван без явного списка (например, на первый прогон при пустой БД).
+ * Раньше здесь был чисто dev-набор (JS/TS/Node/React/Python), из-за чего каталог
+ * забивался только вакансиями разработки и не подходил PM/аналитикам/дизайнерам.
+ */
+export const DEFAULT_SEED_KEYWORDS: readonly string[] = [
+  'Product Manager',
+  'Менеджер продукта',
+  'Product Analyst',
+  'Бизнес-аналитик',
+  'Data Analyst',
+  'UX Designer',
+  'Backend Developer',
+  'Frontend Developer',
+  'QA Engineer',
+  'DevOps Engineer',
+];
+
+/**
+ * Scrape jobs from all configured sources (HH.ru, SuperJob, etc.)
+ * Falls back to mock data in development if all real sources fail.
  */
 export async function scrapeHHJobs(
-  keywords: string[] = ['JavaScript', 'TypeScript', 'Node.js', 'React', 'Python'],
-  locationId: number = 1 // Moscow
+  keywords: string[] = [...DEFAULT_SEED_KEYWORDS],
+  locationId: number = 113 // Россия (HH area). Города сужают выборку слишком сильно.
 ): Promise<ScrapeResult> {
   const result: ScrapeResult = {
     success: false,
@@ -74,8 +151,8 @@ export async function scrapeHHJobs(
     const jobs: JobInput[] = [];
     let allSourcesFailed = true;
 
-    // Try to use HH.ru API (if API key is available)
-    if (process.env.HH_API_KEY) {
+    // Try to use HH.ru API (if auth is configured)
+    if (hasHHAuthConfig()) {
       try {
         logger.info('Attempting to scrape jobs from HH.ru API...');
         const apiJobs = await scrapeHHViaAPI(keywords, locationId);
@@ -94,7 +171,32 @@ export async function scrapeHHJobs(
         );
       }
     } else {
-      logger.info('HH_API_KEY not set - skipping HH.ru API scraping');
+      logger.info(
+        'HH auth is not configured (HH_ACCESS_TOKEN / HH_API_KEY / HH_CLIENT_ID+HH_CLIENT_SECRET) - skipping HH.ru API scraping'
+      );
+    }
+
+    // Try SuperJob API (simple alternative to HH.ru)
+    if (process.env.SUPERJOB_API_KEY) {
+      try {
+        logger.info('Attempting to scrape jobs from SuperJob API...');
+        const superJobJobs = await scrapeSuperJobViaAPI(keywords);
+        if (superJobJobs.length > 0) {
+          jobs.push(...superJobJobs);
+          result.sourcesUsed.push('superjob-api');
+          allSourcesFailed = false;
+          logger.info(`Successfully scraped ${superJobJobs.length} jobs via SuperJob API`);
+        } else {
+          logger.info('SuperJob API returned no jobs');
+        }
+      } catch (error: unknown) {
+        logger.warn('SuperJob API scraping failed:', error);
+        result.errors.push(
+          `SuperJob API error: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    } else {
+      logger.info('SUPERJOB_API_KEY not set - skipping SuperJob API scraping');
     }
 
     // If all sources failed or returned no jobs, check if we should use mock data as fallback
@@ -178,9 +280,7 @@ async function scrapeHHViaAPI(keywords: string[], locationId: number): Promise<J
             },
             headers: {
               'User-Agent': SCRAPER_USER_AGENT,
-              Authorization: process.env.HH_API_KEY
-                ? `Bearer ${process.env.HH_API_KEY}`
-                : undefined,
+              'HH-User-Agent': SCRAPER_USER_AGENT,
             },
             timeout: 10000,
           }),
@@ -225,6 +325,186 @@ async function scrapeHHViaAPI(keywords: string[], locationId: number): Promise<J
 }
 
 /**
+ * Scrape jobs via SuperJob API (пагинация page + count, лимиты через env).
+ * Docs: https://api.superjob.ru/ — списки: page, count (1–100), total/more.
+ */
+async function scrapeSuperJobViaAPI(keywords: string[]): Promise<JobInput[]> {
+  const jobs: JobInput[] = [];
+  const apiKey = process.env.SUPERJOB_API_KEY;
+
+  if (!apiKey) {
+    return jobs;
+  }
+
+  const loc = getSuperJobLocationParams();
+  const { keywordLimit, pageSize, maxPages, delayMs, maxVacanciesPerKeyword } =
+    getSuperJobScraperLimits();
+
+  logger.info(
+    `SuperJob scrape: keywords≤${keywordLimit}, count=${pageSize}, maxPages=${maxPages}, delay=${delayMs}ms, max/keyword=${maxVacanciesPerKeyword}, location=${JSON.stringify(loc)}`
+  );
+
+  for (const keyword of keywords.slice(0, keywordLimit)) {
+    let collectedForKeyword = 0;
+    try {
+      for (let page = 0; page < maxPages; page += 1) {
+        if (collectedForKeyword >= maxVacanciesPerKeyword) {
+          break;
+        }
+
+        const response = await retry(
+          () =>
+            axios.get(`${SUPERJOB_API_URL}/vacancies/`, {
+              params: {
+                keyword,
+                page,
+                count: pageSize,
+                ...loc,
+              },
+              headers: {
+                'User-Agent': SCRAPER_USER_AGENT,
+                'X-Api-App-Id': apiKey,
+                Authorization: process.env.SUPERJOB_ACCESS_TOKEN
+                  ? `Bearer ${process.env.SUPERJOB_ACCESS_TOKEN}`
+                  : undefined,
+              },
+              timeout: 15000,
+            }),
+          {
+            maxRetries: 3,
+            initialDelay: 1000,
+            maxDelay: 5000,
+            onRetry: (error, attempt) => {
+              if (isRetryableError(error)) {
+                logger.warn(
+                  `Retrying SuperJob API keyword="${keyword}" page=${page} (attempt ${attempt})`
+                );
+              }
+            },
+          }
+        );
+
+        const vacancies = Array.isArray(response.data?.objects) ? response.data.objects : [];
+        const moreRaw = response.data?.more;
+        const total = typeof response.data?.total === 'number' ? response.data.total : undefined;
+
+        logger.info(
+          `SuperJob keyword="${keyword}" page=${page}: objects=${vacancies.length}, total=${total ?? 'n/a'}, more=${String(moreRaw)}`
+        );
+
+        for (const vacancy of vacancies) {
+          if (collectedForKeyword >= maxVacanciesPerKeyword) {
+            break;
+          }
+          const parsed = parseSuperJobVacancy(
+            vacancy as Record<string, unknown>,
+            keyword
+          );
+          if (parsed) {
+            jobs.push(parsed);
+            collectedForKeyword += 1;
+          }
+        }
+
+        if (vacancies.length === 0) {
+          break;
+        }
+        let hasMorePages = false;
+        if (moreRaw === true) {
+          hasMorePages = true;
+        } else if (moreRaw === false) {
+          hasMorePages = false;
+        } else {
+          hasMorePages = vacancies.length >= pageSize;
+        }
+        if (!hasMorePages) {
+          break;
+        }
+
+        if (delayMs > 0) {
+          await sleep(delayMs);
+        }
+      }
+    } catch (error: unknown) {
+      logger.warn(`Failed to scrape SuperJob by keyword "${keyword}":`, error);
+    }
+  }
+
+  return jobs;
+}
+
+/**
+ * Parse a single SuperJob vacancy object into JobInput.
+ * Field mapping based on https://api.superjob.ru/ docs v2.0:
+ *   experience.id:     1=без опыта, 2=от 1 года, 3=от 3 лет, 4=от 6 лет
+ *   type_of_work.id:   6=полный день, 10=неполный, 12=сменный, 13=частичная, 7=временная, 9=вахта
+ *   place_of_work.id:  1=на территории работодателя, 2=на дому (remote), 3=разъездной
+ */
+function parseSuperJobVacancy(vacancy: Record<string, unknown>, keyword: string): JobInput | null {
+  const title = (vacancy?.profession as string) || '';
+  const company = (vacancy?.firm_name as string) || '';
+  if (!title || !company) return null;
+
+  const town = vacancy?.town as { title?: string } | undefined;
+  const location = town?.title ? [String(town.title)] : [];
+
+  const payFrom = vacancy?.payment_from as number | undefined;
+  const payTo = vacancy?.payment_to as number | undefined;
+  const salaryMin = typeof payFrom === 'number' && payFrom > 0 ? payFrom : null;
+  const salaryMax = typeof payTo === 'number' && payTo > 0 ? payTo : null;
+  const currency =
+    typeof vacancy?.currency === 'string' && vacancy.currency.trim()
+      ? vacancy.currency.trim()
+      : null;
+
+  const workText = typeof vacancy?.work === 'string' ? vacancy.work : '';
+  const candidatText = typeof vacancy?.candidat === 'string' ? vacancy.candidat : '';
+  const compensationText = typeof vacancy?.compensation === 'string' ? vacancy.compensation : '';
+  const description = [workText, compensationText].filter(Boolean).join('\n\n');
+  const requirements = candidatText || description;
+
+  const exp = vacancy?.experience as { id?: number } | undefined;
+  let experience_level: string | null = null;
+  if (exp?.id) {
+    if (exp.id === 1) experience_level = 'junior';
+    else if (exp.id === 2) experience_level = 'junior';
+    else if (exp.id === 3) experience_level = 'middle';
+    else if (exp.id === 4) experience_level = 'senior';
+  }
+
+  const placeOfWork = vacancy?.place_of_work as { id?: number } | undefined;
+  let work_mode: string | null = null;
+  if (placeOfWork?.id) {
+    if (placeOfWork.id === 2) work_mode = 'remote';
+    else if (placeOfWork.id === 3) work_mode = 'hybrid';
+    else work_mode = 'office';
+  }
+
+  const link = typeof vacancy?.link === 'string' && vacancy.link
+    ? vacancy.link
+    : `https://www.superjob.ru/vakansii/${vacancy?.id || ''}.html`;
+
+  const datePub = vacancy?.date_published as number | undefined;
+
+  return {
+    title,
+    company,
+    location,
+    salary_min: salaryMin,
+    salary_max: salaryMax,
+    currency,
+    description,
+    requirements,
+    skills: [keyword],
+    experience_level,
+    work_mode,
+    source: 'superjob.ru',
+    source_url: link,
+    posted_at: datePub ? new Date(datePub * 1000) : null,
+  };
+}
+
+/**
  * Fetch detailed vacancy information from HH.ru
  */
 async function fetchVacancyDetails(vacancyId: string): Promise<JobInput | null> {
@@ -234,6 +514,7 @@ async function fetchVacancyDetails(vacancyId: string): Promise<JobInput | null> 
         axios.get(`${HH_API_URL}/vacancies/${vacancyId}`, {
           headers: {
             'User-Agent': SCRAPER_USER_AGENT,
+            'HH-User-Agent': SCRAPER_USER_AGENT,
           },
           timeout: 5000,
         }),

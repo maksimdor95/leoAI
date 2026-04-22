@@ -41,18 +41,20 @@ export interface InfoCardItem {
   icon?: string;
 }
 
-export interface InfoCardMessage extends BaseMessage {
-  type: typeof MessageType.INFO_CARD;
-  title: string;
-  description?: string;
-  cards: InfoCardItem[];
-}
-
 export interface CommandItem {
   id: string;
   label: string;
   action: string;
   icon?: string;
+}
+
+export interface InfoCardMessage extends BaseMessage {
+  type: typeof MessageType.INFO_CARD;
+  title: string;
+  description?: string;
+  cards: InfoCardItem[];
+  /** Кнопки сценария (PDF, рестарт и т.д.) */
+  commands?: CommandItem[];
 }
 
 export interface CommandMessage extends BaseMessage {

@@ -31,9 +31,15 @@ src/
 
 ## API Endpoints:
 
+- `GET /api/jobs/catalog` — список вакансий в БД (отладка / админ). Query: `source` (например `superjob.ru`, `hh.ru`), `limit` (≤200), `offset`. В **production** обязателен `JOB_CATALOG_TOKEN` в env и заголовок `X-Job-Catalog-Token` или `Authorization: Bearer`. В dev без токена доступ открыт.
+- `GET /api/jobs/hh/salary-evaluation/:areaId` — прокси к HH Salary Bank API (`/salary_statistics/paid/salary_evaluation/{areaId}`), поддерживает query-параметры HH и использует OAuth на стороне сервиса
 - `GET /api/jobs/match/:userId` - получить подходящие вакансии для пользователя
 - `GET /api/jobs/:jobId` - получить детали вакансии
 - `POST /api/jobs/refresh` - запустить скрейпинг вакансий
+
+### UI (frontend)
+
+Страница `/admin/jobs` (клиентский запрос из браузера) читает каталог с `NEXT_PUBLIC_JOB_MATCHING_URL` (по умолчанию `http://127.0.0.1:3004`). Если на job-matching задан `JOB_CATALOG_TOKEN`, введите его в поле на странице. Убедитесь, что `CORS_ORIGIN` сервиса совпадает с origin фронта.
 
 ## Запуск:
 
@@ -59,6 +65,13 @@ npm start
 - `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` - настройки Redis
 - `USER_PROFILE_SERVICE_URL` - URL сервиса профилей (по умолчанию: http://localhost:3001)
 - `JWT_SECRET` - секретный ключ для JWT
+- `JOB_CATALOG_TOKEN` (опционально) — защита `GET /api/jobs/catalog`; в production без него каталог отключён
+- `HH_CLIENT_ID`, `HH_CLIENT_SECRET` — OAuth credentials HH для salary API
+- `HH_ACCESS_TOKEN` (опционально) — если хотите использовать заранее полученный bearer token HH напрямую
+- `HH_REFRESH_TOKEN` (опционально) — refresh token для автоматического обновления access token
+- `HH_USER_AGENT` — обязателен для HH API, формат вида `AppName/Version (email)`
+
+**SuperJob (дополнительно к `SUPERJOB_API_KEY`):** `SUPERJOB_TOWN` (по умолчанию город **4** — Москва), `SUPERJOB_TOWN_IDS` (например `4,14`), `SUPERJOB_KEYWORD_LIMIT`, `SUPERJOB_PAGE_SIZE` (max 100), `SUPERJOB_MAX_PAGES`, `SUPERJOB_MAX_VACANCIES_PER_KEYWORD`, `SUPERJOB_REQUEST_DELAY_MS`.
 
 ## Matching Algorithm:
 

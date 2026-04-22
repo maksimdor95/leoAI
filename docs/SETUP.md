@@ -1,184 +1,121 @@
-# Инструкция по настройке проекта
+# Локальная разработка — руководство по настройке
 
-## Предварительные требования
+## Требования
 
-### Обязательные
+- Node.js 18+
+- Docker и Docker Compose
+- Git
 
-- **Node.js** 18+ - [Скачать](https://nodejs.org/)
-- **Python** 3.10+ - [Скачать](https://www.python.org/)
-- **Git** - [Скачать](https://git-scm.com/)
-- **Docker Desktop** - [Скачать](https://www.docker.com/products/docker-desktop)
+## Быстрый старт
 
-### Проверка установки
-
-```bash
-node --version    # Должно быть v18.0.0 или выше
-python --version  # Должно быть 3.10.0 или выше
-git --version     # Любая версия
-docker --version  # Любая версия
-```
-
-## Установка проекта
-
-### 1. Клонирование репозитория
+### 1. Клонирование и установка зависимостей
 
 ```bash
-git clone <repository-url>
-cd AIheroes
-```
-
-### 2. Установка зависимостей
-
-#### JavaScript/TypeScript зависимости
-
-```bash
+git clone <repo-url>
+cd leoAI
 npm install
 ```
 
-#### Python зависимости (для разработки)
+Установите зависимости каждого сервиса:
 
 ```bash
-pip install -r requirements-dev.txt
+cd services/user-profile && npm install && cd ../..
+cd services/conversation && npm install && cd ../..
+cd services/ai-nlp && npm install && cd ../..
+cd services/job-matching && npm install && cd ../..
+cd services/email && npm install && cd ../..
+cd services/report && npm install && cd ../..
+cd frontend && npm install && cd ..
 ```
 
-### 3. Настройка переменных окружения
+### 2. Инфраструктура (PostgreSQL + Redis)
 
 ```bash
-# Скопировать пример файла
-cp env.example .env
-
-# Отредактировать .env файл и заполнить значения
-# (особенно важны API ключи)
+# Убедитесь, что в корне проекта есть .env
+# Минимально нужны DB_PASSWORD и JWT_SECRET
+docker compose up -d
 ```
 
-### 4. Настройка pre-commit hooks
+Будут запущены PostgreSQL (порт 5432) и Redis (порт 6379).
 
-#### Для JavaScript/TypeScript
+### 3. Инициализация базы данных
 
 ```bash
-npx husky install
+cd services/user-profile && npm run init:db && cd ../..
+cd services/job-matching && npm run init:db && cd ../..
 ```
 
-#### Для Python
+### 4. Запуск сервисов
+
+Каждый сервис запускается в отдельном терминале:
 
 ```bash
-pre-commit install
+# Терминал 1: User Profile (порт 3001)
+cd services/user-profile && npm run dev
+
+# Терминал 2: Conversation (порт 3002)
+cd services/conversation && npm run dev
+
+# Терминал 3: AI/NLP (порт 3003)
+cd services/ai-nlp && npm run dev
+
+# Терминал 4: Job Matching (порт 3004)
+cd services/job-matching && npm run dev
+
+# Терминал 5: Email (порт 3005)
+cd services/email && npm run dev
+
+# Терминал 6: Frontend (порт 3000)
+cd frontend && npm run dev
 ```
 
-### 5. Запуск базы данных (через Docker)
+### 5. Проверка
+
+Откройте http://localhost:3000
+
+Health-проверки сервисов:
 
 ```bash
-# Запустить PostgreSQL и Redis
-docker-compose up -d
-
-# Проверить, что контейнеры запущены
-docker-compose ps
-
-# Должно показать:
-# - jack-postgres (healthy)
-# - jack-redis (healthy)
+curl http://localhost:3001/health
+curl http://localhost:3002/health
+curl http://localhost:3003/health
+curl http://localhost:3004/health
+curl http://localhost:3005/health
 ```
 
-**Подробная инструкция:** См. [infrastructure/DOCKER_GUIDE.md](../infrastructure/DOCKER_GUIDE.md)
+## API-ключи (опционально для полной функциональности)
+
+Без API-ключей приложение работает с заглушками (mock/fallback-ответы):
+
+- **YC_API_KEY** + **YC_FOLDER_ID** — для YandexGPT (генерация ответов ИИ)
+- **HH_API_KEY** — для скрейпинга вакансий с HH.ru (или установите `USE_MOCK_JOBS=true`)
+- **SMTP_HOST** + **SMTP_USER** + **SMTP_PASSWORD** — для отправки email (или **SENDGRID_API_KEY**)
+- **YC_STORAGE_*** — для хранения PDF-отчётов (Report Service)
+
+Полный справочник переменных окружения: [docs/CONFIGURATION.md](CONFIGURATION.md).
 
 ## Структура проекта
 
 ```
-AIheroes/
-├── frontend/              # Frontend приложение
-├── services/              # Backend сервисы
-│   ├── user-profile/      # Сервис профилей
-│   ├── conversation/      # Сервис чата
-│   ├── ai-nlp/           # AI сервис
-│   ├── job-matching/     # Сервис поиска вакансий
-│   ├── email/            # Email сервис
-│   ├── application/      # Сервис помощи с заявками
-│   └── referral/         # Сервис интро
-├── infrastructure/        # Docker, K8s конфигурации
-└── docs/                 # Документация
+leoAI/
+├── frontend/              # Next.js 14 приложение
+├── services/
+│   ├── user-profile/      # Аутентификация, профили (порт 3001)
+│   ├── conversation/      # Чат, диалоговый движок (порт 3002)
+│   ├── ai-nlp/            # YandexGPT интеграция (порт 3003)
+│   ├── job-matching/      # Скрейпинг и подбор вакансий (порт 3004)
+│   ├── email/             # Email уведомления (порт 3005)
+│   └── report/            # PDF отчёты для wannanew (порт 3007)
+├── infrastructure/        # Docker, nginx конфиги
+├── docs/                  # Документация
+├── docker-compose.yml     # PostgreSQL + Redis
+└── .env                   # Локальные переменные окружения (не в git)
 ```
 
-## Первый запуск
+## Частые проблемы
 
-После установки всех зависимостей и настройки переменных окружения:
-
-1. **Запустить базу данных:**
-
-   ```bash
-   docker-compose up -d
-   ```
-
-2. **Проверить подключение к базе данных:**
-
-   ```bash
-   # Проверить PostgreSQL
-   docker-compose exec postgres psql -U postgres -d jack_ai
-
-   # Проверить Redis
-   docker-compose exec redis redis-cli ping
-   ```
-
-3. **Запустить сервисы:**
-   ```bash
-   # Запустить конкретный сервис (пример)
-   cd services/user-profile
-   npm run dev
-   ```
-
-## Разработка
-
-### Проверка кода
-
-```bash
-# JavaScript/TypeScript
-npm run lint          # Проверить код
-npm run lint:fix      # Исправить ошибки
-npm run format        # Отформатировать код
-
-# Python
-black .               # Отформатировать код
-flake8 .              # Проверить стиль
-```
-
-### Тестирование
-
-```bash
-# JavaScript/TypeScript
-npm test
-
-# Python
-pytest
-```
-
-## Проблемы и решения
-
-### Проблема: `npm install` не работает
-
-**Решение:**
-
-- Убедитесь, что Node.js версии 18+ установлен
-- Попробуйте удалить `node_modules` и `package-lock.json`, затем запустить снова
-- Проверьте интернет-соединение
-
-### Проблема: Docker контейнеры не запускаются
-
-**Решение:**
-
-- Убедитесь, что Docker Desktop запущен
-- Проверьте, что порты 5432 (PostgreSQL) и 6379 (Redis) не заняты
-- Попробуйте перезапустить Docker Desktop
-
-### Проблема: Pre-commit hooks не работают
-
-**Решение:**
-
-- Убедитесь, что выполнили `npx husky install` или `pre-commit install`
-- Проверьте права на выполнение файлов в `.husky/`
-- Попробуйте переустановить hooks
-
-## Дополнительная информация
-
-- [Архитектура проекта](./ARCHITECTURE.md)
-- [План разработки](./DEVELOPMENT_PLAN.md)
-- [Стиль кода](./CODE_STYLE.md)
-- [Pre-commit hooks](./PRE_COMMIT_SETUP.md)
+| Проблема | Решение |
+|----------|---------|
+| Порт занят | Проверьте `lsof -i :PORT` и остановите конфликтующий процесс |
+| БД не инициализирована | Убедитесь, что контейнер PostgreSQL запущен: `docker compose ps` |
+| Сервис не стартует | Проверьте наличие `.env` в корне и что все переменные заполнены |

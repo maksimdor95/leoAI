@@ -30,6 +30,8 @@ app.get('/', (_req, res) => {
     service: 'report-service',
     version: '0.1.0',
     endpoints: [
+      'GET /api/report/preview/:sessionId',
+      'POST /api/report/preview-compute',
       'POST /api/report/generate',
       'GET /api/report/:reportId/status',
       'GET /api/report/:reportId/download',

@@ -1,4 +1,11 @@
-import { Message, MessageRole, MessageType, InfoCardMessage } from '@/types/chat';
+import {
+  Message,
+  MessageRole,
+  MessageType,
+  InfoCardMessage,
+  CommandItem,
+  CommandMessage,
+} from '@/types/chat';
 import { Button } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 
@@ -25,9 +32,10 @@ function getMessageContent(message: Message): string {
 type MessageListProps = {
   messages: Message[];
   onShowProfile?: (profileData: InfoCardMessage) => void;
+  onCommandSelect?: (command: CommandItem) => void;
 };
 
-export function MessageList({ messages, onShowProfile }: MessageListProps) {
+export function MessageList({ messages, onShowProfile, onCommandSelect }: MessageListProps) {
   return (
     <div className="flex flex-col gap-4">
       {messages.map((message) => {
@@ -58,9 +66,25 @@ export function MessageList({ messages, onShowProfile }: MessageListProps) {
               <div className="mb-1 text-[8px] uppercase tracking-[0.3em] text-slate-400 opacity-70">
                 {isAssistant ? 'LEO' : ''}
               </div>
-              <div className="whitespace-pre-line text-[11px] leading-relaxed break-words hyphens-auto">
-                {content}
-              </div>
+              {message.type === MessageType.COMMAND ? (
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {(message as CommandMessage).commands.map((command) => (
+                    <Button
+                      key={`${message.id}-${command.id}`}
+                      type="default"
+                      size="small"
+                      onClick={() => onCommandSelect?.(command)}
+                      className="!h-7 !rounded-full !border-white/20 !bg-white/5 !px-3 !text-[11px] !text-slate-100 hover:!border-green-400/60 hover:!text-green-200"
+                    >
+                      {command.label}
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <div className="whitespace-pre-line text-[11px] leading-relaxed break-words hyphens-auto">
+                  {content}
+                </div>
+              )}
               {isProfileCard && onShowProfile && (
                 <div className="mt-2 pt-2 border-t border-white/10">
                   <Button

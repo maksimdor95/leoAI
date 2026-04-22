@@ -65,6 +65,38 @@ export function shouldLogError(error: unknown): boolean {
   return true; // Unexpected errors should be logged
 }
 
+const SENSITIVE_KEYS = new Set([
+  'authorization',
+  'token',
+  'jwt',
+  'password',
+  'email',
+  'phone',
+  'resume',
+  'rawbody',
+]);
+
+function sanitizeForLog(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForLog(item));
+  }
+  if (typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+      if (SENSITIVE_KEYS.has(key.toLowerCase())) {
+        result[key] = '[REDACTED]';
+      } else {
+        result[key] = sanitizeForLog(nestedValue);
+      }
+    }
+    return result;
+  }
+  return value;
+}
+
 /**
  * Error handler middleware
  * Should be added after all routes
@@ -89,41 +121,8 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
       statusCode,
       error: message,
       stack: err instanceof Error ? err.stack : undefined,
-      body: req.body,
-      query: req.query,
+      query: sanitizeForLog(req.query),
     });
-    // #region agent log
-    if (req.path.includes('/api/users/register')) {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const fs = require('fs');
-      const logPath = 'c:\\Users\\Marina\\Desktop\\AIheroes\\.cursor\\debug.log';
-      const logEntry =
-        JSON.stringify({
-          location: 'errorHandler.ts:86',
-          message: 'Backend: Error handler - register request failed',
-          data: {
-            method: req.method,
-            path: req.path,
-            statusCode,
-            error: message,
-            errorStack: err instanceof Error ? err.stack : undefined,
-            body: req.body,
-            bodyType: typeof req.body,
-            contentType: req.headers['content-type'],
-            contentLength: req.headers['content-length'],
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          runId: 'run1',
-          hypothesisId: 'C',
-        }) + '\n';
-      try {
-        fs.appendFileSync(logPath, logEntry, 'utf8');
-      } catch (e) {
-        // Ignore file write errors in production
-      }
-    }
-    // #endregion
   } else {
     logger.info('Operational error:', {
       method: req.method,

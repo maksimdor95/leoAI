@@ -27,18 +27,26 @@ export type AiReadinessScore = {
   recommendations: string[];
 };
 
-export async function saveCareerBasics(data: CareerBasicsPayload): Promise<{ success: boolean }> {
+export async function saveCareerBasics(
+  data: CareerBasicsPayload,
+  options?: { trackId?: string }
+): Promise<{ success: boolean }> {
   await api.post('/api/career/profile', {
     current_role: data.currentRole,
     target_role: data.targetRole,
     experience_years: data.experienceYears,
+    ...(options?.trackId ? { track_id: options.trackId } : {}),
   });
   return { success: true };
 }
 
-export async function saveResume(payload: ResumePayload): Promise<{ success: boolean }> {
+export async function saveResume(
+  payload: ResumePayload,
+  options?: { trackId?: string }
+): Promise<{ success: boolean }> {
   await api.post('/api/career/profile', {
     resume_text: payload.resumeText,
+    ...(options?.trackId ? { track_id: options.trackId } : {}),
   });
   return { success: true };
 }

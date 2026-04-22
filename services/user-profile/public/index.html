@@ -273,7 +273,7 @@
                 return;
             }
 
-            console.log('📤 Sending request with token:', currentToken.substring(0, 20) + '...');
+            console.log('📤 Sending authenticated request');
 
             try {
                 const response = await fetch(`${API_URL}/profile`, {

@@ -23,6 +23,44 @@ dotenv.config();
 const app = express();
 const PORT = parseInt(process.env.PORT || '8080', 10);
 
+const corsAllowedOrigins = new Set<string>([
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+]);
+if (process.env.CORS_ORIGIN) {
+  for (const part of process.env.CORS_ORIGIN.split(',').map((s) => s.trim())) {
+    if (part) corsAllowedOrigins.add(part);
+  }
+}
+
+function isLocalLoopbackOrigin(origin: string): boolean {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === 'localhost' || hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+// CORS before helmet so OPTIONS gets headers. In dev, allow any loopback port (e.g. Next on 3002 if 3000 is busy).
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || corsAllowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      const nodeEnv = process.env.NODE_ENV || 'development';
+      if (nodeEnv !== 'production' && isLocalLoopbackOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(null, false);
+    },
+    credentials: true,
+  })
+);
+
 // Middleware
 app.use(
   helmet({
@@ -36,61 +74,14 @@ app.use(
     },
   })
 );
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-    credentials: true,
-  })
-);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Request logging middleware
 app.use((req, _res, next) => {
   logger.info(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  if (req.body && Object.keys(req.body).length > 0) {
-    logger.info('Request body:', JSON.stringify(req.body, null, 2));
-  }
-  // #region agent log
-  if (req.path.includes('/api/users/register')) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const fs = require('fs');
-    const logPath = 'c:\\Users\\Marina\\Desktop\\AIheroes\\.cursor\\debug.log';
-    const logEntry =
-      JSON.stringify({
-        location: 'index.ts:52',
-        message: 'Backend: Incoming register request - middleware',
-        data: {
-          method: req.method,
-          path: req.path,
-          headers: {
-            'content-type': req.headers['content-type'],
-            'content-length': req.headers['content-length'],
-            origin: req.headers.origin,
-            'user-agent': req.headers['user-agent'],
-          },
-          bodyType: typeof req.body,
-          bodyKeys: req.body ? Object.keys(req.body) : [],
-          bodyStringified: req.body ? JSON.stringify(req.body) : null,
-          rawBody: req.body,
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'B,C',
-      }) + '\n';
-    try {
-      fs.appendFileSync(logPath, logEntry, 'utf8');
-    } catch (e) {
-      // Ignore file write errors in production
-    }
-  }
-  // #endregion
   next();
 });
-
-// Serve static files (test page)
-app.use(express.static(path.join(__dirname, '../public')));
 
 // Root endpoint
 app.get('/', (_req, res) => {
@@ -104,9 +95,17 @@ app.get('/', (_req, res) => {
       login: 'POST /api/users/login',
       profile: 'GET /api/users/profile',
       updateProfile: 'PUT /api/users/profile',
+      careerTracks: 'GET /api/career/tracks',
+      careerTrackCreate: 'POST /api/career/tracks',
+      careerTrackUpdate: 'PATCH /api/career/tracks/:trackId',
+      careerTrackSetDefault: 'POST /api/career/tracks/:trackId/set-default',
       careerProfile: 'POST /api/career/profile',
       careerProfileGet: 'GET /api/career-profile/:userId',
       resume: 'POST /api/resume',
+      resumesUpload: 'POST /api/career/resumes/upload (multipart file)',
+      resumesList: 'GET /api/career/resumes',
+      resumeById: 'GET /api/career/resumes/:resumeId',
+      resumeDelete: 'DELETE /api/career/resumes/:resumeId',
       aiReadiness: 'GET /api/career/ai-readiness',
       aiReadinessMock: 'POST /api/ai-readiness/mock',
     },
@@ -124,6 +123,9 @@ app.get('/health', async (_req, res) => {
 app.use('/api/users', userRoutes);
 app.use('/api/career', careerRoutes);
 app.use('/api', careerRoutes);
+
+// Test HTML after API routes so GET / stays JSON
+app.use(express.static(path.join(__dirname, '../public')));
 
 // 404 handler (must be before error handler)
 app.use(notFoundHandler);

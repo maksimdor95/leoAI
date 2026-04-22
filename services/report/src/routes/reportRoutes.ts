@@ -4,6 +4,15 @@ import { reportController } from '../controllers/reportController';
 
 const router = Router();
 
+// JSON preview for interview completion UI (must be before /:reportId routes)
+router.get('/preview/:sessionId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  await reportController.previewSessionReport(req, res);
+});
+
+router.post('/preview-compute', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  await reportController.previewFromCollected(req, res);
+});
+
 // Generate a new report
 router.post('/generate', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   await reportController.generateReport(req, res);

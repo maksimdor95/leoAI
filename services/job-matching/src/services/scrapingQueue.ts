@@ -1,12 +1,17 @@
 /**
  * Scraping Queue Service
- * Manages background job scraping using BullMQ
+ * Manages background job scraping using BullMQ.
+ *
+ * Очередь принимает optional payload `{ keywords, locationId, userId }` —
+ * scraper собирает вакансии по кастомным кейвордам (например, из профиля
+ * пользователя). Без payload используется `DEFAULT_SEED_KEYWORDS` из scraper'а.
  */
 
 import { Queue, Worker } from 'bullmq';
 import Redis from 'ioredis';
-import { scrapeHHJobs } from './scraper';
+import { scrapeHHJobs, DEFAULT_SEED_KEYWORDS } from './scraper';
 import { logger } from '../utils/logger';
+import { ioredisTlsOptions } from '../utils/redisTls';
 
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379', 10);
@@ -16,35 +21,60 @@ const connection = new Redis({
   host: REDIS_HOST,
   port: REDIS_PORT,
   password: REDIS_PASSWORD,
-  // Only add username if it's explicitly provided and not 'default'
   ...(process.env.REDIS_USER && process.env.REDIS_USER !== 'default'
     ? { username: process.env.REDIS_USER }
     : {}),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tls: process.env.REDIS_SSL === 'true' ? ({ rejectUnauthorized: false } as any) : undefined,
+  tls: ioredisTlsOptions() as any,
   maxRetriesPerRequest: null,
 });
 
-// Create queue
-export const scrapingQueue = new Queue('job-scraping', {
+export interface ScrapingJobPayload {
+  /** Ключевые слова для scraper'а. Если пусто — используются дефолтные. */
+  keywords?: string[];
+  /** HH area id. По умолчанию 113 (вся Россия). */
+  locationId?: number;
+  /** ID инициатора скрейпа — для логов и антидубликата. */
+  userId?: string;
+  /** Тег для метрик (e.g. 'user-profile' | 'hourly-cron' | 'manual'). */
+  origin?: 'user-profile' | 'hourly-cron' | 'manual' | 'seed';
+}
+
+export const scrapingQueue = new Queue<ScrapingJobPayload>('job-scraping', {
   connection,
 });
 
-// Create worker
-const worker = new Worker(
+const worker = new Worker<ScrapingJobPayload>(
   'job-scraping',
   async (job) => {
-    logger.info(`Processing scraping job ${job.id}...`);
-    const result = await scrapeHHJobs();
+    const payload = job.data || {};
+    const keywords =
+      Array.isArray(payload.keywords) && payload.keywords.length > 0
+        ? payload.keywords
+        : [...DEFAULT_SEED_KEYWORDS];
+    const locationId =
+      typeof payload.locationId === 'number' && payload.locationId > 0
+        ? payload.locationId
+        : 113;
+
+    logger.info(
+      `Processing scraping job ${job.id} origin=${payload.origin ?? 'unspecified'} ` +
+        `userId=${payload.userId ?? '-'} locationId=${locationId} ` +
+        `keywords=[${keywords.slice(0, 5).join(', ')}${keywords.length > 5 ? ', …' : ''}]`
+    );
+
+    const result = await scrapeHHJobs(keywords, locationId);
 
     if (result.mockJobsUsed) {
-      logger.warn(`⚠️  Scraping job ${job.id} used MOCK DATA`);
-      logger.warn(`   Sources used: ${result.sourcesUsed.join(', ')}`);
-      logger.warn(`   Jobs: ${result.jobsScraped} scraped, ${result.jobsSaved} saved`);
+      logger.warn(
+        `⚠️  Scraping job ${job.id} used MOCK DATA (sources=${result.sourcesUsed.join(', ')}, ` +
+          `scraped=${result.jobsScraped}, saved=${result.jobsSaved})`
+      );
     } else {
-      logger.info(`✅ Scraping job ${job.id} completed successfully`);
-      logger.info(`   Sources used: ${result.sourcesUsed.join(', ')}`);
-      logger.info(`   Jobs: ${result.jobsScraped} scraped, ${result.jobsSaved} saved`);
+      logger.info(
+        `✅ Scraping job ${job.id} completed (sources=${result.sourcesUsed.join(', ')}, ` +
+          `scraped=${result.jobsScraped}, saved=${result.jobsSaved})`
+      );
     }
 
     if (result.errors.length > 0) {
@@ -55,7 +85,7 @@ const worker = new Worker(
   },
   {
     connection,
-    concurrency: 1, // Only one scraping job at a time
+    concurrency: 1,
   }
 );
 
@@ -68,40 +98,48 @@ worker.on('failed', (job, err) => {
 });
 
 /**
- * Schedule regular scraping (every hour)
+ * Schedule regular scraping (every hour) with the diverse default keyword set.
  */
 export async function scheduleRegularScraping(): Promise<void> {
-  // Remove existing repeatable jobs
   const repeatableJobs = await scrapingQueue.getRepeatableJobs();
   for (const job of repeatableJobs) {
     await scrapingQueue.removeRepeatableByKey(job.key);
   }
 
-  // Add new repeatable job (every hour)
   await scrapingQueue.add(
     'scrape-jobs',
-    {},
+    { origin: 'hourly-cron' },
     {
       repeat: {
-        pattern: '0 * * * *', // Every hour at minute 0 (cron format)
+        pattern: '0 * * * *',
       },
       jobId: 'hourly-scraping',
     }
   );
 
-  logger.info('Scheduled hourly job scraping');
+  logger.info('Scheduled hourly job scraping (diverse default keyword set)');
 }
 
 /**
- * Trigger immediate scraping
+ * Триггер общего скрейпа (без привязки к пользователю).
+ * Сохраняем обратную совместимость с refreshJobs endpoint.
  */
-export async function triggerScraping(): Promise<void> {
-  await scrapingQueue.add('scrape-jobs', {});
-  logger.info('Triggered immediate job scraping');
+export async function triggerScraping(payload?: ScrapingJobPayload): Promise<void> {
+  const data: ScrapingJobPayload = {
+    origin: payload?.origin ?? 'manual',
+    keywords: payload?.keywords,
+    locationId: payload?.locationId,
+    userId: payload?.userId,
+  };
+  await scrapingQueue.add('scrape-jobs', data);
+  logger.info(
+    `Triggered scraping origin=${data.origin} userId=${data.userId ?? '-'} ` +
+      `keywords=${data.keywords?.length ?? 'default'}`
+  );
 }
 
 /**
- * Close queue connections (for graceful shutdown)
+ * Close queue connections (for graceful shutdown).
  */
 export async function closeQueue(): Promise<void> {
   await worker.close();

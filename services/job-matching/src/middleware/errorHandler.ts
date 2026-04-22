@@ -65,6 +65,38 @@ export function shouldLogError(error: unknown): boolean {
   return true; // Unexpected errors should be logged
 }
 
+const SENSITIVE_KEYS = new Set([
+  'authorization',
+  'token',
+  'jwt',
+  'password',
+  'email',
+  'phone',
+  'resume',
+  'rawbody',
+]);
+
+function sanitizeForLog(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForLog(item));
+  }
+  if (typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+      if (SENSITIVE_KEYS.has(key.toLowerCase())) {
+        result[key] = '[REDACTED]';
+      } else {
+        result[key] = sanitizeForLog(nestedValue);
+      }
+    }
+    return result;
+  }
+  return value;
+}
+
 /**
  * Error handler middleware
  * Should be added after all routes
@@ -89,8 +121,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
       statusCode,
       error: message,
       stack: err instanceof Error ? err.stack : undefined,
-      body: req.body,
-      query: req.query,
+      query: sanitizeForLog(req.query),
     });
   } else {
     logger.info('Operational error:', {

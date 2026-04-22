@@ -128,15 +128,15 @@ if (product === 'wannanew' || scenarioId === 'wannanew-pm-v1') {
 | URL | Описание |
 |-----|----------|
 | `/chat?new=true` | Новый чат с экраном выбора продукта ✅ |
-| `/chat?new=true&product=wannanew` | Новый чат wannanew (прямой переход) |
-| `/chat?new=true&product=jack` | Новый чат Jack (прямой переход) |
+| `/chat?new=true&product=wannanew` | Новый чат сценария PM-интервью (прямой переход) |
+| `/chat?new=true&product=jack` | Новый чат сценария поиска вакансий (прямой переход) |
 | `/chat?sessionId=xxx` | Продолжение существующей сессии |
 
 ### UI различия
 
-| Элемент | Jack (LEO) | wannanew |
+| Элемент | Сценарий поиска вакансий (`product=jack`) | Сценарий PM-интервью (`product=wannanew`) |
 |---------|------------|----------|
-| Заголовок | «Чат с LEO» | «Чат с wannanew» |
+| Заголовок | «Чат с LEO» | «Чат с LEO: PM-интервью» |
 | Цвет акцента | Зелёный (`green-500`) | Фиолетовый (`purple-500`) |
 | Метка в списке чатов | LEO (зелёная) | wannanew (фиолетовая) |
 | Placeholder | «Напишите ответ или задайте вопрос LEO...» | «Напишите ответ или задайте вопрос...» |
@@ -146,7 +146,7 @@ if (product === 'wannanew' || scenarioId === 'wannanew-pm-v1') {
 **Единая кнопка создания чата** ✅:
 - **«Новый чат»** → `/chat?new=true` → Экран выбора продукта
 
-Каждая карточка чата отображает метку продукта (LEO — зелёная, wannanew — фиолетовая).
+Каждая карточка чата отображает метку сценария (поиск вакансий — зелёная, PM-интервью — фиолетовая).
 
 ### Экран выбора продукта (NEW) ✅
 
@@ -198,22 +198,17 @@ wannanew использует **существующий голосовой ст
 
 ### Следующие этапы
 
-1. **Загрузка файла резюме** (PDF/DOCX)
-   - Endpoint `POST /api/wannanew/resume`
-   - Парсинг текста (pdf-parse, mammoth)
-   - UI компонент drag-and-drop
-
-2. **Расширенное интервью**
+1. **Расширенное интервью**
    - Больше вопросов (5-7)
    - Follow-up логика на основе ответов
    - Адаптация под уровень PM
 
-3. **AI-оценка ответов**
+2. **AI-оценка ответов**
    - Интеграция с YandexGPT для анализа качества ответов
    - Персонализированные рекомендации
    - Сравнение с лучшими практиками
 
-4. **Gap Analysis Agent**
+3. **Gap Analysis Agent**
    - Сравнение с идеальным профилем PM
    - Выявление пробелов
    - Диалоговое закрытие гэпов
@@ -269,6 +264,52 @@ Response:
     }
   ]
 }
+```
+
+### Загрузка резюме (актуальный поток)
+
+В текущей реализации загрузка и извлечение резюме проходят через `career` и `ai` сервисы (а не через отдельный `/api/wannanew/resume`):
+
+1) Upload файла (`PDF`/`DOCX`) в User Profile
+
+```bash
+curl -X POST https://api.example.com/api/career/resumes/upload \
+  -H "X-Auth-Token: Bearer <token>" \
+  -F "file=@resume.pdf"
+```
+
+2) Извлечение структурированных полей из текста в AI/NLP
+
+```bash
+curl -X POST https://api.example.com/api/ai/extract-profile-from-resume \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resumeText": "<extracted text>",
+    "scenarioId": "wannanew-pm-v1"
+  }'
+```
+
+3) Слияние извлечённых полей в текущую chat-сессию
+
+```bash
+curl -X POST https://api.example.com/api/chat/session/{sessionId}/merge-collected \
+  -H "X-Auth-Token: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "collectedData": {
+      "resumeOrIntro": "...",
+      "targetRole": "Senior"
+    }
+  }'
+```
+
+### Preview отчёта без PDF
+
+Для экранных карточек в конце интервью используется быстрый расчёт preview:
+
+```bash
+curl https://api.example.com/api/chat/session/{sessionId}/report-preview \
+  -H "X-Auth-Token: Bearer <token>"
 ```
 
 ### Генерация PDF-отчёта
