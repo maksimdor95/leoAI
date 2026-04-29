@@ -8,7 +8,7 @@ import {
   CategoryScore,
 } from '../types/report';
 
-const CONVERSATION_SERVICE_URL = process.env.CONVERSATION_SERVICE_URL || 'http://localhost:3003';
+const CONVERSATION_SERVICE_URL = process.env.CONVERSATION_SERVICE_URL || 'http://localhost:3002';
 
 // Interview questions mapping
 const INTERVIEW_QUESTIONS: Record<string, { question: string; category: string }> = {

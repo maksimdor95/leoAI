@@ -232,7 +232,9 @@ function ChatPageContent() {
   >(new Map());
   const typingMessageIdRef = useRef<string | null>(null);
   const handledSpeechMessageIdsRef = useRef<Set<string>>(new Set());
-  const enableBrowserTtsFallbackRef = useRef(true);
+  const enableBrowserTtsFallbackRef = useRef(
+    process.env.NEXT_PUBLIC_ENABLE_BROWSER_TTS_FALLBACK !== 'false'
+  );
   const lastSpokenTextRef = useRef<string>('');
   const lastSpokenAtRef = useRef<number>(0);
   const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
@@ -554,7 +556,7 @@ function ChatPageContent() {
         await el.play();
         return true;
       } catch (error) {
-        console.warn('Assistant audio playback failed, using speech fallback', error);
+        console.warn('Assistant audio playback failed', error);
         return false;
       }
     },
@@ -562,7 +564,7 @@ function ChatPageContent() {
   );
 
   const waitForAssistantAudio = useCallback(
-    (messageId: string, timeoutMs = 1200) =>
+    (messageId: string, timeoutMs = 4000) =>
       new Promise<{ audioBase64: string; mimeType?: string; format?: 'mp3' | 'oggopus' } | null>(
         (resolve) => {
           const startedAt = Date.now();

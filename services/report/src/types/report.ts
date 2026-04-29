@@ -61,6 +61,8 @@ export interface GenerateReportRequest {
   sessionId: string;
   userId: string;
   email?: string;
+  /** Optional user bearer token used for secure cross-service session fetch. */
+  authorization?: string;
 }
 
 export interface ReportStatusResponse {

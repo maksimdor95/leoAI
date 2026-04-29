@@ -30,16 +30,28 @@ export const reportController = {
       const { sessionId } = req.body;
       const userId = req.userId!;
       const email = req.userEmail;
+      const authHeader =
+        req.headers.authorization ||
+        (typeof req.headers['x-auth-token'] === 'string' ? req.headers['x-auth-token'] : undefined);
 
       if (!sessionId) {
         res.status(400).json({ error: 'sessionId is required' });
         return;
       }
 
+      if (!authHeader || !String(authHeader).includes('Bearer')) {
+        res.status(401).json({ error: 'Authorization header required' });
+        return;
+      }
+
+      const bearer =
+        String(authHeader).startsWith('Bearer ') ? String(authHeader) : `Bearer ${String(authHeader)}`;
+
       const result = await reportService.initiateGeneration({
         sessionId,
         userId,
         email,
+        authorization: bearer,
       });
 
       res.json(result);

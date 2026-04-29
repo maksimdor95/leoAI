@@ -508,8 +508,15 @@ export async function synthesizeAssistantAudio(params: {
     );
 
     if (response.data.status !== 'success' || !response.data.audioBase64) {
+      logger.warn('TTS source=fallback reason=empty_response');
       return null;
     }
+
+    logger.info(
+      `TTS source=yandex preset=${presetName ?? 'custom'} voice=${
+        params.voice ?? process.env.TTS_VOICE ?? preset?.voice ?? DEFAULT_TTS_VOICE
+      } format=${response.data.format ?? 'unknown'}`
+    );
 
     return {
       audioBase64: response.data.audioBase64,
@@ -517,7 +524,7 @@ export async function synthesizeAssistantAudio(params: {
       format: response.data.format,
     };
   } catch (error: unknown) {
-    logger.warn('Failed to synthesize assistant audio, fallback to text-only response:', error);
+    logger.warn('TTS source=fallback reason=request_failed', error);
     return null;
   }
 }

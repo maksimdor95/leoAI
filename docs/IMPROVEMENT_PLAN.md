@@ -17,9 +17,9 @@
 |---|---|
 | Scope freeze и единая MVP 0 рамка | Implemented |
 | Security floor (secrets/auth/rate-limit/TLS/logging) | Implemented |
-| Core flow hardening | Planned |
-| Smoke/integration release gate | Planned |
-| Release runbook + staging rehearsal | Planned |
+| Core flow hardening | Implemented |
+| Smoke/integration release gate | Implemented |
+| Release runbook + staging rehearsal | Implemented |
 | Launch + hypercare (7 дней) | Planned |
 
 ### Weekly review #1 (2026-04-22)

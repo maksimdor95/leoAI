@@ -21,9 +21,9 @@
 | Jack flow (matching + email) | Partial |
 | WannaNew flow (report preview + PDF) | Partial |
 | Career onboarding (production persistence) | Partial |
-| Security baseline (no fallback secrets, rate-limit, unified auth) | Planned |
-| Smoke/integration release gate | Planned |
-| Release runbook + staging rehearsal | Planned |
+| Security baseline (no fallback secrets, rate-limit, unified auth) | Implemented |
+| Smoke/integration release gate | Implemented |
+| Release runbook + staging rehearsal | Implemented |
 
 *Смысл статусов в таблице:* `Implemented` — закрыто по смыслу для MVP0; `Partial` — работает, остаётся существенный долг или риск; `Planned` — к релизу по пункту ещё не доведено.
 

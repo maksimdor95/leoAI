@@ -61,7 +61,8 @@ export const reportService = {
       const reportData = await reportGenerator.generateReportData(
         request.sessionId,
         request.userId,
-        request.email
+        request.email,
+        { authorization: request.authorization }
       );
 
       // 2. Generate PDF from report data

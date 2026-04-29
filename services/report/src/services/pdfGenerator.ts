@@ -407,6 +407,51 @@ const REPORT_TEMPLATE = `
 
 let browserInstance: puppeteer.Browser | null = null;
 
+function escapePdfText(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/\r?\n/g, ' ');
+}
+
+function buildFallbackPdf(reportData: ReportData): Buffer {
+  const lines = [
+    'wannanew interview report',
+    `Candidate: ${reportData.candidateName || 'Candidate'}`,
+    `Target role: ${reportData.targetRole}`,
+    `Product type: ${reportData.targetProductType}`,
+    `Score: ${reportData.evaluation?.overallScore ?? 0}/10`,
+    `Generated at: ${reportData.generatedAt}`,
+  ];
+  const escaped = lines.map((line) => escapePdfText(line));
+  const textOps = escaped.map((line, idx) => `BT /F1 12 Tf 72 ${770 - idx * 18} Td (${line}) Tj ET`).join('\n');
+  const stream = `q\n${textOps}\nQ`;
+
+  const objects: string[] = [
+    '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
+    '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
+    '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj',
+    `4 0 obj << /Length ${Buffer.byteLength(stream, 'utf8')} >> stream\n${stream}\nendstream endobj`,
+    '5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
+  ];
+
+  let content = '%PDF-1.4\n';
+  const offsets: number[] = [0];
+  for (const obj of objects) {
+    offsets.push(Buffer.byteLength(content, 'utf8'));
+    content += `${obj}\n`;
+  }
+  const xrefOffset = Buffer.byteLength(content, 'utf8');
+  content += `xref\n0 ${objects.length + 1}\n`;
+  content += '0000000000 65535 f \n';
+  for (let i = 1; i <= objects.length; i += 1) {
+    content += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  }
+  content += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return Buffer.from(content, 'utf8');
+}
+
 function resolveChromeExecutablePath(): string | undefined {
   const fromEnv = process.env.PUPPETEER_EXECUTABLE_PATH;
   if (fromEnv && fs.existsSync(fromEnv)) {
@@ -460,32 +505,40 @@ export const pdfGenerator = {
     const html = template(reportData);
 
     // Launch browser and generate PDF
-    const browser = await getBrowser();
-    const page = await browser.newPage();
-
     try {
-      await page.setContent(html, {
-        waitUntil: 'domcontentloaded',
-        timeout: 45000,
+      const browser = await getBrowser();
+      const page = await browser.newPage();
+      try {
+        await page.setContent(html, {
+          waitUntil: 'domcontentloaded',
+          timeout: 45000,
+        });
+
+        const pdfBuffer = await page.pdf({
+          format: 'A4',
+          printBackground: true,
+          timeout: 60000,
+          margin: {
+            top: '20mm',
+            right: '15mm',
+            bottom: '20mm',
+            left: '15mm',
+          },
+        });
+
+        logger.info('PDF generated successfully', { size: pdfBuffer.length });
+
+        return Buffer.from(pdfBuffer);
+      } finally {
+        await page.close();
+      }
+    } catch (error) {
+      logger.error('Primary PDF rendering failed, using fallback renderer', {
+        error: (error as Error).message,
       });
-
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        timeout: 60000,
-        margin: {
-          top: '20mm',
-          right: '15mm',
-          bottom: '20mm',
-          left: '15mm',
-        },
-      });
-
-      logger.info('PDF generated successfully', { size: pdfBuffer.length });
-
-      return Buffer.from(pdfBuffer);
-    } finally {
-      await page.close();
+      const fallbackBuffer = buildFallbackPdf(reportData);
+      logger.info('Fallback PDF generated', { size: fallbackBuffer.length });
+      return fallbackBuffer;
     }
   },
 

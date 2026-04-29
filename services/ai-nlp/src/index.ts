@@ -18,6 +18,7 @@ import { retrieveContext } from './controllers/retrieveContextController';
 import { logger } from './utils/logger';
 import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { requireAuth } from './middleware/auth';
 import { aiRateLimit } from './middleware/rateLimit';
 import { getHealthStatus } from './utils/healthCheck';
 
@@ -34,7 +35,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: '2mb' }));
-app.use('/api/ai', aiRateLimit);
+app.use('/api/ai', requireAuth, aiRateLimit);
 
 app.use((req, _res, next) => {
   logger.info(`${new Date().toISOString()} - ${req.method} ${req.path}`);

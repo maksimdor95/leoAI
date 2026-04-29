@@ -21,6 +21,27 @@ print_status() {
   fi
 }
 
+print_tts_status() {
+  if ! lsof -nP -iTCP:3003 -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "[tts-check] status:SKIPPED reason:ai-nlp-down"
+    return 0
+  fi
+
+  local response
+  response="$(
+    curl -sS --max-time 6 \
+      -X POST "http://localhost:3003/api/ai/tts" \
+      -H "Content-Type: application/json" \
+      -d '{"text":"Проверка TTS","lang":"ru-RU"}' 2>/dev/null || true
+  )"
+
+  if [[ "$response" == *"\"status\":\"success\""* ]] && [[ "$response" == *"\"audioBase64\""* ]]; then
+    echo "[tts-check] status:UP provider:yandex"
+  else
+    echo "[tts-check] status:DOWN provider:yandex"
+  fi
+}
+
 print_status "frontend" 3000
 print_status "user-profile" 3001
 print_status "conversation" 3002
@@ -28,3 +49,4 @@ print_status "ai-nlp" 3003
 print_status "job-matching" 3004
 print_status "email" 3005
 print_status "report" 3007
+print_tts_status

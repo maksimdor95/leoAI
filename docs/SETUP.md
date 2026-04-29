@@ -45,29 +45,28 @@ cd services/user-profile && npm run init:db && cd ../..
 cd services/job-matching && npm run init:db && cd ../..
 ```
 
-### 4. Запуск сервисов
+### 4. Запуск сервисов (рекомендуемый способ)
 
-Каждый сервис запускается в отдельном терминале:
+Единая команда запускает весь локальный контур:
 
 ```bash
-# Терминал 1: User Profile (порт 3001)
-cd services/user-profile && npm run dev
-
-# Терминал 2: Conversation (порт 3002)
-cd services/conversation && npm run dev
-
-# Терминал 3: AI/NLP (порт 3003)
-cd services/ai-nlp && npm run dev
-
-# Терминал 4: Job Matching (порт 3004)
-cd services/job-matching && npm run dev
-
-# Терминал 5: Email (порт 3005)
-cd services/email && npm run dev
-
-# Терминал 6: Frontend (порт 3000)
-cd frontend && npm run dev
+npm run dev:up
+npm run dev:status
 ```
+
+Production-like staging профиль локально:
+
+```bash
+npm run dev:up:staging
+```
+
+Остановка:
+
+```bash
+npm run dev:down
+```
+
+Ручной запуск по сервисам в отдельных терминалах оставляйте только для точечной отладки.
 
 ### 5. Проверка
 
@@ -81,6 +80,7 @@ curl http://localhost:3002/health
 curl http://localhost:3003/health
 curl http://localhost:3004/health
 curl http://localhost:3005/health
+curl http://localhost:3007/health
 ```
 
 ## API-ключи (опционально для полной функциональности)
