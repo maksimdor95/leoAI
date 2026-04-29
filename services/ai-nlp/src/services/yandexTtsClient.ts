@@ -34,6 +34,8 @@ export async function synthesizeWithYandexTts(params: {
 
   const response = await axios.post<ArrayBuffer>(TTS_URL, body.toString(), {
     responseType: 'arraybuffer',
+    // Ignore system HTTP(S)_PROXY for Yandex API calls in local dev.
+    proxy: false,
     headers: {
       Authorization: `Api-Key ${apiKey}`,
       'Content-Type': 'application/x-www-form-urlencoded',

@@ -18,7 +18,6 @@ import { retrieveContext } from './controllers/retrieveContextController';
 import { logger } from './utils/logger';
 import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
-import { requireAuth } from './middleware/auth';
 import { aiRateLimit } from './middleware/rateLimit';
 import { getHealthStatus } from './utils/healthCheck';
 
@@ -48,18 +47,19 @@ app.get('/health', async (_req, res) => {
   res.status(statusCode).json(health);
 });
 
-app.post('/api/ai/process-message', requireAuth, processMessage);
-app.post('/api/ai/generate-step', requireAuth, generateStepMessage);
-app.post('/api/ai/validate-answer', requireAuth, validateAnswer);
-app.post('/api/ai/analyze-profile', requireAuth, analyzeProfile);
-app.post('/api/ai/extract-profile-from-resume', requireAuth, extractProfileFromResume);
-app.post('/api/ai/check-context', requireAuth, checkContext);
-app.post('/api/ai/retrieve-context', requireAuth, retrieveContext);
-app.post('/api/ai/free-chat', requireAuth, freeChat);
-app.post('/api/ai/tts', requireAuth, synthesizeTts);
+// Internal service-to-service routes (conversation -> ai-nlp).
+app.post('/api/ai/process-message', processMessage);
+app.post('/api/ai/generate-step', generateStepMessage);
+app.post('/api/ai/validate-answer', validateAnswer);
+app.post('/api/ai/analyze-profile', analyzeProfile);
+app.post('/api/ai/extract-profile-from-resume', extractProfileFromResume);
+app.post('/api/ai/check-context', checkContext);
+app.post('/api/ai/retrieve-context', retrieveContext);
+app.post('/api/ai/free-chat', freeChat);
+app.post('/api/ai/tts', synthesizeTts);
 // Новые эндпоинты для генерации профиля и резюме
-app.post('/api/ai/generate-summary', requireAuth, generateProfileSummary);
-app.post('/api/ai/generate-resume', requireAuth, generateResume);
+app.post('/api/ai/generate-summary', generateProfileSummary);
+app.post('/api/ai/generate-resume', generateResume);
 
 // 404 handler (must be before error handler)
 app.use(notFoundHandler);

@@ -231,6 +231,10 @@ function ChatPageContent() {
     Map<string, { audioBase64: string; mimeType?: string; format?: 'mp3' | 'oggopus' }>
   >(new Map());
   const typingMessageIdRef = useRef<string | null>(null);
+  const handledSpeechMessageIdsRef = useRef<Set<string>>(new Set());
+  const enableBrowserTtsFallbackRef = useRef(true);
+  const lastSpokenTextRef = useRef<string>('');
+  const lastSpokenAtRef = useRef<number>(0);
   const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
   useEffect(() => {
     typingMessageIdRef.current = typingMessage?.id ?? null;
@@ -508,6 +512,13 @@ function ChatPageContent() {
   const speakFallback = useCallback(
     (text: string) => {
       if (typeof window === 'undefined' || isMuted || !text?.trim()) return;
+      const normalized = text.trim().toLowerCase().replace(/\s+/g, ' ');
+      const now = Date.now();
+      if (normalized && normalized === lastSpokenTextRef.current && now - lastSpokenAtRef.current < 4500) {
+        return;
+      }
+      lastSpokenTextRef.current = normalized;
+      lastSpokenAtRef.current = now;
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text.trim());
       utterance.lang = 'ru-RU';
@@ -526,9 +537,13 @@ function ChatPageContent() {
 
   const playAssistantAudio = useCallback(
     async (payload: { audioBase64: string; mimeType?: string }) => {
-      if (isMuted || !payload.audioBase64) return;
+      if (isMuted || !payload.audioBase64) return false;
+      if (typeof window !== 'undefined') {
+        // Prevent overlap with browser TTS fallback.
+        window.speechSynthesis.cancel();
+      }
       const el = ensureAssistantAudioChain();
-      if (!el) return;
+      if (!el) return false;
       const mime = payload.mimeType || 'audio/mpeg';
       el.src = `data:${mime};base64,${payload.audioBase64}`;
       el.currentTime = 0;
@@ -537,17 +552,76 @@ function ChatPageContent() {
           await assistantAudioCtxRef.current.resume();
         }
         await el.play();
+        return true;
       } catch (error) {
         console.warn('Assistant audio playback failed, using speech fallback', error);
+        return false;
       }
     },
     [ensureAssistantAudioChain, isMuted]
   );
 
+  const waitForAssistantAudio = useCallback(
+    (messageId: string, timeoutMs = 1200) =>
+      new Promise<{ audioBase64: string; mimeType?: string; format?: 'mp3' | 'oggopus' } | null>(
+        (resolve) => {
+          const startedAt = Date.now();
+          const check = () => {
+            const payload = assistantAudioByMessageIdRef.current.get(messageId);
+            if (payload) {
+              resolve(payload);
+              return;
+            }
+            if (Date.now() - startedAt >= timeoutMs) {
+              resolve(null);
+              return;
+            }
+            setTimeout(check, 120);
+          };
+          check();
+        }
+      ),
+    []
+  );
+
+  const speakQuestionWithPriority = useCallback(
+    async (message: QuestionMessage) => {
+      const messageId = message?.id;
+      if (!messageId || handledSpeechMessageIdsRef.current.has(messageId)) return;
+      handledSpeechMessageIdsRef.current.add(messageId);
+      if (handledSpeechMessageIdsRef.current.size > 300) {
+        const first = handledSpeechMessageIdsRef.current.values().next().value;
+        if (first) handledSpeechMessageIdsRef.current.delete(first);
+      }
+
+      let payload = assistantAudioByMessageIdRef.current.get(messageId) || null;
+      if (!payload) {
+        payload = await waitForAssistantAudio(messageId);
+      }
+
+      if (payload) {
+        assistantAudioByMessageIdRef.current.delete(messageId);
+        const played = await playAssistantAudio(payload);
+        if (!played && enableBrowserTtsFallbackRef.current) {
+          speakFallback(message.question);
+        } else if (played) {
+          lastSpokenTextRef.current = message.question.trim().toLowerCase().replace(/\s+/g, ' ');
+          lastSpokenAtRef.current = Date.now();
+        }
+        return;
+      }
+
+      if (enableBrowserTtsFallbackRef.current) {
+        speakFallback(message.question);
+      }
+    },
+    [playAssistantAudio, speakFallback, waitForAssistantAudio]
+  );
+
   const voiceMode = useMemo((): VoiceIndicatorMode => {
     if (isListening) return 'listening';
-    /* TTS + TypingMessage: иначе остаётся typing и рисуется старая SVG-волна вместо индикатора речи */
-    if (isTtsSpeaking) return 'speaking';
+    // Keep one visual style for assistant response (as in typing state).
+    if (isTtsSpeaking) return 'typing';
     if (isTyping && typingMessage) return 'typing';
     return 'idle';
   }, [isListening, isTyping, typingMessage, isTtsSpeaking]);
@@ -601,6 +675,7 @@ function ChatPageContent() {
     setConnecting(true);
     setError(null);
     setMessages([]);
+    handledSpeechMessageIdsRef.current.clear();
     setSessionId(null);
     setCurrentProduct(product);
     autoStarterSentRef.current = false;
@@ -665,14 +740,7 @@ function ChatPageContent() {
               setTypingMessage(firstAssistantQuestion);
               setTypingOptions({ speed: 50, delay: 1200 });
               setIsTyping(true);
-
-              const introAudio = assistantAudioByMessageIdRef.current.get(firstAssistantQuestion.id);
-              if (introAudio) {
-                void playAssistantAudio(introAudio);
-                assistantAudioByMessageIdRef.current.delete(firstAssistantQuestion.id);
-              } else {
-                speakFallback((firstAssistantQuestion as QuestionMessage).question);
-              }
+              void speakQuestionWithPriority(firstAssistantQuestion as QuestionMessage);
 
               const withoutIntro = sortedMessages.filter(
                 (msg) => msg.id !== firstAssistantQuestion.id
@@ -700,13 +768,7 @@ function ChatPageContent() {
               setIsTyping(true);
 
               if (payload.message.type === MessageType.QUESTION) {
-                const audioPayload = assistantAudioByMessageIdRef.current.get(payload.message.id);
-                if (audioPayload) {
-                  void playAssistantAudio(audioPayload);
-                  assistantAudioByMessageIdRef.current.delete(payload.message.id);
-                } else {
-                  speakFallback((payload.message as QuestionMessage).question);
-                }
+                void speakQuestionWithPriority(payload.message as QuestionMessage);
               }
 
               return prev;
@@ -741,10 +803,6 @@ function ChatPageContent() {
         },
         onAssistantAudio: (payload) => {
           assistantAudioByMessageIdRef.current.set(payload.messageId, payload);
-          if (typingMessageIdRef.current === payload.messageId) {
-            void playAssistantAudio(payload);
-            assistantAudioByMessageIdRef.current.delete(payload.messageId);
-          }
         },
       });
 
@@ -761,7 +819,7 @@ function ChatPageContent() {
       setConnecting(false);
       messageApi.error(messageText);
     }
-  }, [messageApi, openAuthModal, playAssistantAudio, router, speakFallback]);
+  }, [messageApi, openAuthModal, playAssistantAudio, router, speakQuestionWithPriority]);
 
   useEffect(() => {
     if (!isAuthenticated()) {
