@@ -4,6 +4,7 @@ import { reportGenerator } from '../services/reportGenerator';
 import { reportService } from '../services/reportService';
 import { CollectedData } from '../types/report';
 import { logger } from '../utils/logger';
+import fs from 'fs';
 
 export const reportController = {
   /**
@@ -76,6 +77,16 @@ export const reportController = {
 
       if (!downloadUrl) {
         res.status(404).json({ error: 'Report not found or not ready' });
+        return;
+      }
+
+      if (downloadUrl.startsWith('localfile:')) {
+        const localPath = downloadUrl.substring('localfile:'.length);
+        if (!fs.existsSync(localPath)) {
+          res.status(404).json({ error: 'Report file not found' });
+          return;
+        }
+        res.download(localPath);
         return;
       }
 

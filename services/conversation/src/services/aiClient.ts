@@ -443,8 +443,20 @@ interface TtsResponse {
   format?: 'mp3' | 'oggopus';
 }
 
-const DEFAULT_TTS_VOICE = 'filipp';
-const DEFAULT_TTS_SPEED = 0.92;
+type TtsPreset = 'ermil_normal' | 'ermil_soft' | 'filipp_fast';
+const DEFAULT_TTS_VOICE = 'ermil';
+const DEFAULT_TTS_SPEED = 1.0;
+const DEFAULT_TTS_FORMAT: 'mp3' | 'oggopus' = 'oggopus';
+const TTS_PRESETS: Record<TtsPreset, { voice: string; speed: number; format: 'mp3' | 'oggopus' }> = {
+  ermil_normal: { voice: 'ermil', speed: 1.0, format: 'oggopus' },
+  ermil_soft: { voice: 'ermil', speed: 0.92, format: 'oggopus' },
+  filipp_fast: { voice: 'filipp', speed: 1.08, format: 'oggopus' },
+};
+
+function resolveTtsPreset(raw?: string): TtsPreset | null {
+  if (!raw) return null;
+  return raw in TTS_PRESETS ? (raw as TtsPreset) : null;
+}
 
 function normalizeTtsText(text: string): string {
   // Keep message natural for speech synthesis:
@@ -461,14 +473,19 @@ export async function synthesizeAssistantAudio(params: {
   voice?: string;
   speed?: number;
   format?: 'mp3' | 'oggopus';
+  preset?: TtsPreset;
 }): Promise<AssistantAudio | null> {
   const normalizedText = normalizeTtsText(params.text);
   if (!normalizedText) return null;
 
+  const presetName = params.preset ?? resolveTtsPreset(process.env.TTS_PRESET);
+  const preset = presetName ? TTS_PRESETS[presetName] : null;
   const configuredSpeed = Number(process.env.TTS_SPEED);
   const speed =
     params.speed ??
-    (Number.isFinite(configuredSpeed) && configuredSpeed > 0 ? configuredSpeed : DEFAULT_TTS_SPEED);
+    (Number.isFinite(configuredSpeed) && configuredSpeed > 0 ? configuredSpeed : undefined) ??
+    preset?.speed ??
+    DEFAULT_TTS_SPEED;
 
   try {
     const response = await axios.post<TtsResponse>(
@@ -476,9 +493,14 @@ export async function synthesizeAssistantAudio(params: {
       {
         text: normalizedText,
         lang: params.lang ?? 'ru-RU',
-        voice: params.voice ?? process.env.TTS_VOICE ?? DEFAULT_TTS_VOICE,
+        preset: presetName ?? undefined,
+        voice: params.voice ?? process.env.TTS_VOICE ?? preset?.voice ?? DEFAULT_TTS_VOICE,
         speed,
-        format: params.format ?? (process.env.TTS_FORMAT as 'mp3' | 'oggopus' | undefined) ?? 'mp3',
+        format:
+          params.format ??
+          (process.env.TTS_FORMAT as 'mp3' | 'oggopus' | undefined) ??
+          preset?.format ??
+          DEFAULT_TTS_FORMAT,
       },
       {
         timeout: 25000,

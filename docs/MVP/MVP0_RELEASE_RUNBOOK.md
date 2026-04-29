@@ -16,6 +16,7 @@
 
 ```bash
 npm run smoke:mvp0
+npm run smoke:mvp0:pre-release
 ```
 
 3. Пройти релизный сценарий вручную:
@@ -32,12 +33,33 @@ npm run smoke:mvp0
 | Final artifact delivery | PASS/FAIL |  |
 | Error handling (negative case) | PASS/FAIL |  |
 
+4. Зафиксировать артефакты:
+   - summary/run логи из `/.runlogs/smoke`;
+   - отдельная запись по отклонениям и ручным действиям (если были).
+
 ## 3) Production rollout
 
 1. Выполнить деплой сервисов.
-2. Проверить `GET /health` для каждого сервиса.
-3. Выполнить целевой user-flow сразу после деплоя.
-4. Проверить ошибки в логах за первые 30 минут.
+2. Проверить `GET /health` для каждого сервиса:
+
+```bash
+curl -fsS http://localhost:3001/health
+curl -fsS http://localhost:3002/health
+curl -fsS http://localhost:3003/health
+curl -fsS http://localhost:3004/health
+curl -fsS http://localhost:3005/health
+curl -fsS http://localhost:3007/health
+```
+
+3. Выполнить post-deploy smoke:
+
+```bash
+npm run smoke:mvp0
+RUNS=2 npm run smoke:mvp0:full:auto
+```
+
+4. Выполнить целевой user-flow сразу после деплоя.
+5. Проверить ошибки в логах за первые 30 минут.
 
 ## 4) Rollback trigger
 
@@ -45,9 +67,20 @@ npm run smoke:mvp0
 - не проходит login/session;
 - не формируется финальный результат;
 - 5xx растут и не стабилизируются в течение 15 минут.
+- smoke после деплоя не проходит 2 попытки подряд.
 
 ## 5) Rollback steps
 
 - Serverless: вернуться на предыдущую стабильную revision.
 - PM2: переключиться на предыдущий commit/tag и перезапустить сервисы.
-- Подтвердить восстановление через smoke и один ручной сценарий.
+- Подтвердить восстановление:
+  - `npm run smoke:mvp0`
+  - `RUNS=1 SMOKE_FINAL_ARTIFACT=1 npm run smoke:mvp0:full:auto`
+  - один ручной primary-flow.
+
+## 6) Release decision gate
+
+Релиз считается готовым только если:
+- staging rehearsal PASS без ручной импровизации;
+- post-deploy smoke PASS;
+- rollback (при необходимости) выполняется по документированным шагам без ad-hoc фиксов.

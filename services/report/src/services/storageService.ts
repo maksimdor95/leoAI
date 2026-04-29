@@ -5,6 +5,8 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl as s3GetSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { logger } from '../utils/logger';
+import fs from 'fs';
+import path from 'path';
 
 // Yandex Object Storage configuration (S3-compatible)
 const s3Client = new S3Client({
@@ -19,6 +21,13 @@ const s3Client = new S3Client({
 
 const BUCKET_NAME = process.env.YC_STORAGE_BUCKET || 'aiheroes-reports';
 const URL_EXPIRATION_SECONDS = 60 * 60; // 1 hour
+const LOCAL_REPORTS_DIR = process.env.LOCAL_REPORTS_DIR || '/tmp/leoai-reports';
+
+function canUseLocalFallback(): boolean {
+  if (process.env.REPORT_LOCAL_STORAGE_FALLBACK === 'true') return true;
+  if (process.env.REPORT_LOCAL_STORAGE_FALLBACK === 'false') return false;
+  return (process.env.NODE_ENV || 'development') !== 'production';
+}
 
 export const storageService = {
   /**
@@ -46,6 +55,15 @@ export const storageService = {
       return directUrl;
     } catch (error) {
       logger.error('Failed to upload PDF', { key, error: (error as Error).message });
+      if (canUseLocalFallback()) {
+        // Local/dev fallback: persist PDF to local disk and return localfile marker.
+        const fileName = key.replace(/\//g, '__');
+        fs.mkdirSync(LOCAL_REPORTS_DIR, { recursive: true });
+        const localPath = path.join(LOCAL_REPORTS_DIR, fileName);
+        fs.writeFileSync(localPath, pdfBuffer);
+        logger.warn('Using local file fallback for report PDF delivery', { key, localPath });
+        return `localfile:${localPath}`;
+      }
       throw new Error('Failed to upload PDF to storage');
     }
   },

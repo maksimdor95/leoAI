@@ -36,6 +36,70 @@
 
 ---
 
+### Weekly review #2 (2026-04-26)
+
+**Что закрыто за Неделю 2 (Day 8–13):**
+- Зафиксированы и закрыты top-3 точки нестабильности из mid-flow: инфраструктурный старт, auth/check guardrails, предсказуемость подбора (`catalogWarning`, weak tier, прозрачные ветки `no_matches` / `catalog_family_mismatch`).
+- Подтверждена стабильность startup после cold-start: повторные циклы `postgres/redis` без ручного рестарта сервисов.
+- Нормализован критичный межсервисный контур `conversation -> job-matching/email/report`: единые timeout/retry + exponential backoff для transient-сбоев.
+- Выполнены 3 последовательных прогона `smoke:mvp0` с валидным JWT: `3/3 PASSED` (health + profile auth стабильно).
+
+**Фокус на Неделю 3 (путь к 5/5):**
+1. Расширить smoke до полного primary-flow (не только health/profile): добавить обязательные `SESSION_ID`, `USER_ID`, `REPORT_ID` проверки в ежедневном прогоне.
+2. Довести стабильность до `5/5` последовательных прогонов и фиксировать причины каждого fail в тот же день.
+3. Закрыть минимум один root-cause из fail-логов недели (в приоритете межсервисные таймауты/внешние зависимости).
+
+---
+
+### Weekly review #3 (2026-04-26)
+
+**Что закрыто за Неделю 3 (Day 15–20):**
+- Full-smoke доведён до рабочего daily-gate: обязательные `SESSION_ID` / `USER_ID` / `REPORT_ID`, без `SKIP` в full-режиме.
+- Подготовка контекста full-smoke автоматизирована в один запуск (`smoke:mvp0:full:auto`), что убрало ручные ошибки с env-переменными.
+- Добавлены run-артефакты smoke-gate (`.runlogs/smoke`): per-run логи + summary с pass/fail по каждому прогону.
+- Выполнен gate-прогон `5/5` подряд (`smoke:mvp0:gate`) и подтверждена стабильность ключевых шагов (`profile`, `session`, `match`, `report status`).
+- Закрыт root-cause ложноположительных зелёных прогонов: full-smoke теперь валидирует не только `HTTP 200`, но и структуру JSON-ответов на критичных шагах.
+- UX пустых/слабых результатов в чате упрощён: тексты без технического жаргона, отдельная понятная ветка для `no_matches`.
+
+**Итог недели:**
+- Цель недели достигнута: **`5/5` успешных full-smoke прогонов**.
+- Blockers на текущем этапе не зафиксированы; переход к Неделе 4 (Smoke/Test Gate) возможен без дополнительных условий.
+
+---
+
+### Weekly review #4 (2026-04-26)
+
+**Что закрыто за Неделю 4 (Day 22–28):**
+- Подтверждён рабочий контур light-smoke (`smoke:mvp0`) как быстрый sanity-check для health/auth.
+- Full-smoke расширен до проверки ключевых этапов conversational flow: `session creation`, `chat loop`, `completion trigger`.
+- Закрыта проверка финального артефакта (`final artifact delivery`): `report status=ready` + `download` (`HTTP 200/302`) в smoke-контуре.
+- Добавлены и подтверждены negative checks (`empty data`, `not found`, `timeout`) как обязательная отдельная ветка прогона.
+- Собран единый pre-release прогон (`smoke:mvp0:pre-release`) с fail-fast фазами: stability gate, final artifact, negative cases.
+- Выполнен стабильный gate-прогон `5/5` подряд (`smoke:mvp0:gate`) без fail-записей; свежий summary: `/.runlogs/smoke/mvp0-full-summary-20260426-213651.log`.
+
+**Итог недели:**
+- Цель недели достигнута: smoke/test gate стабильно проходит, pre-release сценарий воспроизводим одной командой.
+- Переход к Неделе 5 (Release Engineering + Staging Rehearsal) возможен без дополнительных технических блокеров в local-контуре.
+
+---
+
+### Weekly review #5 (2026-04-26)
+
+**Что закрыто за Неделю 5 (Day 29–35):**
+- Проведён env-matrix аудит по `docs/CONFIGURATION.md`: local минимум подтверждён, для production-like зафиксированы обязательные параметры и gaps в отдельном артефакте (`docs/MVP/MVP0_ENV_MATRIX_DAY29.md`).
+- Усилен release runbook: добавлены конкретные rehearsal/post-deploy smoke-команды, health-check по сервисам, rollback triggers и release decision gate.
+- Поднят staging-like контур с отдельным env-файлом (`.env.staging.local`) через `dev:up:staging`; добавлен `--env-file` в `scripts/dev/up.sh`.
+- Закрыты P1 blockers rehearsal-контура:  
+  1) `report` добавлен в `scripts/dev/up.sh` / `scripts/dev/down.sh` / `scripts/dev/status.sh`;  
+  2) загрузка env переведена с `source` на безопасный построчный экспорт (устранены shell parse-ошибки на значениях с пробелами/скобками).
+- Staging rehearsal подтверждён end-to-end: manual primary-flow (`login -> session -> message -> report -> status/download`) завершён с финальным результатом `ready` и `download 302`.
+
+**Итог недели:**
+- Цель недели достигнута: **staging rehearsal PASS без ручной импровизации**.
+- Переход к Неделе 6 (Launch + Hypercare) возможен при текущем состоянии кода и runbook.
+
+---
+
 ## 1. Контекст: что ломало UX
 
 | Симптом | Вероятная причина (по коду) |

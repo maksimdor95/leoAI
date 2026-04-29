@@ -10,8 +10,67 @@ const JOB_MATCHING_SERVICE_URL = process.env.JOB_MATCHING_SERVICE_URL || 'http:/
 const EMAIL_SERVICE_URL = process.env.EMAIL_SERVICE_URL || 'http://localhost:3005';
 const REPORT_SERVICE_URL = process.env.REPORT_SERVICE_URL || 'http://localhost:3007';
 
+const HTTP_TIMEOUT_MS = {
+  scrapeForUser: 10000,
+  jobMatching: 30000,
+  jobsEmail: 10000,
+  reportGeneration: 15000,
+} as const;
+
+const HTTP_RETRY = {
+  scrapeForUser: 2,
+  jobMatching: 2,
+  jobsEmail: 1,
+  reportGeneration: 1,
+} as const;
+
 function toBearerToken(token: string): string {
   return token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) {
+    return false;
+  }
+
+  const code = error.code || '';
+  if (code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'ECONNRESET' || code === 'ENOTFOUND') {
+    return true;
+  }
+
+  const status = error.response?.status;
+  return Boolean(status && (status >= 500 || status === 429));
+}
+
+async function withHttpRetry<T>(
+  operationName: string,
+  maxRetries: number,
+  request: () => Promise<T>
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    try {
+      return await request();
+    } catch (error: unknown) {
+      lastError = error;
+      const canRetry = attempt < maxRetries && isRetryableError(error);
+      if (!canRetry) {
+        throw error;
+      }
+
+      const delayMs = Math.min(500 * Math.pow(2, attempt), 3000);
+      logger.warn(
+        `[integration:${operationName}] transient failure, retry ${attempt + 1}/${maxRetries} in ${delayMs}ms`
+      );
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError;
 }
 
 /**
@@ -25,16 +84,21 @@ function toBearerToken(token: string): string {
 export async function triggerProfileDrivenScrape(userId: string, token: string): Promise<void> {
   try {
     logger.info(`[scrape-for-user] Enqueuing profile-driven scrape for user: ${userId}`);
-    await axios.post(
-      `${JOB_MATCHING_SERVICE_URL}/api/jobs/scrape/for-user/${userId}`,
-      {},
-      {
-        headers: {
-          Authorization: toBearerToken(token),
-          'Content-Type': 'application/json',
-        },
-        timeout: 10000,
-      }
+    await withHttpRetry(
+      'scrape-for-user',
+      HTTP_RETRY.scrapeForUser,
+      async () =>
+        axios.post(
+          `${JOB_MATCHING_SERVICE_URL}/api/jobs/scrape/for-user/${userId}`,
+          {},
+          {
+            headers: {
+              Authorization: toBearerToken(token),
+              'Content-Type': 'application/json',
+            },
+            timeout: HTTP_TIMEOUT_MS.scrapeForUser,
+          }
+        )
     );
     logger.info(`[scrape-for-user] Scrape enqueued for user: ${userId}`);
   } catch (error: unknown) {
@@ -50,12 +114,17 @@ export async function triggerJobMatching(userId: string, token: string): Promise
     logger.info(`Triggering job matching for user: ${userId}`);
 
     // Call job matching service to find jobs
-    await axios.get(`${JOB_MATCHING_SERVICE_URL}/api/jobs/match/${userId}`, {
-      headers: {
-        Authorization: toBearerToken(token),
-      },
-      timeout: 30000, // 30 seconds timeout
-    });
+    await withHttpRetry(
+      'job-matching',
+      HTTP_RETRY.jobMatching,
+      async () =>
+        axios.get(`${JOB_MATCHING_SERVICE_URL}/api/jobs/match/${userId}`, {
+          headers: {
+            Authorization: toBearerToken(token),
+          },
+          timeout: HTTP_TIMEOUT_MS.jobMatching,
+        })
+    );
 
     logger.info(`Job matching completed for user: ${userId}`);
   } catch (error: unknown) {
@@ -77,19 +146,24 @@ export async function triggerJobsEmail(
     logger.info(`Triggering jobs email for user: ${userId} with ${jobIds.length} jobs`);
 
     // Call email service to send jobs digest
-    await axios.post(
-      `${EMAIL_SERVICE_URL}/api/email/send-jobs`,
-      {
-        userId,
-        jobIds,
-      },
-      {
-        headers: {
-          Authorization: toBearerToken(token),
-          'Content-Type': 'application/json',
-        },
-        timeout: 10000, // 10 seconds timeout
-      }
+    await withHttpRetry(
+      'jobs-email',
+      HTTP_RETRY.jobsEmail,
+      async () =>
+        axios.post(
+          `${EMAIL_SERVICE_URL}/api/email/send-jobs`,
+          {
+            userId,
+            jobIds,
+          },
+          {
+            headers: {
+              Authorization: toBearerToken(token),
+              'Content-Type': 'application/json',
+            },
+            timeout: HTTP_TIMEOUT_MS.jobsEmail,
+          }
+        )
     );
 
     logger.info(`Jobs email sent to user: ${userId}`);
@@ -111,16 +185,21 @@ export async function triggerWannanewReport(
   try {
     logger.info(`[wannanew] Triggering report generation for user: ${userId}, session: ${sessionId}`);
 
-    await axios.post(
-      `${REPORT_SERVICE_URL}/api/report/generate`,
-      { sessionId, userId, email },
-      {
-        headers: {
-          Authorization: toBearerToken(token),
-          'Content-Type': 'application/json',
-        },
-        timeout: 15000,
-      }
+    await withHttpRetry(
+      'report-generate',
+      HTTP_RETRY.reportGeneration,
+      async () =>
+        axios.post(
+          `${REPORT_SERVICE_URL}/api/report/generate`,
+          { sessionId, userId, email },
+          {
+            headers: {
+              Authorization: toBearerToken(token),
+              'Content-Type': 'application/json',
+            },
+            timeout: HTTP_TIMEOUT_MS.reportGeneration,
+          }
+        )
     );
 
     logger.info(`[wannanew] Report generation requested for user: ${userId}, session: ${sessionId}`);
@@ -157,14 +236,19 @@ export async function handleConversationCompletion(options: CompletionOptions): 
 
     // Jack product: trigger job matching → email flow
     // Step 1: Trigger job matching
-    const matchingResponse = await axios.get(
-      `${JOB_MATCHING_SERVICE_URL}/api/jobs/match/${userId}`,
-      {
-        headers: {
-          Authorization: toBearerToken(token),
-        },
-        timeout: 30000,
-      }
+    const matchingResponse = await withHttpRetry(
+      'completion-job-matching',
+      HTTP_RETRY.jobMatching,
+      async () =>
+        axios.get(
+          `${JOB_MATCHING_SERVICE_URL}/api/jobs/match/${userId}`,
+          {
+            headers: {
+              Authorization: toBearerToken(token),
+            },
+            timeout: HTTP_TIMEOUT_MS.jobMatching,
+          }
+        )
     );
 
     const jobs = matchingResponse.data?.jobs || [];

@@ -694,3 +694,54 @@ body {
   box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.18) !important;
 }
 
+/* Auth modal: improve readability in dark theme */
+.auth-modal .ant-typography,
+.auth-modal p {
+  color: #f8fafc !important;
+}
+
+.auth-modal .ant-input-affix-wrapper,
+.auth-modal .ant-input,
+.auth-modal .ant-input-password {
+  color: #f8fafc !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.auth-modal .ant-input-affix-wrapper .ant-input,
+.auth-modal .ant-input-password .ant-input {
+  background: transparent !important;
+}
+
+.auth-modal .ant-input-prefix {
+  color: rgba(148, 163, 184, 0.95) !important;
+}
+
+.auth-modal .ant-input-password-icon {
+  color: rgba(148, 163, 184, 0.9) !important;
+}
+
+.auth-modal .ant-input-password-icon:hover,
+.auth-modal .ant-input-affix-wrapper-focused .ant-input-password-icon {
+  color: #e2e8f0 !important;
+}
+
+.auth-modal .ant-input::placeholder,
+.auth-modal .ant-input-affix-wrapper .ant-input::placeholder,
+.auth-modal .ant-input-password input::placeholder {
+  color: rgba(148, 163, 184, 0.9) !important;
+  opacity: 1 !important;
+}
+
+.auth-modal .ant-input-affix-wrapper:hover,
+.auth-modal .ant-input:hover {
+  border-color: rgba(148, 163, 184, 0.45) !important;
+}
+
+.auth-modal .ant-input-affix-wrapper-focused,
+.auth-modal .ant-input:focus,
+.auth-modal .ant-input-focused {
+  border-color: rgba(74, 222, 128, 0.7) !important;
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.18) !important;
+}
+

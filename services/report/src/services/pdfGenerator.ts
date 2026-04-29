@@ -407,9 +407,29 @@ const REPORT_TEMPLATE = `
 
 let browserInstance: puppeteer.Browser | null = null;
 
+function resolveChromeExecutablePath(): string | undefined {
+  const fromEnv = process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (fromEnv && fs.existsSync(fromEnv)) {
+    return fromEnv;
+  }
+
+  const candidates = [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
 async function getBrowser(): Promise<puppeteer.Browser> {
   if (!browserInstance) {
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    const executablePath = resolveChromeExecutablePath();
     
     browserInstance = await puppeteer.launch({
       headless: true,
@@ -421,6 +441,12 @@ async function getBrowser(): Promise<puppeteer.Browser> {
       ],
       ...(executablePath && { executablePath }),
     });
+
+    if (executablePath) {
+      logger.info('Puppeteer launched with explicit Chrome executable', { executablePath });
+    } else {
+      logger.info('Puppeteer launched with bundled browser resolution');
+    }
   }
   return browserInstance;
 }
@@ -439,12 +465,14 @@ export const pdfGenerator = {
 
     try {
       await page.setContent(html, {
-        waitUntil: 'networkidle0',
+        waitUntil: 'domcontentloaded',
+        timeout: 45000,
       });
 
       const pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: true,
+        timeout: 60000,
         margin: {
           top: '20mm',
           right: '15mm',

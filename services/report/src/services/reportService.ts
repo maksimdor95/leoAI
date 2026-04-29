@@ -70,13 +70,14 @@ export const reportService = {
       // 3. Upload to storage
       const s3Key = `reports/${request.userId}/${reportId}.pdf`;
       const pdfUrl = await storageService.uploadPdf(pdfBuffer, s3Key);
+      const isLocalDataUrl = pdfUrl.startsWith('data:application/pdf;base64,');
 
       // 4. Update record with success
       const record = await this.getRecord(reportId);
       if (record) {
         record.status = 'ready';
         record.pdfUrl = pdfUrl;
-        record.s3Key = s3Key;
+        record.s3Key = isLocalDataUrl ? undefined : s3Key;
         record.updatedAt = new Date().toISOString();
         await redis.set(recordKey, JSON.stringify(record), 'EX', REPORT_TTL);
       }

@@ -107,6 +107,20 @@ REDIS_DB=0
 | `YC_MAX_TOKENS`  | Максимальное количество токенов | `800`                 |
 | `YC_TOP_P`       | Top-p параметр                  | `0.9`                 |
 
+**Опциональные параметры SpeechKit TTS (голос ассистента):**
+
+| Переменная   | Описание                                  | Значение по умолчанию |
+| ------------ | ----------------------------------------- | --------------------- |
+| `TTS_VOICE`  | Голос SpeechKit (напр. `ermil`, `filipp`) | `ermil`               |
+| `TTS_SPEED`  | Скорость речи (0.1 - 3.0)                 | `1.0`                 |
+| `TTS_FORMAT` | Формат аудио (`oggopus` или `mp3`)        | `oggopus`             |
+| `TTS_PRESET` | Готовый пресет голоса                     | `ermil_normal`        |
+
+Доступные `TTS_PRESET`:
+- `ermil_normal` — Ермил, стандартная скорость (`1.0`), `oggopus`
+- `ermil_soft` — Ермил, мягче/медленнее (`0.92`), `oggopus`
+- `filipp_fast` — Филипп, быстрее (`1.08`), `oggopus`
+
 **Как получить ключи:**
 
 1. Зарегистрируйтесь в [Yandex Cloud](https://cloud.yandex.ru/)
@@ -120,6 +134,10 @@ REDIS_DB=0
 YC_FOLDER_ID=b1g2v3c4d5e6f7g8h9i0j1
 YC_API_KEY=AQVNxxxxxxxxxxxxxxxxxxxxxxxxx
 YC_MODEL_ID=foundation-models/yandexgpt-lite
+TTS_VOICE=ermil
+TTS_SPEED=1.0
+TTS_FORMAT=oggopus
+TTS_PRESET=ermil_normal
 ```
 
 ## Email Notification Service

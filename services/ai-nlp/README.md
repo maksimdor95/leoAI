@@ -56,6 +56,10 @@ YC_MODEL_ID=foundation-models/yandexgpt-lite
 YC_TEMPERATURE=0.6
 YC_TOP_P=0.9
 YC_MAX_TOKENS=800
+TTS_VOICE=ermil
+TTS_SPEED=1.0
+TTS_FORMAT=oggopus
+TTS_PRESET=ermil_normal
 
 LOG_LEVEL=info
 ```

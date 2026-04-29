@@ -7,6 +7,7 @@ const requestSchema = z.object({
   text: z.string().trim().min(1).max(1200),
   lang: z.string().optional(),
   voice: z.string().optional(),
+  preset: z.enum(['ermil_normal', 'ermil_soft', 'filipp_fast']).optional(),
   speed: z.number().min(0.1).max(3).optional(),
   format: z.enum(['mp3', 'oggopus']).optional(),
 });
@@ -19,6 +20,7 @@ export async function synthesizeTts(req: Request, res: Response) {
       text: parsed.text,
       lang: parsed.lang,
       voice: parsed.voice,
+      preset: parsed.preset,
       speed: parsed.speed,
       format: parsed.format,
     });
