@@ -6,13 +6,42 @@
 import { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import { UserService } from '../services/userService';
+import { OAuthProvider, OAuthService } from '../services/oauthService';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
 
 const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'Unknown error';
 
+function getCookieOptions(httpOnly: boolean) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly,
+    secure: isProduction,
+    sameSite: 'lax' as const,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/',
+  };
+}
+
+function clearAuthCookies(res: Response): void {
+  const options = getCookieOptions(true);
+  res.clearCookie('leo_access_token', { ...options, maxAge: undefined });
+  res.clearCookie('leo_auth', { ...getCookieOptions(false), maxAge: undefined });
+}
+
+function setAuthCookies(res: Response, token: string): void {
+  res.cookie('leo_access_token', token, getCookieOptions(true));
+  res.cookie('leo_auth', '1', getCookieOptions(false));
+}
+
 export class UserController {
+  private static parseProvider(providerRaw: string): OAuthProvider {
+    if (providerRaw === 'google' || providerRaw === 'yandex') {
+      return providerRaw;
+    }
+    throw new Error('Unsupported OAuth provider');
+  }
   /**
    * Validation rules for registration
    */
@@ -48,6 +77,7 @@ export class UserController {
       });
 
       logger.info('User registered successfully:', result.user.id);
+      setAuthCookies(res, result.token);
       return res.status(201).json({
         message: 'User registered successfully',
         ...result,
@@ -90,6 +120,7 @@ export class UserController {
       const result = await UserService.login(email, password);
 
       logger.info('Login successful for:', result.user.id);
+      setAuthCookies(res, result.token);
       return res.json({
         message: 'Login successful',
         ...result,
@@ -159,5 +190,51 @@ export class UserController {
       }
       return res.status(500).json({ error: 'Internal server error' });
     }
+  }
+
+  static async oauthStart(req: Request, res: Response) {
+    let provider: OAuthProvider | null = null;
+    try {
+      provider = UserController.parseProvider(req.params.provider);
+      const url = OAuthService.getAuthorizationUrl(provider);
+      return res.redirect(url);
+    } catch (error: unknown) {
+      logger.error('OAuth start error:', error);
+      if (provider !== null) {
+        const reason = getErrorMessage(error);
+        return res.redirect(OAuthService.getFailureRedirect(provider, reason));
+      }
+      return res.status(400).json({ error: getErrorMessage(error) });
+    }
+  }
+
+  static async oauthCallback(req: Request, res: Response) {
+    let provider: OAuthProvider;
+    try {
+      provider = UserController.parseProvider(req.params.provider);
+    } catch (error: unknown) {
+      return res.status(400).json({ error: getErrorMessage(error) });
+    }
+
+    try {
+      const code = req.query.code;
+      const state = req.query.state;
+      if (typeof code !== 'string' || typeof state !== 'string') {
+        throw new Error('Missing OAuth callback parameters');
+      }
+
+      const token = await OAuthService.exchangeCodeAndLogin(provider, code, state);
+      setAuthCookies(res, token);
+      return res.redirect(OAuthService.getSuccessRedirect(provider, token));
+    } catch (error: unknown) {
+      const reason = getErrorMessage(error);
+      logger.error('OAuth callback error:', error);
+      return res.redirect(OAuthService.getFailureRedirect(provider, reason));
+    }
+  }
+
+  static async logout(_req: Request, res: Response) {
+    clearAuthCookies(res);
+    return res.json({ message: 'Logout successful' });
   }
 }

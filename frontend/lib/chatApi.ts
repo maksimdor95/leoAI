@@ -108,9 +108,6 @@ class ChatApiClient {
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = this.token || getToken();
-    if (!token) {
-      throw new Error('Токен не найден. Пользователь должен быть авторизован.');
-    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
@@ -120,9 +117,10 @@ class ChatApiClient {
       response = await fetch(url, {
         ...options,
         signal: controller.signal,
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          ...buildAuthHeaders(token, true),
+          ...buildAuthHeaders(token || undefined, true),
           ...options.headers,
         },
       });
@@ -379,14 +377,12 @@ class ChatApiClient {
       throw new Error('Сессия не инициализирована');
     }
     const token = this.token || getToken();
-    if (!token) {
-      throw new Error('Токен не найден. Пользователь должен быть авторизован.');
-    }
     const response = await fetch(
       `${this.baseUrl}/api/chat/session/${this.sessionId}/resume-file?format=${encodeURIComponent(format)}`,
       {
         method: 'GET',
-        headers: buildAuthHeaders(token, true),
+        credentials: 'include',
+        headers: buildAuthHeaders(token || undefined, true),
       }
     );
     if (!response.ok) {

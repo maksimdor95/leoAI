@@ -29,7 +29,11 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.staging.local
 *.env
+
+# Локальные PID/логи dev-скриптов
+.runlogs/
 
 # IDE и редакторы
 .vscode/

@@ -53,6 +53,18 @@ export function validateConfig(): ValidationResult {
     );
   }
 
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    warnings.push('Google OAuth is not fully configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)');
+  }
+  if (!process.env.YANDEX_CLIENT_ID || !process.env.YANDEX_CLIENT_SECRET) {
+    warnings.push('Yandex OAuth is not fully configured (YANDEX_CLIENT_ID / YANDEX_CLIENT_SECRET)');
+  }
+  if (!process.env.OAUTH_CALLBACK_BASE_URL) {
+    warnings.push(
+      'OAUTH_CALLBACK_BASE_URL is not set; default http://localhost:3001 is used for OAuth callbacks'
+    );
+  }
+
   return {
     valid: errors.length === 0,
     errors,

@@ -474,6 +474,7 @@ export async function synthesizeAssistantAudio(params: {
   speed?: number;
   format?: 'mp3' | 'oggopus';
   preset?: TtsPreset;
+  authToken?: string;
 }): Promise<AssistantAudio | null> {
   const normalizedText = normalizeTtsText(params.text);
   if (!normalizedText) return null;
@@ -504,6 +505,7 @@ export async function synthesizeAssistantAudio(params: {
       },
       {
         timeout: 25000,
+        headers: buildAuthHeaders(params.authToken),
       }
     );
 

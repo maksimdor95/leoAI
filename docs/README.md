@@ -1,37 +1,17 @@
-# Документация LEO AI
+# LEO AI Documentation
 
-## Навигация
+Добро пожаловать в базу знаний проекта LEO AI.
 
-| Документ | Описание |
-|----------|----------|
-| [PRODUCT_VISION.md](./PRODUCT_VISION.md) | Видение продукта, стратегия, AI-агенты, модель данных, бизнес-план |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Техническая архитектура: сервисы, стек, диаграммы, потоки данных |
-| [USER_JOURNEYS.md](./USER_JOURNEYS.md) | Клиентские пути пользователя (BPMN), сценарии использования |
-| [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md) | План разработки: что реализовано, что в работе, что дальше |
-| [IMPROVEMENT_PLAN.md](./IMPROVEMENT_PLAN.md) | План улучшений по результатам анализа UX и кода (Jack, матчинг, окружение) |
-| [MVP/MVP0_DAILY_EXECUTION_CHECKLIST.md](./MVP/MVP0_DAILY_EXECUTION_CHECKLIST.md) | Ежедневный рабочий чеклист MVP0 (главный операционный трекер) |
-| [MVP/MVP1_DAILY_EXECUTION_CHECKLIST.md](./MVP/MVP1_DAILY_EXECUTION_CHECKLIST.md) | Ежедневный чеклист MVP1 (вынесен отдельно для снижения шума) |
-| [SETUP.md](./SETUP.md) | Локальная установка и запуск для разработки |
-| [CONFIGURATION.md](./CONFIGURATION.md) | Справочник всех переменных окружения |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Развёртывание в production (Yandex Cloud, PM2, Docker) |
-| [WANNANEW.md](./WANNANEW.md) | Спецификация продукта wannanew (PM-интервью, PDF-отчёты) |
+## Основные разделы
 
-### Гайды
+- [**PRODUCT.md**](./PRODUCT.md) — Видение, пользовательские сценарии и спецификации продуктов (Jack, WannaNew).
+- [**ARCHITECTURE.md**](./ARCHITECTURE.md) — Техническое устройство, карта сервисов и модель данных.
+- [**OPERATIONS.md**](./OPERATIONS.md) — Инструкции по установке, конфигурации и деплою на VPS.
+- [**ROADMAP.md**](./ROADMAP.md) — Текущий статус, план развития и задачи MVP 1.
 
-| Документ | Описание |
-|----------|----------|
-| [guides/DIALOGUE_ENGINE.md](./guides/DIALOGUE_ENGINE.md) | Мультиагентная система: Validator, Profile Analyst, Context Manager |
-| [guides/DATABASE.md](./guides/DATABASE.md) | Работа с PostgreSQL и Redis |
-| [guides/CODE_STYLE.md](./guides/CODE_STYLE.md) | Стиль кода, линтеры, форматирование |
+## Быстрые ссылки
+- [Health Check (Production)](https://leo-ai.ru/health)
+- [История изменений и чеклисты](./HISTORY/)
 
-## Быстрый старт
-
-```bash
-# Убедитесь, что в корне проекта есть .env
-docker compose up -d
-npm install
-npm run dev:up
-npm run dev:status
-```
-
-Подробная инструкция: [SETUP.md](./SETUP.md)
+---
+*Последнее обновление структуры: 2026-05-06*

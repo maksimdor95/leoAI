@@ -9,11 +9,12 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-jack_ai}
       PGDATA: /var/lib/postgresql/data/pgdata
-    ports:
-      - '${DB_PORT:-5432}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d
+    # Publish to host so `scripts/dev/up.sh` (Node on the host) can use DB_HOST=127.0.0.1
+    ports:
+      - '${POSTGRES_HOST_PORT:-5432}:5432'
     networks:
       - jack-network
     healthcheck:
@@ -28,10 +29,10 @@ services:
     container_name: jack-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
-    ports:
-      - '${REDIS_PORT:-6379}:6379'
     volumes:
       - redis_data:/data
+    ports:
+      - '${REDIS_HOST_PORT:-6379}:6379'
     networks:
       - jack-network
     healthcheck:

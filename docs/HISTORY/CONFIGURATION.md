@@ -116,6 +116,14 @@ REDIS_DB=0
 | `TTS_FORMAT` | Формат аудио (`oggopus` или `mp3`)        | `oggopus`             |
 | `TTS_PRESET` | Готовый пресет голоса                     | `ermil_normal`        |
 
+**Опциональные параметры SpeechKit STT (распознавание речи):**
+
+| Переменная            | Описание                                   | Значение по умолчанию |
+| --------------------- | ------------------------------------------ | --------------------- |
+| `STT_LANGUAGE`        | Язык распознавания                         | `ru-RU`               |
+| `STT_PROFANITY_FILTER`| Фильтр ненормативной лексики (`true/false`) | `false`             |
+| `STT_PARTIAL_RESULTS` | Возвращать частичные результаты             | `false`               |
+
 Доступные `TTS_PRESET`:
 - `ermil_normal` — Ермил, стандартная скорость (`1.0`), `oggopus`
 - `ermil_soft` — Ермил, мягче/медленнее (`0.92`), `oggopus`
@@ -254,6 +262,40 @@ SENDGRID_API_KEY=SG.xxxxxxxxxxxxxxxxxxxxxxxxx
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+### OAuth (Google / Yandex)
+
+OAuth реализован в `user-profile` через endpoints:
+- `GET /api/users/oauth/:provider/start`
+- `GET /api/users/oauth/:provider/callback`
+
+| Переменная                   | Описание                                                         | Обязательно |
+| ---------------------------- | ---------------------------------------------------------------- | ----------- |
+| `OAUTH_CALLBACK_BASE_URL`    | Базовый URL backend для callback (например, `https://leo-ai.ru`) | Да (prod)   |
+| `FRONTEND_OAUTH_SUCCESS_URL` | URL frontend после успешной авторизации                          | Да (prod)   |
+| `FRONTEND_OAUTH_ERROR_URL`   | URL frontend после ошибки авторизации                            | Да (prod)   |
+| `GOOGLE_CLIENT_ID`           | OAuth Client ID Google                                           | Да*         |
+| `GOOGLE_CLIENT_SECRET`       | OAuth Client Secret Google                                       | Да*         |
+| `YANDEX_CLIENT_ID`           | OAuth Client ID Yandex                                           | Да**        |
+| `YANDEX_CLIENT_SECRET`       | OAuth Client Secret Yandex                                       | Да**        |
+
+> \* Обязательно для включения входа через Google.
+>
+> \** Обязательно для включения входа через Yandex.
+
+Пример (production):
+
+```env
+OAUTH_CALLBACK_BASE_URL=https://leo-ai.ru
+FRONTEND_OAUTH_SUCCESS_URL=https://leo-ai.ru/oauth/callback
+FRONTEND_OAUTH_ERROR_URL=https://leo-ai.ru/oauth/callback
+
+GOOGLE_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=xxxxxxxx
+
+YANDEX_CLIENT_ID=xxxxxxxx
+YANDEX_CLIENT_SECRET=xxxxxxxx
 ```
 
 ## Job Matching Service

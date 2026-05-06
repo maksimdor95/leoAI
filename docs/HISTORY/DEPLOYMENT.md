@@ -1,4 +1,19 @@
-# LeoAI — Руководство по деплою (Yandex Cloud)
+# LeoAI — Руководство по деплою
+
+## Актуальный production-like контур (VPS)
+
+С 2026-05-06 в проекте зафиксирован рабочий контур деплоя на один VPS:
+- Cloud.ru VPS (Ubuntu 22.04);
+- запуск приложения через `docker compose`;
+- reverse proxy + TLS через Caddy;
+- домен `leo-ai.ru` с health: `https://leo-ai.ru/health`.
+
+Подробный пошаговый runbook, post-deploy checklist и ops-команды:
+- [`VPS_STAGING_RUNBOOK.md`](./VPS_STAGING_RUNBOOK.md)
+
+---
+
+## Альтернативный/целевой cloud-контур (Yandex Cloud)
 
 ## Требования
 
@@ -41,6 +56,16 @@
 | `YC_API_KEY` | API-ключ Yandex Cloud | `AQVN...` |
 | `YC_FOLDER_ID` | ID каталога | `b1g...` |
 
+### Voice (Yandex SpeechKit)
+
+| Переменная | Описание | Пример |
+|---|---|---|
+| `TTS_VOICE` | Голос ассистента | `ermil` |
+| `TTS_SPEED` | Скорость речи | `1.0` |
+| `TTS_FORMAT` | Формат аудио | `oggopus` |
+| `TTS_PRESET` | Пресет голоса | `ermil_normal` |
+| `STT_LANGUAGE` | Язык распознавания | `ru-RU` |
+
 ### Email (SMTP primary, SendGrid fallback)
 
 | Переменная | Описание |
@@ -60,6 +85,16 @@
 | `JWT_EXPIRES_IN` | Время жизни access-токена (`7d`) |
 | `JWT_REFRESH_SECRET` | Секрет refresh-токена |
 | `JWT_REFRESH_EXPIRES_IN` | Время жизни refresh-токена (`30d`) |
+
+### OAuth (Google / Yandex)
+
+| Переменная | Описание |
+|---|---|
+| `OAUTH_CALLBACK_BASE_URL` | Базовый URL backend для OAuth callback (`https://leo-ai.ru`) |
+| `FRONTEND_OAUTH_SUCCESS_URL` | URL frontend после успешного OAuth |
+| `FRONTEND_OAUTH_ERROR_URL` | URL frontend после OAuth ошибки |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth credentials Google |
+| `YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` | OAuth credentials Yandex |
 
 ### Job Scraping
 

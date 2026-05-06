@@ -26,7 +26,8 @@ import {
   QuestionMessage,
 } from '@/types/chat';
 import { createChatApi, ChatApi } from '@/lib/chatApi';
-import { getToken, isAuthenticated, removeToken } from '@/lib/auth';
+import { clearClientAuthState, getToken, isAuthenticated } from '@/lib/auth';
+import { userAPI } from '@/lib/api';
 import { jackCollectedDataReadyForJobMatch } from '@/lib/jackProfileGating';
 import {
   formatCollectedValue,
@@ -797,7 +798,7 @@ function ChatPageContent() {
           ) {
             // Токен протух/невалиден: завершаем сессию и просим войти снова,
             // иначе пользователь видит бесконечное подключение.
-            removeToken();
+            clearClientAuthState();
             openAuthModal('login');
             router.push('/');
           }
@@ -1596,9 +1597,13 @@ function ChatPageContent() {
       okText: 'Выйти',
       cancelText: 'Отмена',
       okButtonProps: { danger: true },
-      onOk: () => {
-        // Remove token
-        removeToken();
+      onOk: async () => {
+        try {
+          await userAPI.logout();
+        } catch {
+          // Even if backend logout fails, clear local auth state.
+        }
+        clearClientAuthState();
         // Disconnect chat
         chatRef.current?.disconnect();
         // Redirect to home

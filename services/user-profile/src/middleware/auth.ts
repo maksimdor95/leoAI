@@ -19,7 +19,15 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   logger.info('Authenticating token');
 
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const headerToken = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const cookieHeader = req.headers.cookie;
+  const cookieToken = cookieHeader
+    ?.split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith('leo_access_token='))
+    ?.split('=')[1];
+  const safeCookieToken = cookieToken ? decodeURIComponent(cookieToken) : undefined;
+  const token = headerToken || safeCookieToken;
 
   if (!token) {
     logger.warn('No token provided');

@@ -6,6 +6,7 @@ import { Modal, Form, Input, Button, Typography, message } from 'antd';
 import { MailOutlined, LockOutlined, UserOutlined } from '@ant-design/icons';
 import { userAPI } from '@/lib/api';
 import { saveToken } from '@/lib/auth';
+import { SocialAuthButton } from '@/components/auth/SocialAuthButton';
 
 type ApiError = {
   response?: {
@@ -39,6 +40,11 @@ export function AuthModal({ open, onClose, initialMode = 'login' }: AuthModalPro
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
+
+  const startOAuth = (provider: 'google' | 'yandex') => {
+    const url = userAPI.getOAuthStartUrl(provider);
+    window.location.href = url;
+  };
 
   // Reset mode when modal opens
   useEffect(() => {
@@ -218,6 +224,21 @@ export function AuthModal({ open, onClose, initialMode = 'login' }: AuthModalPro
             </Button>
           </Form.Item>
         </Form>
+        <div className="mt-4">
+          <p className="text-slate-400 text-xs text-center mb-3">или продолжить через</p>
+          <div className="flex flex-col gap-3">
+            <SocialAuthButton
+              provider="google"
+              text="Войти через Google"
+              onClick={() => startOAuth('google')}
+            />
+            <SocialAuthButton
+              provider="yandex"
+              text="Войти через Яндекс ID"
+              onClick={() => startOAuth('yandex')}
+            />
+          </div>
+        </div>
       </div>
     </Modal>
   );

@@ -7,6 +7,7 @@ import { UserOutlined, MailOutlined, LockOutlined } from '@ant-design/icons';
 import { userAPI } from '@/lib/api';
 import { saveToken } from '@/lib/auth';
 import { useAuth } from '@/contexts/AuthContext';
+import { SocialAuthButton } from '@/components/auth/SocialAuthButton';
 
 type ApiError = {
   response?: {
@@ -34,6 +35,11 @@ export default function RegisterPage() {
   const router = useRouter();
   const { openAuthModal } = useAuth();
   const [loading, setLoading] = useState(false);
+
+  const startOAuth = (provider: 'google' | 'yandex') => {
+    const url = userAPI.getOAuthStartUrl(provider);
+    window.location.href = url;
+  };
 
   const onFinish = async (values: {
     email: string;
@@ -115,6 +121,22 @@ export default function RegisterPage() {
             </Button>
           </Form.Item>
         </Form>
+
+        <div style={{ marginTop: 10, marginBottom: 6, textAlign: 'center', color: '#8f8fa3' }}>
+          или продолжить через
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <SocialAuthButton
+            provider="google"
+            text="Войти через Google"
+            onClick={() => startOAuth('google')}
+          />
+          <SocialAuthButton
+            provider="yandex"
+            text="Войти через Яндекс ID"
+            onClick={() => startOAuth('yandex')}
+          />
+        </div>
 
         <div style={{ textAlign: 'center', marginTop: 16 }}>
           Уже есть аккаунт?{' '}

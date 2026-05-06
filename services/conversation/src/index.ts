@@ -174,12 +174,16 @@ async function authenticateRequest(
   try {
     // Support both X-Auth-Token (for Yandex Serverless) and Authorization (for local dev)
     const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
-    if (!authHeader || !String(authHeader).startsWith('Bearer ')) {
+    const headerToken =
+      typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+        ? authHeader.substring(7)
+        : null;
+    const cookieToken = extractCookieToken(req.headers.cookie, 'leo_access_token');
+    const token = headerToken || cookieToken;
+    if (!token) {
       res.status(401).json({ error: 'Unauthorized: No token provided' });
       return;
     }
-
-    const token = String(authHeader).substring(7);
     const user = await verifyToken(token);
     if (!user) {
       res.status(401).json({ error: 'Unauthorized: Invalid token' });
@@ -201,6 +205,22 @@ function extractBearerToken(
   const value = Array.isArray(headerValue) ? headerValue[0] : headerValue;
   if (!value) return null;
   return value.startsWith('Bearer ') ? value.substring(7) : value;
+}
+
+function extractCookieToken(cookieHeader: string | undefined, cookieName: string): string | null {
+  if (!cookieHeader) return null;
+  const part = cookieHeader
+    .split(';')
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(`${cookieName}=`));
+  if (!part) return null;
+  const raw = part.substring(cookieName.length + 1);
+  if (!raw) return null;
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }
 
 function getSpeakableTextFromAssistantMessage(message: Message | null): string {
@@ -313,6 +333,12 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
     // Prepare entry step if needed
     const hydratedSession = await getSession(session.id);
     let assistantAudio: Awaited<ReturnType<typeof synthesizeAssistantAudio>> = null;
+    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const token = extractBearerToken(
+      typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
+        ? rawAuthHeader
+        : undefined
+    );
     if (hydratedSession) {
       const entryStepResult = await prepareEntryStep(hydratedSession);
       if (entryStepResult.metadataUpdates) {
@@ -322,7 +348,11 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
         await addMessageToSession(hydratedSession.id, entryStepResult.message);
         const ttsText = getSpeakableTextFromAssistantMessage(entryStepResult.message);
         if (ttsText) {
-          assistantAudio = await synthesizeAssistantAudio({ text: ttsText, lang: 'ru-RU' });
+          assistantAudio = await synthesizeAssistantAudio({
+            text: ttsText,
+            lang: 'ru-RU',
+            authToken: token || undefined,
+          });
         }
       }
     }
@@ -415,7 +445,11 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
       assistantMessage = replyResult.message;
       const ttsText = getSpeakableTextFromAssistantMessage(replyResult.message);
       if (ttsText) {
-        assistantAudio = await synthesizeAssistantAudio({ text: ttsText, lang: 'ru-RU' });
+        assistantAudio = await synthesizeAssistantAudio({
+          text: ttsText,
+          lang: 'ru-RU',
+          authToken: token || undefined,
+        });
       }
     }
 
@@ -487,6 +521,12 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
 
     const result = await applyImportedCollectedData(session, collectedData);
     await updateSession(session);
+    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const token = extractBearerToken(
+      typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
+        ? rawAuthHeader
+        : undefined
+    );
 
     let assistantMessage = null;
     let assistantAudio: Awaited<ReturnType<typeof synthesizeAssistantAudio>> = null;
@@ -495,7 +535,11 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
       assistantMessage = result.message;
       const ttsText = getSpeakableTextFromAssistantMessage(result.message);
       if (ttsText) {
-        assistantAudio = await synthesizeAssistantAudio({ text: ttsText, lang: 'ru-RU' });
+        assistantAudio = await synthesizeAssistantAudio({
+          text: ttsText,
+          lang: 'ru-RU',
+          authToken: token || undefined,
+        });
       }
     }
 
@@ -691,7 +735,11 @@ app.post('/api/chat/session/:id/resume-email', authenticateRequest, async (req, 
     let assistantAudio = null;
     const ttsText = getSpeakableTextFromAssistantMessage(assistantMessage);
     if (ttsText) {
-      assistantAudio = await synthesizeAssistantAudio({ text: ttsText, lang: 'ru-RU' });
+      assistantAudio = await synthesizeAssistantAudio({
+        text: ttsText,
+        lang: 'ru-RU',
+        authToken: token || undefined,
+      });
     }
 
     const updatedSession = await getSession(session.id);

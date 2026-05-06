@@ -47,8 +47,15 @@ start_service() {
   local name="$1"
   local port="$2"
   local rel_dir="$3"
+  local mode="${4:-}"
   local log_file="$RUNLOGS_DIR/$name.log"
   local pid_file="$PID_DIR/$name.pid"
+  local post_env=""
+
+  # next dev + NODE_ENV=production (e.g. staging env file) breaks PostCSS/Tailwind (@tailwind in globals.css).
+  if [[ "$mode" == "next-dev" ]]; then
+    post_env="export NODE_ENV=development"
+  fi
 
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     echo "[$name] Port $port already busy, skipping start."
@@ -66,6 +73,7 @@ while IFS= read -r line || [[ -n \"\$line\" ]]; do
   value=\"\${value%\$'\\r'}\"
   export \"\$key=\$value\"
 done < \"$ENV_FILE\"
+$post_env
 cd \"$ROOT_DIR/$rel_dir\" && npm run dev
 " >"$log_file" 2>&1 &
   local pid="$!"
@@ -86,7 +94,7 @@ start_service "ai-nlp" 3003 "services/ai-nlp"
 start_service "job-matching" 3004 "services/job-matching"
 start_service "email" 3005 "services/email"
 start_service "report" 3007 "services/report"
-start_service "frontend" 3000 "frontend"
+start_service "frontend" 3000 "frontend" "next-dev"
 
 echo
 echo "Done. Check status with: npm run dev:status"

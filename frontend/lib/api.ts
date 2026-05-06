@@ -17,6 +17,7 @@ const API_URL = normalizeServiceBaseUrl(
 
 const api = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -46,6 +47,7 @@ const CONVERSATION_API_URL = normalizeServiceBaseUrl(
 
 const conversationApi = axios.create({
   baseURL: CONVERSATION_API_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -83,6 +85,15 @@ export const userAPI = {
   login: async (data: { email: string; password: string }) => {
     const response = await api.post('/api/users/login', data);
     return response.data;
+  },
+
+  logout: async () => {
+    const response = await api.post('/api/users/logout');
+    return response.data;
+  },
+
+  getOAuthStartUrl: (provider: 'google' | 'yandex') => {
+    return `${API_URL}/api/users/oauth/${provider}/start`;
   },
 
   /**

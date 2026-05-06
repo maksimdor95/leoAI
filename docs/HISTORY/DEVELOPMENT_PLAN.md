@@ -38,6 +38,7 @@
 
 ### User Profile Service
 - [x] Регистрация и аутентификация (JWT)
+- [x] OAuth endpoints (Google/Yandex) в backend + привязка provider ID к пользователю
 - [x] Управление профилями пользователей
 
 ### Frontend
@@ -46,6 +47,7 @@
 - [x] Экран выбора продукта (Jack / WannaNew)
 - [x] Темная тема
 - [x] Голосовой ввод (Web Speech API)
+- [x] UI-кнопки social login (Google/Yandex) + OAuth callback page
 
 ### Conversation Service
 - [x] REST API + WebSocket
@@ -89,6 +91,8 @@
 ## Текущие задачи (приоритет: высокий)
 
 - [ ] Настроить API-ключи (YC_API_KEY, HH_API_KEY, SMTP) для полноценной работы
+- [ ] Настроить production OAuth credentials (Google/Yandex) и redirect URI под `https://leo-ai.ru`
+- [ ] Унифицировать голосовой контур: server-side STT/TTS (SpeechKit) как production baseline
 - [ ] E2E тестирование полного flow (регистрация -> диалог -> результат)
 - [ ] Автоматические тесты (Jest) для всех сервисов
 - [ ] CI/CD pipeline (GitHub Actions -> Yandex Cloud)
@@ -139,7 +143,9 @@
 - [ ] Мониторинг (Sentry, Prometheus/Grafana)
 - [ ] Аудит безопасности
 - [ ] Rate limiting
-- [ ] SSL-сертификаты
+- [x] SSL-сертификаты (Caddy + `leo-ai.ru`, 2026-05-06)
+- [x] VPS runbook зафиксирован (`docs/VPS_STAGING_RUNBOOK.md`, 2026-05-06)
+- [ ] Автоматизированный backup PostgreSQL (cron + retention + restore smoke)
 
 ---
 
@@ -163,3 +169,5 @@
 - [ ] Job matching: жёсткий порог `score >= 30` без объяснения пользователю при пустом списке
 
 Уже закрыто в коде (проверять при регрессии): передача `product` при создании сессии по WebSocket; вызов интеграции при завершении по REST; триггер report для wannanew; CORS `localhost` + `127.0.0.1` для user-profile.
+
+Уже закрыто в инфраструктуре (2026-05-06): рабочий VPS-контур (`Cloud.ru + Docker Compose + Caddy HTTPS`) и публичный health-check `https://leo-ai.ru/health`.

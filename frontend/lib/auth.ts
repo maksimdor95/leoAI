@@ -32,8 +32,27 @@ export function removeToken(): void {
 }
 
 /**
+ * Clear all client-visible auth state.
+ */
+export function clearClientAuthState(): void {
+  removeToken();
+  if (typeof document !== 'undefined') {
+    document.cookie = 'leo_auth=; Max-Age=0; path=/; SameSite=Lax';
+  }
+}
+
+/**
  * Check if user is authenticated
  */
 export function isAuthenticated(): boolean {
-  return getToken() !== null;
+  if (getToken() !== null) {
+    return true;
+  }
+  if (typeof document !== 'undefined') {
+    return document.cookie
+      .split(';')
+      .map((part) => part.trim())
+      .some((part) => part === 'leo_auth=1');
+  }
+  return false;
 }
