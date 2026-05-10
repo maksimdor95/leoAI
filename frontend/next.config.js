@@ -10,6 +10,8 @@ const staticExport = process.env.NEXT_STATIC_EXPORT === '1';
 
 const nextConfig = {
   reactStrictMode: true,
+  // Staging: `next dev` за Caddy с публичным Host — иначе предупреждение и в будущих major — блокировка /_next/*.
+  allowedDevOrigins: ['leo-ai.ru', 'www.leo-ai.ru'],
   ...(staticExport ? { output: 'export', trailingSlash: true } : {}),
   images: {
     unoptimized: true,
