@@ -213,7 +213,7 @@ interface CompletionOptions {
   email: string;
   token: string;
   sessionId: string;
-  product?: 'jack' | 'wannanew';
+  product?: 'jack' | 'wannanew' | 'interview-prep';
   scenarioId?: string;
 }
 
@@ -227,6 +227,11 @@ export async function handleConversationCompletion(options: CompletionOptions): 
   
   try {
     logger.info(`Handling conversation completion for user: ${userId}, product: ${product || 'jack'}`);
+
+    if (product === 'interview-prep' || scenarioId === 'interview-prep-v1') {
+      logger.info('Interview prep session completed; no downstream integration configured.');
+      return;
+    }
 
     // wannanew product: trigger report generation flow
     if (product === 'wannanew' || scenarioId === 'wannanew-pm-v1') {

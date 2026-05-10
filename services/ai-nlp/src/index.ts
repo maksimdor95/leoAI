@@ -15,6 +15,13 @@ import { extractProfileFromResume } from './controllers/resumeExtractController'
 import { synthesizeTts } from './controllers/ttsController';
 import { checkContext } from './controllers/contextController';
 import { retrieveContext } from './controllers/retrieveContextController';
+import {
+  extractVacancyProfile,
+  generateMockSummary,
+  generatePrepPlan,
+  gradeInterviewAnswer,
+  respondToInterviewMode,
+} from './controllers/interviewPrepController';
 import { logger } from './utils/logger';
 import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -58,6 +65,11 @@ app.post('/api/ai/check-context', checkContext);
 app.post('/api/ai/retrieve-context', retrieveContext);
 app.post('/api/ai/free-chat', freeChat);
 app.post('/api/ai/tts', synthesizeTts);
+app.post('/api/ai/interview/extract-vacancy-profile', extractVacancyProfile);
+app.post('/api/ai/interview/generate-prep-plan', generatePrepPlan);
+app.post('/api/ai/interview/respond', respondToInterviewMode);
+app.post('/api/ai/interview/grade-answer', gradeInterviewAnswer);
+app.post('/api/ai/interview/generate-mock-summary', generateMockSummary);
 // Новые эндпоинты для генерации профиля и резюме
 app.post('/api/ai/generate-summary', generateProfileSummary);
 app.post('/api/ai/generate-resume', generateResume);
@@ -90,6 +102,7 @@ async function start() {
       logger.info('Endpoint: POST /api/ai/check-context');
       logger.info('Endpoint: POST /api/ai/free-chat');
       logger.info('Endpoint: POST /api/ai/tts');
+      logger.info('Endpoint: POST /api/ai/interview/*');
       logger.info('Endpoint: POST /api/ai/generate-summary (NEW)');
       logger.info('Endpoint: POST /api/ai/generate-resume (NEW)');
     });

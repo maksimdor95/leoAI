@@ -918,14 +918,30 @@ app.post('/api/chat/session/:id/command', authenticateRequest, async (req, res) 
       return;
     }
 
-    const commandResult = await handleCommand(session, commandId, action);
+    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const token = extractBearerToken(
+      typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
+        ? rawAuthHeader
+        : undefined
+    );
+
+    const commandResult = await handleCommand(session, commandId, action, token || undefined);
 
     if (commandResult.metadataUpdates) {
       await updateSessionMetadata(session.id, commandResult.metadataUpdates);
     }
 
+    let assistantAudio: Awaited<ReturnType<typeof synthesizeAssistantAudio>> = null;
     if (commandResult.message) {
       await addMessageToSession(session.id, commandResult.message);
+      const ttsText = getSpeakableTextFromAssistantMessage(commandResult.message);
+      if (ttsText) {
+        assistantAudio = await synthesizeAssistantAudio({
+          text: ttsText,
+          lang: 'ru-RU',
+          authToken: token || undefined,
+        });
+      }
     }
 
     // If next step changed, prepare it
@@ -948,6 +964,7 @@ app.post('/api/chat/session/:id/command', authenticateRequest, async (req, res) 
       sessionId: finalSession?.id,
       messages: finalSession?.messages || [],
       metadata: finalSession?.metadata,
+      assistantAudio,
     });
   } catch (error: unknown) {
     logger.error('Error executing chat command:', error);
@@ -1183,7 +1200,9 @@ io.on('connection', async (socket) => {
         return;
       }
 
-      const commandResult = await handleCommand(sessionSnapshot, commandId, action);
+      const socketToken =
+        typeof socket.handshake.auth?.token === 'string' ? socket.handshake.auth.token : undefined;
+      const commandResult = await handleCommand(sessionSnapshot, commandId, action, socketToken);
 
       if (commandResult.metadataUpdates) {
         await updateSessionMetadata(sessionSnapshot.id, commandResult.metadataUpdates);

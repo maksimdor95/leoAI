@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { JACK_SCENARIO } from '../scenario/jackScenario';
 import { WANNANEW_SCENARIO } from '../scenario/wannanewScenario';
+import { INTERVIEW_PREP_SCENARIO } from '../scenario/interviewPrepScenario';
 import {
   ScenarioDefinition,
   ScenarioQuestionStep,
@@ -27,6 +28,14 @@ import {
   checkContext,
   generateFreeChatResponse,
   retrieveContext,
+  extractVacancyProfile,
+  generateInterviewPrepPlan,
+  generateInterviewModeResponse,
+  gradeInterviewAnswer,
+  generateMockInterviewSummary,
+  InterviewPrepMode,
+  VacancyProfile,
+  InterviewPrepPlanDay,
   ValidationResult,
 } from './aiClient';
 import {
@@ -43,6 +52,7 @@ import { triggerProfileDrivenScrape } from './integrationService';
 const SCENARIOS: Record<string, ScenarioDefinition> = {
   'jack-profile-v2': JACK_SCENARIO,
   'wannanew-pm-v1': WANNANEW_SCENARIO,
+  'interview-prep-v1': INTERVIEW_PREP_SCENARIO,
 };
 
 const DEFAULT_SCENARIO_ID = 'jack-profile-v2';
@@ -78,6 +88,9 @@ export function getScenario(scenarioId: string | undefined): ScenarioDefinition 
  * Get scenario ID by product type
  */
 export function getScenarioIdByProduct(product: ProductType | undefined): string {
+  if (product === 'interview-prep') {
+    return 'interview-prep-v1';
+  }
   if (product === 'wannanew') {
     return 'wannanew-pm-v1';
   }
@@ -842,6 +855,336 @@ function buildCommandMessage(
   };
 }
 
+const INTERVIEW_MODE_LABELS: Record<InterviewPrepMode, string> = {
+  diagnostics: 'Диагностика',
+  theory: 'Теория',
+  case: 'Кейс',
+  mock: 'Мок-интервью',
+  star: 'STAR / поведенческие вопросы',
+  employer_questions: 'Вопросы работодателю',
+};
+
+function isInterviewPrepSession(session: ConversationSession): boolean {
+  return session.metadata.product === 'interview-prep' || session.metadata.scenarioId === 'interview-prep-v1';
+}
+
+function isUrlOnlyVacancyInput(input: string): boolean {
+  const trimmed = input.trim();
+  return /^https?:\/\/\S+$/i.test(trimmed) || /^www\.\S+$/i.test(trimmed);
+}
+
+function detectVacancySource(input: string): 'url' | 'text' | 'summary' {
+  if (/https?:\/\/|www\./i.test(input)) return 'url';
+  return input.trim().length > 500 ? 'text' : 'summary';
+}
+
+function normalizeInterviewMode(raw: string): InterviewPrepMode | null {
+  const value = raw.toLowerCase().trim();
+  if (value.includes('diagnostics') || value.includes('диагност')) return 'diagnostics';
+  if (value.includes('theory') || value.includes('теор')) return 'theory';
+  if (value.includes('case') || value.includes('кейс') || value.includes('задач')) return 'case';
+  if (value.includes('mock') || value.includes('мок') || value.includes('интервью')) return 'mock';
+  if (value.includes('star') || value.includes('поведен')) return 'star';
+  if (value.includes('employer') || value.includes('работодател') || value.includes('вопрос')) {
+    return 'employer_questions';
+  }
+  return null;
+}
+
+function compactList(items: string[] | undefined, fallback: string): string {
+  if (!items || items.length === 0) return fallback;
+  return items.slice(0, 5).join('\n');
+}
+
+function formatPrepPlan(plan: InterviewPrepPlanDay[]): string {
+  if (!plan.length) return 'План уточним после короткой диагностики.';
+  return plan
+    .slice(0, 7)
+    .map((day) => {
+      const tasks = day.tasks.slice(0, 3).map((task) => `  - ${task}`).join('\n');
+      return `День ${day.day}: ${day.focus}${tasks ? `\n${tasks}` : ''}`;
+    })
+    .join('\n\n');
+}
+
+function buildVacancyProfileCard(
+  session: ConversationSession,
+  profile: VacancyProfile,
+  prepPlan: InterviewPrepPlanDay[]
+): InfoCardMessage {
+  const roleLine = [profile.role, profile.level].filter(Boolean).join(' / ') || 'роль требует уточнения';
+  const locationLine = [profile.location, profile.format, profile.interviewLanguage]
+    .filter(Boolean)
+    .join(' / ') || 'не указано';
+  const stackLine = [
+    profile.domain,
+    profile.stack && profile.stack.length > 0 ? profile.stack.join(', ') : undefined,
+  ]
+    .filter(Boolean)
+    .join(' / ') || 'не указано';
+
+  return {
+    id: uuidv4(),
+    type: MessageType.INFO_CARD,
+    role: MessageRole.ASSISTANT,
+    timestamp: new Date().toISOString(),
+    sessionId: session.id,
+    title: 'Профиль вакансии и план подготовки',
+    description:
+      'Я выделил ключевые ожидания по роли. Если где-то данных мало, считаю это предположением и буду уточнять в подготовке.',
+    cards: [
+      {
+        title: 'Должность / уровень',
+        content: roleLine,
+      },
+      {
+        title: 'Локация / формат',
+        content: locationLine,
+      },
+      {
+        title: 'Стек и домен',
+        content: stackLine,
+      },
+      {
+        title: 'Ключевые ожидания',
+        content: compactList(profile.requirements, 'Нет явных требований в тексте.'),
+      },
+      {
+        title: 'Ответственность',
+        content: compactList(profile.responsibilities, 'Ответственность описана недостаточно явно.'),
+      },
+      {
+        title: 'Красные флаги / пробелы',
+        content: compactList(profile.gaps, 'Явных пробелов не вижу, но уточним формат интервью.'),
+      },
+      {
+        title: 'План подготовки',
+        content: formatPrepPlan(prepPlan),
+      },
+    ],
+    commands: [
+      { id: 'diagnostics', label: 'Диагностика', action: 'interview_mode:diagnostics' },
+      { id: 'theory', label: 'Теория', action: 'interview_mode:theory' },
+      { id: 'case', label: 'Кейс', action: 'interview_mode:case' },
+      { id: 'mock', label: 'Мок-интервью', action: 'interview_mode:mock' },
+      { id: 'star', label: 'STAR', action: 'interview_mode:star' },
+      {
+        id: 'employer_questions',
+        label: 'Вопросы работодателю',
+        action: 'interview_mode:employer_questions',
+      },
+    ],
+  };
+}
+
+function getInterviewConversationHistory(session: ConversationSession) {
+  return (session.messages || [])
+    .filter(
+      (msg) =>
+        (msg.role === MessageRole.USER || msg.role === MessageRole.ASSISTANT) &&
+        (msg.type === MessageType.TEXT || msg.type === MessageType.QUESTION)
+    )
+    .slice(-10)
+    .map((msg) => ({
+      role: msg.role === MessageRole.USER ? ('user' as const) : ('assistant' as const),
+      content: 'content' in msg ? String(msg.content) : 'question' in msg ? String(msg.question) : '',
+    }));
+}
+
+function buildInterviewTextMessage(session: ConversationSession, content: string): Message {
+  return {
+    id: uuidv4(),
+    type: MessageType.TEXT,
+    role: MessageRole.ASSISTANT,
+    timestamp: new Date().toISOString(),
+    sessionId: session.id,
+    content,
+  };
+}
+
+async function buildInterviewModeMessage(
+  session: ConversationSession,
+  mode: InterviewPrepMode,
+  userMessageContent: string,
+  authToken?: string
+): Promise<{ message: Message; metadataUpdates: PreparedStepResult['metadataUpdates'] }> {
+  const collectedData = session.metadata.collectedData;
+  const previousMode = collectedData.activeMode as InterviewPrepMode | undefined;
+  const shouldGrade =
+    previousMode === mode &&
+    (mode === 'case' || mode === 'mock' || mode === 'star') &&
+    userMessageContent.trim().length > 20;
+
+  const grading = shouldGrade
+    ? await gradeInterviewAnswer({
+        mode,
+        answer: userMessageContent,
+        vacancyProfile: collectedData.vacancyProfile as VacancyProfile | undefined,
+        collectedData,
+        authToken,
+      })
+    : null;
+  if (shouldGrade && mode === 'case') {
+    logger.info(`event=case_answer_submitted sessionId=${session.id}`);
+  }
+
+  const response = await generateInterviewModeResponse({
+    mode,
+    userMessage: userMessageContent,
+    vacancyProfile: collectedData.vacancyProfile as VacancyProfile | undefined,
+    prepPlan: (collectedData.prepPlan as InterviewPrepPlanDay[] | undefined) ?? [],
+    collectedData,
+    conversationHistory: getInterviewConversationHistory(session),
+    grading: grading ?? undefined,
+    authToken,
+  });
+
+  const modeHistoryKey = `${mode}History`;
+  const modeHistory = Array.isArray(collectedData[modeHistoryKey])
+    ? (collectedData[modeHistoryKey] as unknown[])
+    : [];
+  const metadataUpdates: PreparedStepResult['metadataUpdates'] = {
+    collectedData: {
+      activeMode: mode,
+      lastInterviewGrade: grading ?? undefined,
+      lastFollowUpToProbe: grading?.followUpToProbe,
+      [modeHistoryKey]: [
+        ...modeHistory.slice(-9),
+        {
+          at: new Date().toISOString(),
+          userMessage: userMessageContent,
+          grading: grading ?? undefined,
+        },
+      ],
+    },
+    currentStepId: 'mode_select',
+  };
+
+  if (mode === 'mock' && previousMode === mode && userMessageContent.trim().length > 20) {
+    const mockAnswers = Array.isArray(collectedData.mockAnswers)
+      ? (collectedData.mockAnswers as unknown[])
+      : [];
+    const nextMockAnswers = [
+      ...mockAnswers,
+      { answer: userMessageContent, grading: grading ?? undefined, at: new Date().toISOString() },
+    ];
+    metadataUpdates.collectedData = {
+      ...metadataUpdates.collectedData,
+      mockAnswers: nextMockAnswers,
+      mockInterview: {
+        currentQuestionIndex: nextMockAnswers.length + 1,
+        answers: nextMockAnswers,
+      },
+    };
+
+    if (nextMockAnswers.length >= 3) {
+      const summary = await generateMockInterviewSummary({
+        vacancyProfile: collectedData.vacancyProfile as VacancyProfile | undefined,
+        answers: nextMockAnswers,
+        authToken,
+      });
+      logger.info(`event=mock_interview_completed sessionId=${session.id}`);
+      metadataUpdates.collectedData = {
+        ...metadataUpdates.collectedData,
+        mockSummary: summary,
+      };
+      return {
+        message: buildInterviewTextMessage(
+          session,
+          `${response}\n\n## Итог мок-интервью\n\n${summary}\n\nМожем перейти к кейсам, теории или STAR-историям.`
+        ),
+        metadataUpdates,
+      };
+    }
+  }
+
+  return {
+    message: buildInterviewTextMessage(session, response),
+    metadataUpdates,
+  };
+}
+
+async function handleInterviewPrepReply(
+  session: ConversationSession,
+  currentStep: ScenarioStep,
+  userMessageContent: string,
+  authToken?: string
+): Promise<PreparedStepResult> {
+  if (currentStep.id === 'vacancy_input') {
+    if (isUrlOnlyVacancyInput(userMessageContent)) {
+      logger.info(`event=interview_prep_started sessionId=${session.id} source=url_only`);
+      return {
+        message: buildInterviewTextMessage(
+          session,
+          'Вижу ссылку на вакансию. Я не буду выдумывать детали по одной ссылке: вставь, пожалуйста, текст вакансии или хотя бы ключевые требования. После этого соберу профиль роли и план подготовки.'
+        ),
+        metadataUpdates: {
+          collectedData: {
+            vacancySource: 'url',
+            vacancyUrl: userMessageContent.trim(),
+          },
+          currentStepId: 'vacancy_input',
+        },
+        nextStepId: 'vacancy_input',
+      };
+    }
+
+    logger.info(`event=interview_prep_started sessionId=${session.id} source=${detectVacancySource(userMessageContent)}`);
+    const profile = await extractVacancyProfile({
+      vacancyText: userMessageContent,
+      source: detectVacancySource(userMessageContent),
+      authToken,
+    });
+    logger.info(`event=vacancy_profile_extracted sessionId=${session.id} role=${profile.role ?? 'unknown'}`);
+    const prepPlan = await generateInterviewPrepPlan({
+      vacancyProfile: profile,
+      availableDays: 5,
+      authToken,
+    });
+    logger.info(`event=prep_plan_generated sessionId=${session.id} days=${prepPlan.length}`);
+
+    return {
+      message: buildVacancyProfileCard(session, profile, prepPlan),
+      metadataUpdates: {
+        collectedData: {
+          vacancySource: detectVacancySource(userMessageContent),
+          vacancyRawText: userMessageContent,
+          vacancyProfile: profile,
+          prepPlan,
+        },
+        completedSteps: ['vacancy_input'],
+        currentStepId: 'mode_select',
+      },
+      nextStepId: 'mode_select',
+    };
+  }
+
+  const explicitMode = normalizeInterviewMode(userMessageContent);
+  const collectedMode = session.metadata.collectedData.activeMode as InterviewPrepMode | undefined;
+  const mode = explicitMode ?? collectedMode;
+
+  if (!mode) {
+    return {
+      message: buildInterviewTextMessage(
+        session,
+        'Выбери режим подготовки: Диагностика, Теория, Кейс, Мок-интервью, STAR или Вопросы работодателю. Можно нажать кнопку или написать режим текстом.'
+      ),
+      metadataUpdates: { currentStepId: 'mode_select' },
+      nextStepId: 'mode_select',
+    };
+  }
+
+  if (explicitMode) {
+    logger.info(`event=mode_selected sessionId=${session.id} mode=${explicitMode}`);
+  }
+  const result = await buildInterviewModeMessage(session, mode, userMessageContent, authToken);
+  return {
+    message: result.message,
+    metadataUpdates: result.metadataUpdates,
+    nextStepId: 'mode_select',
+  };
+}
+
 /**
  * Get active scenario for session (for backward compatibility)
  */
@@ -983,6 +1326,10 @@ export async function handleUserReply(
   if (!currentStep) {
     logger.error(`Current step ${currentStepId} not found in scenario ${scenarioId} for session ${session.id}`);
     return { message: null, metadataUpdates: scenarioUpdates };
+  }
+
+  if (isInterviewPrepSession(session)) {
+    return handleInterviewPrepReply(session, currentStep, userMessageContent, authToken);
   }
 
   // Check for profile command (only for Jack scenario): "покажи мой профиль", "мой профиль", "профиль", "покажи профиль"
@@ -1978,13 +2325,31 @@ export async function handleUserReply(
 export async function handleCommand(
   session: ConversationSession,
   commandId: string,
-  action: string
+  action: string,
+  authToken?: string
 ): Promise<PreparedStepResult> {
   const scenarioUpdates = ensureScenarioMetadata(session);
   const { currentStepId, scenarioId } = session.metadata;
   const currentStep = getStep(scenarioId, currentStepId);
 
   logger.info(`Handling command: ${commandId} (action: ${action}) for step: ${currentStepId}`);
+
+  if (isInterviewPrepSession(session) && action.startsWith('interview_mode:')) {
+    const mode = normalizeInterviewMode(action.replace('interview_mode:', ''));
+    if (mode) {
+      const result = await buildInterviewModeMessage(
+        session,
+        mode,
+        `Начать режим: ${INTERVIEW_MODE_LABELS[mode]}`,
+        authToken
+      );
+      return {
+        message: result.message,
+        metadataUpdates: result.metadataUpdates,
+        nextStepId: 'mode_select',
+      };
+    }
+  }
 
   // Handle different command actions
   switch (action) {

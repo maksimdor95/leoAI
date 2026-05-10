@@ -335,6 +335,241 @@ export async function generateFreeChatResponse(params: FreeChatRequest): Promise
   }
 }
 
+export type InterviewPrepMode =
+  | 'diagnostics'
+  | 'theory'
+  | 'case'
+  | 'mock'
+  | 'star'
+  | 'employer_questions';
+
+export type VacancyProfile = {
+  role?: string;
+  level?: string;
+  location?: string;
+  format?: string;
+  interviewLanguage?: string;
+  stack?: string[];
+  domain?: string;
+  responsibilities?: string[];
+  requirements?: string[];
+  softSkills?: string[];
+  metrics?: string[];
+  gaps?: string[];
+  assumptions?: string[];
+};
+
+export type InterviewPrepPlanDay = {
+  day: number;
+  focus: string;
+  tasks: string[];
+};
+
+export type InterviewAnswerGrade = {
+  overallScore: number;
+  dimensionScores: {
+    structure: number;
+    depth: number;
+    metrics: number;
+    tradeOffs: number;
+    communication: number;
+    seniorityFit: number;
+  };
+  fatalGaps: string[];
+  strengths: string[];
+  improvements: string[];
+  followUpToProbe: string;
+  modelStructure: string[];
+};
+
+type InterviewApiResponse<T extends Record<string, unknown>> = T & {
+  status: 'success';
+};
+
+const FALLBACK_VACANCY_PROFILE: VacancyProfile = {
+  role: 'Роль требует уточнения',
+  level: 'Middle/Senior',
+  location: 'Не указано',
+  format: 'Не указано',
+  interviewLanguage: 'ru',
+  stack: [],
+  domain: 'Не указан',
+  responsibilities: [],
+  requirements: [],
+  softSkills: ['коммуникация', 'системное мышление'],
+  metrics: [],
+  gaps: ['Недостаточно данных для точного профиля вакансии.'],
+  assumptions: ['Профиль построен по краткому описанию пользователя.'],
+};
+
+export async function extractVacancyProfile(params: {
+  vacancyText: string;
+  source: 'url' | 'text' | 'summary';
+  authToken?: string;
+}): Promise<VacancyProfile> {
+  try {
+    const response = await axios.post<InterviewApiResponse<{ profile: VacancyProfile }>>(
+      `${AI_SERVICE_URL}/api/ai/interview/extract-vacancy-profile`,
+      {
+        vacancyText: params.vacancyText,
+        source: params.source,
+      },
+      {
+        timeout: 20000,
+        headers: buildAuthHeaders(params.authToken),
+      }
+    );
+
+    if (response.data.status !== 'success' || !response.data.profile) {
+      throw new Error('AI extract-vacancy-profile returned non-success status');
+    }
+    return response.data.profile;
+  } catch (error: unknown) {
+    logger.warn('Error extracting vacancy profile, using fallback:', error);
+    return {
+      ...FALLBACK_VACANCY_PROFILE,
+      requirements: [params.vacancyText.slice(0, 400)],
+    };
+  }
+}
+
+export async function generateInterviewPrepPlan(params: {
+  vacancyProfile: VacancyProfile;
+  availableDays?: number;
+  authToken?: string;
+}): Promise<InterviewPrepPlanDay[]> {
+  try {
+    const response = await axios.post<InterviewApiResponse<{ plan: InterviewPrepPlanDay[] }>>(
+      `${AI_SERVICE_URL}/api/ai/interview/generate-prep-plan`,
+      {
+        vacancyProfile: params.vacancyProfile,
+        availableDays: params.availableDays ?? 5,
+      },
+      {
+        timeout: 20000,
+        headers: buildAuthHeaders(params.authToken),
+      }
+    );
+
+    if (response.data.status !== 'success' || !Array.isArray(response.data.plan)) {
+      throw new Error('AI generate-prep-plan returned non-success status');
+    }
+    return response.data.plan;
+  } catch (error: unknown) {
+    logger.warn('Error generating interview prep plan, using fallback:', error);
+    return [
+      {
+        day: 1,
+        focus: 'Профиль роли и базовая теория',
+        tasks: ['Разобрать ожидания вакансии', 'Составить список слабых зон', 'Повторить базовые понятия домена'],
+      },
+      {
+        day: 2,
+        focus: 'Метрики и кейсы',
+        tasks: ['Подготовить структуру кейса', 'Отработать 1-2 типовых вопроса', 'Собрать вопросы работодателю'],
+      },
+    ];
+  }
+}
+
+export async function generateInterviewModeResponse(params: {
+  mode: InterviewPrepMode;
+  userMessage: string;
+  vacancyProfile?: VacancyProfile;
+  prepPlan?: InterviewPrepPlanDay[];
+  collectedData?: Record<string, unknown>;
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  grading?: InterviewAnswerGrade;
+  authToken?: string;
+}): Promise<string> {
+  try {
+    const response = await axios.post<InterviewApiResponse<{ text: string }>>(
+      `${AI_SERVICE_URL}/api/ai/interview/respond`,
+      {
+        mode: params.mode,
+        userMessage: params.userMessage,
+        vacancyProfile: params.vacancyProfile,
+        prepPlan: params.prepPlan ?? [],
+        collectedData: params.collectedData ?? {},
+        conversationHistory: params.conversationHistory ?? [],
+        grading: params.grading,
+      },
+      {
+        timeout: 25000,
+        headers: buildAuthHeaders(params.authToken),
+      }
+    );
+
+    if (response.data.status !== 'success' || !response.data.text) {
+      throw new Error('AI interview/respond returned non-success status');
+    }
+    return response.data.text;
+  } catch (error: unknown) {
+    logger.warn('Error generating interview mode response, using fallback:', error);
+    return 'Давай продолжим подготовку. Ответь развернуто: что бы ты сказал на интервью, какие шаги предпринял бы и какими метриками проверил результат?';
+  }
+}
+
+export async function gradeInterviewAnswer(params: {
+  mode: InterviewPrepMode;
+  answer: string;
+  vacancyProfile?: VacancyProfile;
+  collectedData?: Record<string, unknown>;
+  authToken?: string;
+}): Promise<InterviewAnswerGrade | null> {
+  try {
+    const response = await axios.post<InterviewApiResponse<{ grade: InterviewAnswerGrade }>>(
+      `${AI_SERVICE_URL}/api/ai/interview/grade-answer`,
+      {
+        mode: params.mode,
+        answer: params.answer,
+        vacancyProfile: params.vacancyProfile,
+        collectedData: params.collectedData ?? {},
+      },
+      {
+        timeout: 20000,
+        headers: buildAuthHeaders(params.authToken),
+      }
+    );
+
+    if (response.data.status !== 'success' || !response.data.grade) {
+      throw new Error('AI grade-answer returned non-success status');
+    }
+    return response.data.grade;
+  } catch (error: unknown) {
+    logger.warn('Error grading interview answer, continuing without grade:', error);
+    return null;
+  }
+}
+
+export async function generateMockInterviewSummary(params: {
+  vacancyProfile?: VacancyProfile;
+  answers: unknown[];
+  authToken?: string;
+}): Promise<string> {
+  try {
+    const response = await axios.post<InterviewApiResponse<{ summary: string }>>(
+      `${AI_SERVICE_URL}/api/ai/interview/generate-mock-summary`,
+      {
+        vacancyProfile: params.vacancyProfile,
+        answers: params.answers,
+      },
+      {
+        timeout: 25000,
+        headers: buildAuthHeaders(params.authToken),
+      }
+    );
+
+    if (response.data.status !== 'success' || !response.data.summary) {
+      throw new Error('AI generate-mock-summary returned non-success status');
+    }
+    return response.data.summary;
+  } catch (error: unknown) {
+    logger.warn('Error generating mock interview summary, using fallback:', error);
+    return 'Суммарно: продолжайте усиливать структуру ответов, добавляйте конкретные метрики, ограничения и выводы. Перед интервью повторите профиль вакансии и подготовьте 2-3 сильных истории по STAR.';
+  }
+}
+
 type RetrieveContextRequest = {
   query: string;
   topK?: number;
@@ -461,10 +696,11 @@ function resolveTtsPreset(raw?: string): TtsPreset | null {
 function normalizeTtsText(text: string): string {
   // Keep message natural for speech synthesis:
   // collapse whitespace and add lightweight pauses on list separators.
-  return text
+  const normalized = text
     .replace(/\s+/g, ' ')
     .replace(/([,;:])\s*/g, '$1 ')
     .trim();
+  return normalized.length > 1100 ? `${normalized.slice(0, 1090).trim()}...` : normalized;
 }
 
 export async function synthesizeAssistantAudio(params: {
@@ -519,6 +755,7 @@ export async function synthesizeAssistantAudio(params: {
         params.voice ?? process.env.TTS_VOICE ?? preset?.voice ?? DEFAULT_TTS_VOICE
       } format=${response.data.format ?? 'unknown'}`
     );
+    logger.info('event=tts_played source=yandex');
 
     return {
       audioBase64: response.data.audioBase64,

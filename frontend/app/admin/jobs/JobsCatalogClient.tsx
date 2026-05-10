@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { getPublicJobMatchingBaseUrl } from '@/lib/publicJobMatchingUrl';
 
 type JobRow = {
   id: string;
@@ -26,11 +27,7 @@ type CatalogResponse = {
 };
 
 function jobMatchingBaseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_JOB_MATCHING_URL ||
-    process.env.NEXT_PUBLIC_API_URL?.replace(':3001', ':3004') ||
-    'http://127.0.0.1:3004'
-  );
+  return getPublicJobMatchingBaseUrl();
 }
 
 function truncate(s: string, max: number): string {

@@ -1,9 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { SearchOutlined, FileTextOutlined, RocketOutlined } from '@ant-design/icons';
+import {
+  BulbOutlined,
+  FileTextOutlined,
+  RocketOutlined,
+  SearchOutlined,
+} from '@ant-design/icons';
 
-export type ProductType = 'jack' | 'wannanew';
+export type ProductType = 'jack' | 'wannanew' | 'interview-prep';
 
 interface ProductSelectionScreenProps {
   onSelect: (product: ProductType, starterMessage?: string) => void;
@@ -23,7 +28,7 @@ export function ProductSelectionScreen({ onSelect }: ProductSelectionScreenProps
       </div>
 
       {/* Product Selection Buttons */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 w-full max-w-6xl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-6 w-full max-w-7xl">
         {/* Jack - Quick Start Router */}
         <button
           onClick={() =>
@@ -70,6 +75,27 @@ export function ProductSelectionScreen({ onSelect }: ProductSelectionScreenProps
           </div>
           {/* Hover gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+        </button>
+
+        {/* Interview Prep - Universal vacancy trainer */}
+        <button
+          onClick={() => onSelect('interview-prep')}
+          className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-6 sm:p-8 backdrop-blur transition-all duration-300 hover:bg-white/[0.08] hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/10"
+        >
+          <div className="flex flex-col items-center gap-4 text-center">
+            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-amber-500/20 to-amber-600/20 border border-amber-500/30 group-hover:from-amber-500/30 group-hover:to-amber-600/30 transition-all duration-300">
+              <BulbOutlined className="text-2xl text-amber-300" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-lg sm:text-xl font-semibold text-white">
+                Тренажёр интервью
+              </h3>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                Разберу вакансию, составлю план и проведу кейсы, теорию или мок-интервью
+              </p>
+            </div>
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-t from-amber-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
         </button>
 
         {/* Wannanew - PM Interview Prep */}

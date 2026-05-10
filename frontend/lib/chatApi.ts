@@ -16,7 +16,7 @@ const getApiUrl = () => {
          'http://localhost:3002';
 };
 
-type ProductType = 'jack' | 'wannanew';
+type ProductType = 'jack' | 'wannanew' | 'interview-prep';
 
 interface SessionMetadata {
   product?: ProductType;
@@ -326,6 +326,19 @@ class ChatApiClient {
       // Check for new messages
       if (response.messages.length > this.lastMessageCount) {
         const newMessages = response.messages.slice(this.lastMessageCount);
+        if (response.assistantAudio?.audioBase64) {
+          const lastAssistant = [...newMessages]
+            .reverse()
+            .find((msg) => msg.role === 'assistant');
+          if (lastAssistant) {
+            this.onAssistantAudio?.({
+              messageId: lastAssistant.id,
+              audioBase64: response.assistantAudio.audioBase64,
+              mimeType: response.assistantAudio.mimeType,
+              format: response.assistantAudio.format,
+            });
+          }
+        }
         newMessages.forEach((msg) => this.onMessage?.(msg));
       }
 

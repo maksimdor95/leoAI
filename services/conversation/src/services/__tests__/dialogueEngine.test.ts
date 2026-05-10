@@ -1,4 +1,4 @@
-import { evaluateCondition, resolveNextStep } from '../dialogueEngine';
+import { evaluateCondition, getScenarioIdByProduct, resolveNextStep } from '../dialogueEngine';
 import { ScenarioNextValue } from '../../types/scenario';
 
 // Mock the logger
@@ -148,6 +148,12 @@ describe('dialogueEngine', () => {
       const collectedData = {};
       const result = resolveNextStep(next, collectedData);
       expect(result).toBeNull();
+    });
+  });
+
+  describe('getScenarioIdByProduct', () => {
+    it('should route interview prep product to interview scenario', () => {
+      expect(getScenarioIdByProduct('interview-prep')).toBe('interview-prep-v1');
     });
   });
 });

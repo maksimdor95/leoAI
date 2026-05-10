@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button, Layout, Typography, message, Spin } from 'antd';
@@ -32,6 +32,23 @@ const { Title, Text } = Typography;
 
 type InterviewAnswersState = Record<string, string>;
 
+function buildInterviewPrepStarterFromOnboarding(basics: CareerBasicsPayload): string {
+  const lines = [
+    basics.currentRole.trim() && `Текущая роль: ${basics.currentRole.trim()}`,
+    typeof basics.experienceYears === 'number' && basics.experienceYears >= 0
+      ? `Опыт: ${basics.experienceYears} лет`
+      : null,
+    basics.targetRole.trim() && `Целевая роль: ${basics.targetRole.trim()}`,
+  ].filter(Boolean) as string[];
+
+  const header =
+    lines.length > 0
+      ? `Контекст из AI Career Onboarding:\n${lines.join('\n')}`
+      : 'Прошёл AI Career Onboarding, хочу продолжить подготовку к собеседованию.';
+
+  return `${header}\n\nДальше пришлю текст вакансии (или ссылку с описанием требований), чтобы собрать профиль и план.`;
+}
+
 export default function CareerOnboardingPage() {
   const router = useRouter();
   const { openAuthModal } = useAuth();
@@ -50,6 +67,11 @@ export default function CareerOnboardingPage() {
     summary: string;
     recommendations: string[];
   } | null>(null);
+
+  const interviewPrepChatHref = useMemo(() => {
+    const starter = buildInterviewPrepStarterFromOnboarding(careerBasics);
+    return `/chat?new=true&product=interview-prep&starter=${encodeURIComponent(starter)}`;
+  }, [careerBasics]);
 
   const [messageApi, contextHolder] = message.useMessage();
 
@@ -202,7 +224,9 @@ export default function CareerOnboardingPage() {
                 </Title>
                 <Text className="text-sm sm:text-base text-slate-300 max-w-2xl">
                   Мы зададим несколько вопросов про вашу карьеру, опыт и цели, попросим резюме или
-                  проведём короткое интервью — и покажем первый AI Readiness Score.
+                  проведём короткое интервью — и покажем первый AI Readiness Score. После отчёта можно
+                  сразу открыть тренажёр интервью по конкретной вакансии — контекст из шагов мастера
+                  подставится в чат.
                 </Text>
               </div>
               <Link href="/chats" className="shrink-0">
@@ -283,6 +307,7 @@ export default function CareerOnboardingPage() {
                 levelLabel={scoreData.levelLabel}
                 summary={scoreData.summary}
                 recommendations={scoreData.recommendations}
+                interviewPrepHref={interviewPrepChatHref}
               />
             )}
           </main>

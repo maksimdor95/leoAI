@@ -102,7 +102,7 @@ export interface CollectedData extends Omit<CandidateProfile, 'skills'> {
   [key: string]: unknown;
 }
 
-export type ProductType = 'jack' | 'wannanew';
+export type ProductType = 'jack' | 'wannanew' | 'interview-prep';
 
 export interface ConversationSessionMetadata {
   collectedData: CollectedData;

@@ -15,10 +15,12 @@ export async function synthesizeWithYandexTts(params: {
   text: string;
   lang?: string;
   voice?: string;
+  preset?: string;
   speed?: number;
   format?: TtsFormat;
 }): Promise<TtsAudioResult> {
   const apiKey = process.env.YC_API_KEY;
+  const folderId = process.env.YC_FOLDER_ID;
   if (!apiKey) {
     throw new Error('YC_API_KEY is missing; cannot call Yandex TTS');
   }
@@ -30,6 +32,7 @@ export async function synthesizeWithYandexTts(params: {
     voice: params.voice ?? 'filipp',
     speed: String(params.speed ?? 1.15),
     format,
+    ...(folderId ? { folderId } : {}),
   });
 
   const response = await axios.post<ArrayBuffer>(TTS_URL, body.toString(), {
@@ -39,6 +42,7 @@ export async function synthesizeWithYandexTts(params: {
     headers: {
       Authorization: `Api-Key ${apiKey}`,
       'Content-Type': 'application/x-www-form-urlencoded',
+      ...(folderId ? { 'x-folder-id': folderId } : {}),
     },
     timeout: 20000,
   });

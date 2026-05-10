@@ -8,5 +8,5 @@ export interface SocketAuth {
   userId?: string;
   sessionId?: string;
   createNew?: boolean;
-  product?: 'jack' | 'wannanew';
+  product?: 'jack' | 'wannanew' | 'interview-prep';
 }

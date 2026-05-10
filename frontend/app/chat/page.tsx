@@ -29,6 +29,7 @@ import { createChatApi, ChatApi } from '@/lib/chatApi';
 import { clearClientAuthState, getToken, isAuthenticated } from '@/lib/auth';
 import { userAPI } from '@/lib/api';
 import { jackCollectedDataReadyForJobMatch } from '@/lib/jackProfileGating';
+import { getPublicJobMatchingBaseUrl } from '@/lib/publicJobMatchingUrl';
 import {
   formatCollectedValue,
   getJackProfileSidebarRows,
@@ -287,20 +288,7 @@ function ChatPageContent() {
     }
   }, []);
 
-  const getJobMatchingBaseUrl = useCallback(() => {
-    const explicit = process.env.NEXT_PUBLIC_JOB_MATCHING_URL?.trim();
-    if (explicit) {
-      return explicit.replace(/\/$/, '');
-    }
-    if (typeof window === 'undefined') {
-      return 'http://localhost:3004';
-    }
-    const nextPublicApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-    if (nextPublicApiUrl.includes(':3001')) {
-      return nextPublicApiUrl.replace(':3001', ':3004');
-    }
-    return 'http://localhost:3004';
-  }, []);
+  const getJobMatchingBaseUrl = useCallback(() => getPublicJobMatchingBaseUrl(), []);
 
   useEffect(() => {
     return () => {
@@ -835,6 +823,7 @@ function ChatPageContent() {
     const isNewChat = searchParams.get('new') === 'true';
     const requestedSessionId = isNewChat ? null : searchParams.get('sessionId');
     const requestedProduct = searchParams.get('product') as ProductType | null;
+    const starterFromUrl = searchParams.get('starter');
 
     // If it's a new chat without a pre-selected product, show product selection screen
     if (isNewChat && !requestedProduct) {
@@ -846,6 +835,13 @@ function ChatPageContent() {
 
     // If resuming an existing session or product is pre-selected
     if (requestedSessionId || requestedProduct) {
+      if (isNewChat && requestedProduct && starterFromUrl) {
+        try {
+          setPendingStarterMessage(decodeURIComponent(starterFromUrl));
+        } catch {
+          setPendingStarterMessage(starterFromUrl);
+        }
+      }
       const product = requestedProduct || 'jack';
       initializeChat(product, requestedSessionId ?? undefined, isNewChat);
     } else {
@@ -920,7 +916,11 @@ function ChatPageContent() {
         const { extractedText, contentList } = await uploadResumeFile(file);
         const scenarioId =
           chatRef.current.metadata?.scenarioId ||
-          (currentProduct === 'wannanew' ? 'wannanew-pm-v1' : 'jack-profile-v2');
+          (currentProduct === 'interview-prep'
+            ? 'interview-prep-v1'
+            : currentProduct === 'wannanew'
+              ? 'wannanew-pm-v1'
+              : 'jack-profile-v2');
         const { fields } = await extractProfileFromResumeText(extractedText, scenarioId);
         const imported = contentList
           ? { ...fields, __resumeContentList: contentList }
@@ -1571,16 +1571,19 @@ function ChatPageContent() {
   }, [currentProduct, fetchMatchedJobs, isJobsLoading, sidePanelTab]);
 
   useEffect(() => {
-    if (currentProduct === 'wannanew' && sidePanelTab === 'vacancies') {
+    if (currentProduct !== 'jack' && sidePanelTab === 'vacancies') {
       setSidePanelTab('chat');
     }
   }, [currentProduct, sidePanelTab]);
 
   const sidePanelTabs = useMemo((): { id: SidePanelTab; label: string }[] => {
-    if (currentProduct === 'wannanew') {
+    if (currentProduct !== 'jack') {
       return [
         { id: 'chat', label: 'Чат' },
-        { id: 'profile', label: 'Профиль' },
+        {
+          id: 'profile',
+          label: currentProduct === 'interview-prep' ? 'Подготовка' : 'Профиль',
+        },
       ];
     }
     return [

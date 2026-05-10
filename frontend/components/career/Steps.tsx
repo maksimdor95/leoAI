@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Form, Input, InputNumber, Typography, Upload, Button, Space, Card } from 'antd';
 import { InboxOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
@@ -353,6 +354,8 @@ type ReadinessScoreStepProps = {
   levelLabel: string;
   summary: string;
   recommendations: string[];
+  /** Deep link в чат с продуктом interview-prep и контекстом из онбординга */
+  interviewPrepHref?: string;
 };
 
 export function ReadinessScoreStep({
@@ -360,6 +363,7 @@ export function ReadinessScoreStep({
   levelLabel,
   summary,
   recommendations,
+  interviewPrepHref,
 }: ReadinessScoreStepProps) {
   const percentage = Math.max(0, Math.min(100, score));
 
@@ -390,6 +394,23 @@ export function ReadinessScoreStep({
             ))}
           </ul>
         </div>
+
+        {interviewPrepHref ? (
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+            <Link
+              href={interviewPrepHref}
+              className="inline-flex h-10 items-center justify-center rounded-full bg-amber-500 px-6 text-base font-medium text-white shadow-lg transition-colors hover:bg-amber-400"
+            >
+              Тренажёр интервью по вакансии
+            </Link>
+            <Link
+              href="/chats"
+              className="inline-flex h-10 items-center justify-center rounded-full border border-white/40 bg-transparent px-6 text-base font-medium text-slate-100 transition-colors hover:border-white/60 hover:text-white"
+            >
+              Мои чаты
+            </Link>
+          </div>
+        ) : null}
 
         <Paragraph className="!text-slate-400 text-sm !mb-0">
           Этот скор пока основан на mock-логике. В следующих итерациях он будет рассчитываться на

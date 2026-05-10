@@ -394,7 +394,7 @@ USE_MOCK_JOBS=false
 | Переменная                             | Описание                           | Значение по умолчанию   |
 | -------------------------------------- | ---------------------------------- | ----------------------- |
 | `NEXT_PUBLIC_API_URL`                  | URL User Profile Service           | `http://localhost:3001` |
-| `NEXT_PUBLIC_JOB_MATCHING_URL`         | URL Job Matching (подбор вакансий в браузере); если не задан — из `NEXT_PUBLIC_API_URL` с заменой порта `3001`→`3004`, иначе `http://localhost:3004` | — |
+| `NEXT_PUBLIC_JOB_MATCHING_URL`         | URL Job Matching (подбор вакансий в браузере). Если не задан: при `NEXT_PUBLIC_API_URL` с `:3001` — та же схема с портом `3004`; при `https://…` без порта — тот же публичный хост (gateway, `/api/jobs/`); иначе `http://127.0.0.1:3004` | — |
 | `NEXT_PUBLIC_CONVERSATION_API_URL`     | URL Conversation Service API       | `http://localhost:3002` |
 | `NEXT_PUBLIC_CONVERSATION_SERVICE_URL` | URL Conversation Service WebSocket | `http://localhost:3002` |
 

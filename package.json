@@ -12,6 +12,7 @@
     "dev:clean-start": "bash ./scripts/dev/clean-start.sh",
     "dev:clean-start:docker": "bash ./scripts/dev/clean-start.sh --with-docker",
     "dev:status": "bash ./scripts/dev/status.sh",
+    "dev:kill-ports": "bash ./scripts/dev/kill-host-ports.sh",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx --ignore-path .eslintignore",
     "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md,yml,yaml}\"",
