@@ -19,17 +19,23 @@ type OAuthProfile = {
 };
 
 const OAUTH_STATE_EXPIRATION = '10m';
+const JWT_ALGORITHM: jwt.Algorithm = 'HS256';
 
 function getJwtSecret(): string {
   return process.env.JWT_SECRET || 'your_jwt_secret_key_here_change_in_production';
 }
 
 function buildStateToken(provider: OAuthProvider): string {
-  return jwt.sign({ provider }, getJwtSecret(), { expiresIn: OAUTH_STATE_EXPIRATION });
+  return jwt.sign({ provider }, getJwtSecret(), {
+    algorithm: JWT_ALGORITHM,
+    expiresIn: OAUTH_STATE_EXPIRATION,
+  });
 }
 
 function validateStateToken(state: string, provider: OAuthProvider): void {
-  const decoded = jwt.verify(state, getJwtSecret()) as OAuthStatePayload;
+  const decoded = jwt.verify(state, getJwtSecret(), {
+    algorithms: [JWT_ALGORITHM],
+  }) as OAuthStatePayload;
   if (decoded.provider !== provider) {
     throw new Error('OAuth state provider mismatch');
   }

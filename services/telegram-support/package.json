@@ -1,0 +1,30 @@
+{
+  "name": "telegram-support-service",
+  "version": "0.1.0",
+  "description": "LEO AI Telegram support bot — tickets to LEO Support group",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "PORT=3008 ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "set-webhook": "ts-node --transpile-only scripts/set-webhook.ts",
+    "delete-webhook": "ts-node --transpile-only scripts/delete-webhook.ts",
+    "lint": "eslint src --ext .ts"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

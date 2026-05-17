@@ -13,13 +13,54 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3007;
 
+function isLocalLoopbackOrigin(origin: string): boolean {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === 'localhost' || hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+const corsExplicitOrigins = new Set(
+  (process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+);
+
+function corsOriginChecker(
+  origin: string | undefined,
+  callback: (...args: [Error | null, boolean?]) => void
+): void {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+  if (corsExplicitOrigins.has(origin)) {
+    callback(null, true);
+    return;
+  }
+  if (origin === 'http://localhost:3000' || origin === 'http://127.0.0.1:3000') {
+    callback(null, true);
+    return;
+  }
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  if (nodeEnv !== 'production' && isLocalLoopbackOrigin(origin)) {
+    callback(null, true);
+    return;
+  }
+  callback(null, false);
+}
+
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: corsOriginChecker,
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 100 }));
 
 // Health check
 app.get('/health', healthCheck);

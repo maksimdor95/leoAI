@@ -1002,6 +1002,24 @@ function buildInterviewTextMessage(session: ConversationSession, content: string
   };
 }
 
+function buildInterviewQuestionMessage(
+  session: ConversationSession,
+  question: string,
+  placeholder?: string
+): QuestionMessage {
+  return {
+    id: uuidv4(),
+    type: MessageType.QUESTION,
+    role: MessageRole.ASSISTANT,
+    timestamp: new Date().toISOString(),
+    sessionId: session.id,
+    question,
+    placeholder:
+      placeholder ??
+      'Ответь развёрнуто: опирайся на опыт, назови шаги и метрики; отметь допущения, если данных не хватает.',
+  };
+}
+
 async function buildInterviewModeMessage(
   session: ConversationSession,
   mode: InterviewPrepMode,
@@ -1096,6 +1114,13 @@ async function buildInterviewModeMessage(
         metadataUpdates,
       };
     }
+  }
+
+  if (mode === 'diagnostics') {
+    return {
+      message: buildInterviewQuestionMessage(session, response.trim()),
+      metadataUpdates,
+    };
   }
 
   return {

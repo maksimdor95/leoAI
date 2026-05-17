@@ -29,8 +29,13 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   }
 
   try {
-    const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
-    req.userId = String(decoded.userId || decoded.id || '');
+    const decoded = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as JwtPayload;
+    const userId = decoded.userId || decoded.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Invalid token payload' });
+      return;
+    }
+    req.userId = String(userId);
     next();
   } catch (error) {
     logger.warn('AI/NLP auth failed', { error: (error as Error).message });

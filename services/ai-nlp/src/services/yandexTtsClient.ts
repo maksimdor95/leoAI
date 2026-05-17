@@ -5,6 +5,13 @@ const TTS_URL = 'https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize';
 
 type TtsFormat = 'mp3' | 'oggopus';
 
+/** Синхронно с services/conversation/src/services/aiClient.ts (TTS_PRESETS) — preset задаёт голос/скорость/формат API. */
+const TTS_PRESETS: Record<string, { voice: string; speed: number; format: TtsFormat }> = {
+  ermil_normal: { voice: 'ermil', speed: 1.0, format: 'oggopus' },
+  ermil_soft: { voice: 'ermil', speed: 0.92, format: 'oggopus' },
+  filipp_fast: { voice: 'filipp', speed: 1.08, format: 'oggopus' },
+};
+
 export type TtsAudioResult = {
   audioBase64: string;
   mimeType: string;
@@ -25,12 +32,20 @@ export async function synthesizeWithYandexTts(params: {
     throw new Error('YC_API_KEY is missing; cannot call Yandex TTS');
   }
 
-  const format: TtsFormat = params.format ?? 'mp3';
+  const fromPreset = params.preset ? TTS_PRESETS[params.preset] : undefined;
+  const voice = params.voice ?? fromPreset?.voice ?? process.env.TTS_VOICE ?? 'ermil';
+  const envSpeed = Number(process.env.TTS_SPEED);
+  const speed =
+    params.speed ??
+    fromPreset?.speed ??
+    (Number.isFinite(envSpeed) && envSpeed > 0 ? envSpeed : 1.0);
+  const format: TtsFormat = params.format ?? fromPreset?.format ?? 'oggopus';
+
   const body = new URLSearchParams({
     text: params.text,
     lang: params.lang ?? 'ru-RU',
-    voice: params.voice ?? 'filipp',
-    speed: String(params.speed ?? 1.15),
+    voice,
+    speed: String(Number.isFinite(speed) && speed > 0 ? speed : 1.0),
     format,
     ...(folderId ? { folderId } : {}),
   });

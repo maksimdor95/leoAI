@@ -12,10 +12,11 @@ dotenv.config({ override: true });
 
 const JWT_SECRET: string = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '7d';
+const JWT_ALGORITHM: jwt.Algorithm = 'HS256';
 
-// Log JWT_SECRET info on module load (only first few chars for security)
+// Log only presence of JWT secret, never partial value.
 if (JWT_SECRET && JWT_SECRET !== 'your-secret-key-change-in-production') {
-  logger.info(`JWT_SECRET is set (length: ${JWT_SECRET.length}, starts with: ${JWT_SECRET.substring(0, 4)}...)`);
+  logger.info(`JWT_SECRET is configured (length: ${JWT_SECRET.length})`);
 } else {
   logger.warn('JWT_SECRET is using default value - this is insecure!');
 }
@@ -33,6 +34,7 @@ export function generateToken(payload: TokenPayload): string {
     throw new Error('JWT_SECRET is not configured');
   }
   return jwt.sign(payload, JWT_SECRET, {
+    algorithm: JWT_ALGORITHM,
     expiresIn: JWT_EXPIRES_IN,
   } as jwt.SignOptions);
 }
@@ -45,7 +47,9 @@ export function verifyToken(token: string): TokenPayload {
     throw new Error('JWT_SECRET is not configured');
   }
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
+    const decoded = jwt.verify(token, JWT_SECRET, {
+      algorithms: [JWT_ALGORITHM],
+    }) as TokenPayload;
     return decoded;
   } catch (error) {
     throw new Error('Invalid or expired token');

@@ -48,5 +48,6 @@ print_status "conversation" 3002
 print_status "ai-nlp" 3003
 print_status "job-matching" 3004
 print_status "email" 3005
+print_status "telegram-support" 3008
 print_status "report" 3007
 print_tts_status

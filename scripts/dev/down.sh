@@ -33,6 +33,7 @@ stop_service() {
 
 stop_service "frontend"
 stop_service "report"
+stop_service "telegram-support"
 stop_service "email"
 stop_service "job-matching"
 stop_service "ai-nlp"

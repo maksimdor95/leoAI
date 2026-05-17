@@ -20,7 +20,7 @@ export async function synthesizeTts(req: Request, res: Response) {
       text: parsed.text,
       lang: parsed.lang,
       voice: parsed.voice,
-      preset: parsed.preset,
+      preset: parsed.preset ?? process.env.TTS_PRESET,
       speed: parsed.speed,
       format: parsed.format,
     });

@@ -715,8 +715,11 @@ export async function synthesizeAssistantAudio(params: {
   const normalizedText = normalizeTtsText(params.text);
   if (!normalizedText) return null;
 
-  const presetName = params.preset ?? resolveTtsPreset(process.env.TTS_PRESET);
-  const preset = presetName ? TTS_PRESETS[presetName] : null;
+  const presetName =
+    params.preset ??
+    resolveTtsPreset(process.env.TTS_PRESET) ??
+    'ermil_normal';
+  const preset = TTS_PRESETS[presetName];
   const configuredSpeed = Number(process.env.TTS_SPEED);
   const speed =
     params.speed ??

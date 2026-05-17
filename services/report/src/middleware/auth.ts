@@ -36,7 +36,11 @@ export function authMiddleware(
       return;
     }
 
-    const decoded = jwt.verify(token, secret) as JWTPayload;
+    const decoded = jwt.verify(token, secret, { algorithms: ['HS256'] }) as JWTPayload;
+    if (!decoded.userId) {
+      res.status(401).json({ error: 'Invalid token payload' });
+      return;
+    }
 
     req.userId = decoded.userId;
     req.userEmail = decoded.email;

@@ -93,6 +93,7 @@ start_service "conversation" 3002 "services/conversation"
 start_service "ai-nlp" 3003 "services/ai-nlp"
 start_service "job-matching" 3004 "services/job-matching"
 start_service "email" 3005 "services/email"
+start_service "telegram-support" 3008 "services/telegram-support"
 start_service "report" 3007 "services/report"
 start_service "frontend" 3000 "frontend" "next-dev"
 

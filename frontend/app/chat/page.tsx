@@ -24,6 +24,7 @@ import {
   MessageType,
   MessageTypeValue,
   QuestionMessage,
+  TextMessage,
 } from '@/types/chat';
 import { createChatApi, ChatApi } from '@/lib/chatApi';
 import { clearClientAuthState, getToken, isAuthenticated } from '@/lib/auth';
@@ -37,6 +38,7 @@ import {
 import { MessageList } from '@/components/chat/MessageList';
 import { VoiceIndicator, type VoiceIndicatorMode } from '@/components/chat/VoiceIndicator';
 import { StagePanel } from '@/components/chat/StagePanel';
+import { InterviewPrepInfoOverview } from '@/components/chat/InterviewPrepInfoOverview';
 import type { InterviewReportPreview } from '@/components/chat/InterviewReportCards';
 import { TypingMessage } from '@/components/chat/TypingMessage';
 import { ProfileModal } from '@/components/chat/ProfileModal';
@@ -168,6 +170,28 @@ function shouldAnimateMessage(message: Message, existingMessages: Message[]): bo
 
   // Если сообщение уже есть в истории, повторно не анимируем
   return !existingMessages.some((existing) => existing.id === message.id);
+}
+
+/** Текст для TTS (Яндекс на сервере + воспроизведение на клиенте). Согласовано с лимитом ~1100 символов в conversation/aiClient. */
+function getAssistantSpeakableTextForTts(message: Message): string {
+  if (message.role !== MessageRole.ASSISTANT) return '';
+  if (message.type === MessageType.TEXT) {
+    return String((message as TextMessage).content || '').trim();
+  }
+  if (message.type === MessageType.INFO_CARD) {
+    const ic = message as InfoCardMessage;
+    const parts: string[] = ['Информация'];
+    if (ic.title) parts.push(ic.title);
+    if (ic.description) parts.push(ic.description);
+    for (const card of ic.cards || []) {
+      if (card.title || card.content) {
+        parts.push(`${card.title}. ${card.content}`.trim());
+      }
+    }
+    const full = parts.join('. ').replace(/\s+/g, ' ').trim();
+    return full.length > 1100 ? `${full.slice(0, 1090).trim()}...` : full;
+  }
+  return '';
 }
 
 function dedupeAndSortMessages(messages: Message[]): Message[] {
@@ -609,6 +633,47 @@ function ChatPageContent() {
     [playAssistantAudio, speakFallback, waitForAssistantAudio]
   );
 
+  /** Озвучка ответов text / info_card (план, карточка вакансии, диагностика и т.д.) — раньше в очередь попадали только question. */
+  const speakAssistantMessageWithPriority = useCallback(
+    async (message: Message) => {
+      if (message.role !== MessageRole.ASSISTANT) return;
+      if (message.type === MessageType.QUESTION) return;
+
+      const text = getAssistantSpeakableTextForTts(message);
+      if (!text) return;
+
+      const messageId = message.id;
+      if (!messageId || handledSpeechMessageIdsRef.current.has(messageId)) return;
+      handledSpeechMessageIdsRef.current.add(messageId);
+      if (handledSpeechMessageIdsRef.current.size > 300) {
+        const first = handledSpeechMessageIdsRef.current.values().next().value;
+        if (first) handledSpeechMessageIdsRef.current.delete(first);
+      }
+
+      let payload = assistantAudioByMessageIdRef.current.get(messageId) || null;
+      if (!payload) {
+        payload = await waitForAssistantAudio(messageId);
+      }
+
+      if (payload) {
+        assistantAudioByMessageIdRef.current.delete(messageId);
+        const played = await playAssistantAudio(payload);
+        if (!played && enableBrowserTtsFallbackRef.current) {
+          speakFallback(text);
+        } else if (played) {
+          lastSpokenTextRef.current = text.trim().toLowerCase().replace(/\s+/g, ' ');
+          lastSpokenAtRef.current = Date.now();
+        }
+        return;
+      }
+
+      if (enableBrowserTtsFallbackRef.current) {
+        speakFallback(text);
+      }
+    },
+    [playAssistantAudio, speakFallback, waitForAssistantAudio]
+  );
+
   const voiceMode = useMemo((): VoiceIndicatorMode => {
     if (isListening) return 'listening';
     // Keep one visual style for assistant response (as in typing state).
@@ -765,6 +830,15 @@ function ChatPageContent() {
               return prev;
             }
 
+            if (
+              payload.message.role === MessageRole.ASSISTANT &&
+              (payload.message.type === MessageType.TEXT ||
+                payload.message.type === MessageType.INFO_CARD) &&
+              !prev.some((existing) => existing.id === payload.message.id)
+            ) {
+              void speakAssistantMessageWithPriority(payload.message);
+            }
+
             return appendMessage(prev, payload.message);
           });
         },
@@ -810,7 +884,14 @@ function ChatPageContent() {
       setConnecting(false);
       messageApi.error(messageText);
     }
-  }, [messageApi, openAuthModal, playAssistantAudio, router, speakQuestionWithPriority]);
+  }, [
+    messageApi,
+    openAuthModal,
+    playAssistantAudio,
+    router,
+    speakAssistantMessageWithPriority,
+    speakQuestionWithPriority,
+  ]);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -1703,6 +1784,13 @@ function ChatPageContent() {
                           infoCard={latestInfoCard}
                           commands={stagePanelCommands}
                           onCommandSelect={handleCommandSelect}
+                          interviewPrepOnOpenOverview={
+                            currentProduct === 'interview-prep' &&
+                            latestQuestion &&
+                            latestInfoCard?.title === 'Профиль вакансии и план подготовки'
+                              ? () => setSidePanelTab('profile')
+                              : undefined
+                          }
                           onContinue={() => {
                             if (chatRef.current) {
                               chatRef.current.sendMessage('продолжить');
@@ -1832,7 +1920,9 @@ function ChatPageContent() {
                       </>
                     ) : sidePanelTab === 'profile' ? (
                       <div className="flex items-center justify-between gap-2">
-                        <div className="text-sm font-semibold text-slate-100 leading-snug">Профиль</div>
+                        <div className="text-sm font-semibold text-slate-100 leading-snug">
+                          {currentProduct === 'interview-prep' ? 'Профиль вакансии' : 'Профиль'}
+                        </div>
                         {currentProduct === 'jack' ? (
                           <Button
                             type="text"
@@ -2023,7 +2113,21 @@ function ChatPageContent() {
                       </>
                     )
                   ) : sidePanelTab === 'profile' ? (
-                    currentProduct !== 'jack' ? (
+                    currentProduct === 'interview-prep' ? (
+                      latestInfoCard?.title === 'Профиль вакансии и план подготовки' ? (
+                        <InterviewPrepInfoOverview
+                          compact
+                          infoCard={latestInfoCard}
+                          commands={latestInfoCard.commands}
+                          onCommandSelect={handleCommandSelect}
+                        />
+                      ) : (
+                        <div className="text-sm text-slate-400 leading-relaxed">
+                          Здесь появятся карточки «Профиль вакансии и план подготовки» после того, как вы
+                          отправите в чат текст вакансии или требования к роли.
+                        </div>
+                      )
+                    ) : currentProduct !== 'jack' ? (
                       <div className="space-y-3">
                         {Object.keys(jackCollectedSnapshot).length === 0 ? (
                           <div className="text-sm text-slate-400">Пока нет сохранённых данных профиля.</div>

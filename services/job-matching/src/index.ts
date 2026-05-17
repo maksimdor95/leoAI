@@ -40,7 +40,7 @@ const corsExplicitOrigins = new Set(
 
 function corsOriginChecker(
   origin: string | undefined,
-  callback: (err: Error | null, allow?: boolean) => void
+  callback: (...args: [Error | null, boolean?]) => void
 ): void {
   if (!origin) {
     callback(null, true);
@@ -81,8 +81,8 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 100 }));
 
 // Request logging middleware
 app.use((req, _res, next) => {

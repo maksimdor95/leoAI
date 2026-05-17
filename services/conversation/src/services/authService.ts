@@ -9,6 +9,7 @@ import { logger } from '../utils/logger';
 
 const USER_PROFILE_SERVICE_URL = process.env.USER_PROFILE_SERVICE_URL || 'http://localhost:3001';
 const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_ALGORITHM: jwt.Algorithm = 'HS256';
 
 /**
  * Verify JWT token
@@ -32,7 +33,9 @@ export async function verifyToken(
     const cleanToken = token.replace(/^Bearer\s+/, '');
 
     // Verify token locally (fast)
-    const decoded = jwt.verify(cleanToken, JWT_SECRET);
+    const decoded = jwt.verify(cleanToken, JWT_SECRET, {
+      algorithms: [JWT_ALGORITHM],
+    });
     if (typeof decoded !== 'object' || decoded === null) {
       logger.error('Token verification returned a non-object payload');
       return null;

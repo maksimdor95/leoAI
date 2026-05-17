@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer';
+import puppeteer, { Browser } from 'puppeteer';
 import Handlebars from 'handlebars';
 import fs from 'fs';
 import path from 'path';
@@ -405,7 +405,7 @@ const REPORT_TEMPLATE = `
 </html>
 `;
 
-let browserInstance: puppeteer.Browser | null = null;
+let browserInstance: Browser | null = null;
 
 function escapePdfText(value: string): string {
   return value
@@ -472,7 +472,7 @@ function resolveChromeExecutablePath(): string | undefined {
   return undefined;
 }
 
-async function getBrowser(): Promise<puppeteer.Browser> {
+async function getBrowser(): Promise<Browser> {
   if (!browserInstance) {
     const executablePath = resolveChromeExecutablePath();
     

@@ -25,7 +25,7 @@ import {
   deleteSession,
 } from './services/sessionService';
 import { ConversationSession } from './types/session';
-import { Message, MessageType, MessageRole } from './types/message';
+import { Message, MessageType, MessageRole, InfoCardMessage } from './types/message';
 import { SocketAuth } from './types/socket';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from './utils/logger';
@@ -72,7 +72,7 @@ const corsExplicitOrigins = new Set(
 
 function corsOriginChecker(
   origin: string | undefined,
-  callback: (err: Error | null, allow?: boolean) => void
+  callback: (...args: [Error | null, boolean?]) => void
 ): void {
   if (!origin) {
     callback(null, true);
@@ -136,7 +136,8 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 100 }));
 app.use(express.static(publicDir));
 
 // Request logging
@@ -229,10 +230,16 @@ function getSpeakableTextFromAssistantMessage(message: Message | null): string {
   if (message.type === MessageType.QUESTION && 'question' in message) return String(message.question || '');
   if (message.type === MessageType.SYSTEM && 'content' in message) return String(message.content || '');
   if (message.type === MessageType.INFO_CARD && 'title' in message) {
-    const description = 'description' in message && typeof message.description === 'string'
-      ? message.description
-      : '';
-    return `${message.title}. ${description}`.trim();
+    const ic = message as InfoCardMessage;
+    const parts: string[] = ['Информация'];
+    if (ic.title) parts.push(ic.title);
+    if (ic.description) parts.push(ic.description);
+    for (const card of ic.cards || []) {
+      if (card.title || card.content) {
+        parts.push(`${card.title}. ${card.content}`.trim());
+      }
+    }
+    return parts.join('. ').replace(/\s+/g, ' ').trim();
   }
   return '';
 }

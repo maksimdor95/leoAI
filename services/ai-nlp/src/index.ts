@@ -34,14 +34,55 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT || 3003);
 
+function isLocalLoopbackOrigin(origin: string): boolean {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === 'localhost' || hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+const corsExplicitOrigins = new Set(
+  (process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+);
+
+function corsOriginChecker(
+  origin: string | undefined,
+  callback: (...args: [Error | null, boolean?]) => void
+): void {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+  if (corsExplicitOrigins.has(origin)) {
+    callback(null, true);
+    return;
+  }
+  if (origin === 'http://localhost:3000' || origin === 'http://127.0.0.1:3000') {
+    callback(null, true);
+    return;
+  }
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  if (nodeEnv !== 'production' && isLocalLoopbackOrigin(origin)) {
+    callback(null, true);
+    return;
+  }
+  callback(null, false);
+}
+
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: corsOriginChecker,
     credentials: true,
   })
 );
 app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 100 }));
 app.use('/api/ai', requireAuth, aiRateLimit);
 
 app.use((req, _res, next) => {
