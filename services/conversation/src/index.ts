@@ -231,14 +231,9 @@ function getSpeakableTextFromAssistantMessage(message: Message | null): string {
   if (message.type === MessageType.SYSTEM && 'content' in message) return String(message.content || '');
   if (message.type === MessageType.INFO_CARD && 'title' in message) {
     const ic = message as InfoCardMessage;
-    const parts: string[] = ['Информация'];
+    const parts: string[] = [];
     if (ic.title) parts.push(ic.title);
     if (ic.description) parts.push(ic.description);
-    for (const card of ic.cards || []) {
-      if (card.title || card.content) {
-        parts.push(`${card.title}. ${card.content}`.trim());
-      }
-    }
     return parts.join('. ').replace(/\s+/g, ' ').trim();
   }
   return '';

@@ -34,4 +34,4 @@ fi
 rm -f "$PID_DIR"/*.pid 2>/dev/null || true
 
 echo "Done. Check: ss -ltnp | grep -E ':(3000|3001|3002|3003|3004|3005|3007) '"
-echo "Then: bash ./scripts/dev/up.sh --with-docker --env-file .env.staging.local"
+echo "Then: npm run dev:deploy:staging   # or: npm run dev:up:staging"

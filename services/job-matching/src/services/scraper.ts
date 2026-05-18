@@ -9,6 +9,7 @@ import jobRepository from '../models/jobRepository';
 import { logger } from '../utils/logger';
 import { retry, isRetryableError } from '../utils/retry';
 import { getHHUserAgent, hasHHAuthConfig } from './hhAuthService';
+import { buildHhVacancyUrl } from '../utils/vacancyUrl';
 
 const HH_API_URL = process.env.HH_API_URL || 'https://api.hh.ru';
 const SUPERJOB_API_URL = process.env.SUPERJOB_API_URL || 'https://api.superjob.ru/2.0';
@@ -593,7 +594,7 @@ async function fetchVacancyDetails(vacancyId: string): Promise<JobInput | null> 
       experience_level,
       work_mode,
       source: 'hh.ru',
-      source_url: vacancy.alternate_url || `https://hh.ru/vacancy/${vacancyId}`,
+      source_url: buildHhVacancyUrl(vacancyId),
       posted_at: vacancy.published_at ? new Date(vacancy.published_at) : null,
     };
   } catch (error: unknown) {
@@ -628,8 +629,8 @@ function generateMockJobs(keywords: string[]): JobInput[] {
         | 'middle'
         | 'senior',
       work_mode: workModes[index % workModes.length] as 'remote' | 'office' | 'hybrid',
-      source: 'hh.ru',
-      source_url: `https://hh.ru/vacancy/mock-${index + 1}`,
+      source: 'demo',
+      source_url: `demo://leo-ai/mock/${index + 1}?q=${encodeURIComponent(keyword)}`,
       posted_at: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000), // Within last 7 days
     });
   });

@@ -207,11 +207,16 @@ function getFallbackGrade(profile?: PromptVacancyProfile): InterviewAnswerGrade 
 }
 
 function validateProfile(value: PromptVacancyProfile): VacancyProfile {
-  return vacancyProfileSchema.parse({
+  const parsed = vacancyProfileSchema.parse({
     ...fallbackProfile,
     ...value,
     gaps: value.gaps && value.gaps.length > 0 ? value.gaps : fallbackProfile.gaps,
   });
+  const lang = (parsed.interviewLanguage ?? 'ru').toLowerCase();
+  if (!lang || lang === 'unknown') {
+    parsed.interviewLanguage = 'ru';
+  }
+  return parsed;
 }
 
 function validateGrade(
@@ -294,7 +299,7 @@ export async function generatePrepPlan(req: Request, res: Response) {
       }),
       buildJsonOnlyInstruction(`{
   "plan": [
-    { "day": 1, "focus": "highest-value focus area", "tasks": ["2-4 specific tasks"] }
+    { "day": 1, "focus": "highest-value focus area in the response language", "tasks": ["2-4 specific tasks in the response language"] }
   ]
 }`),
     ];

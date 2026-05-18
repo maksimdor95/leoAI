@@ -12,12 +12,26 @@ function markdownToPlainText(markdown: string): string {
     .trim();
 }
 
+function resolveDejaVuFromPackage(): string | null {
+  try {
+    const pkgJson = require.resolve('dejavu-fonts-ttf/package.json');
+    const fontPath = path.join(path.dirname(pkgJson), 'ttf', 'DejaVuSans.ttf');
+    return fs.existsSync(fontPath) ? fontPath : null;
+  } catch {
+    return null;
+  }
+}
+
 function resolvePdfUnicodeFontPath(): string | null {
   // 1) Пользовательский оверрайд через env.
   const fromEnv = process.env.PDF_UNICODE_FONT_PATH;
   if (fromEnv && fs.existsSync(fromEnv)) return fromEnv;
 
-  // 2) Локальный шрифт внутри проекта (если добавим позже в репозиторий).
+  // 2) Шрифт из npm (работает в Docker/Alpine без системных fonts).
+  const fromPackage = resolveDejaVuFromPackage();
+  if (fromPackage) return fromPackage;
+
+  // 3) Локальный шрифт внутри проекта.
   const localCandidates = [
     path.resolve(process.cwd(), 'assets/fonts/DejaVuSans.ttf'),
     path.resolve(process.cwd(), 'frontend/public/fonts/DejaVuSans.ttf'),
@@ -26,7 +40,7 @@ function resolvePdfUnicodeFontPath(): string | null {
     if (fs.existsSync(p)) return p;
   }
 
-  // 3) Системные пути (macOS/Linux) — чтобы не тащить бинарник в git.
+  // 4) Системные пути (macOS/Linux) — fallback для dev без node_modules.
   const systemCandidates = [
     '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
     '/System/Library/Fonts/Supplemental/Arial.ttf',
@@ -62,10 +76,13 @@ export async function generateResumePdfBuffer(markdownResume: string): Promise<B
   });
 
   const unicodeFontPath = resolvePdfUnicodeFontPath();
-  if (unicodeFontPath) {
-    // Без Unicode-шрифта PDFKit даёт «кракозябры» на кириллице.
-    doc.font(unicodeFontPath);
+  if (!unicodeFontPath) {
+    throw new Error(
+      'PDF Unicode font not found. Install dejavu-fonts-ttf or set PDF_UNICODE_FONT_PATH.'
+    );
   }
+  // Без Unicode-шрифта PDFKit даёт «кракозябры» на кириллице.
+  doc.font(unicodeFontPath);
 
   doc.fontSize(18).text('Резюме', { align: 'left' });
   doc.moveDown(0.8);

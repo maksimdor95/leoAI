@@ -7,6 +7,7 @@ import pool from '../config/database';
 import { Job, JobInput } from './job';
 import { logger } from '../utils/logger';
 import { JobRow } from './types';
+import { resolvePublicVacancyUrl } from '../utils/vacancyUrl';
 
 export class JobRepository {
   /**
@@ -184,7 +185,7 @@ export class JobRepository {
       experience_level: row.experience_level,
       work_mode: row.work_mode,
       source: row.source,
-      source_url: row.source_url,
+      source_url: resolvePublicVacancyUrl(row.source, row.source_url) ?? '',
       posted_at: row.posted_at ? new Date(row.posted_at) : null,
       created_at: new Date(row.created_at),
       updated_at: new Date(row.updated_at),

@@ -111,6 +111,30 @@ function safeLower(value?: string): string {
   return value?.toLowerCase() ?? '';
 }
 
+export type InterviewResponseLanguage = 'ru' | 'en';
+
+export function resolveInterviewLanguage(profile?: PromptVacancyProfile): InterviewResponseLanguage {
+  const raw = safeLower(profile?.interviewLanguage);
+  if (raw === 'en' || raw === 'english' || raw.startsWith('en-')) {
+    return 'en';
+  }
+  return 'ru';
+}
+
+export function buildLanguageInstruction(profile?: PromptVacancyProfile): string {
+  if (resolveInterviewLanguage(profile) === 'en') {
+    return `# Language
+- All user-facing text MUST be in English.
+- Interview questions, feedback, prep plan focus/tasks, grading fields, and summaries must be in English.`;
+  }
+
+  return `# Language
+- All user-facing text MUST be in Russian.
+- Interview questions, feedback, prep plan focus/tasks, grading fields, and summaries must be in Russian.
+- Common technical terms (SQL, A/B test, KPI, STAR) may stay in their usual form.
+- Do NOT switch to English unless the vacancy profile explicitly requires an English-language interview.`;
+}
+
 export function inferRoleTrack(profile?: PromptVacancyProfile): InterviewRoleTrack {
   const haystack = [
     profile?.role,
@@ -463,6 +487,7 @@ export function buildInterviewSystemMessage(
 ): AIMessage {
   const extraSections = [
     buildInterviewCorePersona(),
+    buildLanguageInstruction(profile),
     buildAntiWaterRules(),
     buildRoleAdaptationPrompt(profile),
     buildSeniorityPrompt(profile),
@@ -511,7 +536,9 @@ ${params.vacancyText}
 Instructions:
 - Infer role, likely level, domain, expectations, and interview-relevant competencies.
 - Mark assumptions explicitly when information is incomplete.
-- Prefer interview preparation usefulness over literal copying.`);
+- Prefer interview preparation usefulness over literal copying.
+- Set interviewLanguage to "en" only if the vacancy clearly requires English interviews; otherwise use "ru".
+- Write string fields in the profile in the same language as interviewLanguage.`);
 }
 
 export function buildPrepPlanPrompt(params: {
@@ -526,7 +553,8 @@ ${normalizeProfileText(params.vacancyProfile)}
 Instructions:
 - Prioritize highest-value preparation first.
 - Keep tasks concrete, interview-oriented, and realistic for the time budget.
-- Optimize for impact, not completeness.`);
+- Optimize for impact, not completeness.
+${resolveInterviewLanguage(params.vacancyProfile) === 'ru' ? '- Write focus and every task in Russian.' : '- Write focus and every task in English.'}`);
 }
 
 export function buildRespondPrompt(params: InterviewRespondPromptParams): AIMessage {
@@ -555,6 +583,7 @@ Instructions:
 - If grading exists, use it directly: diagnose the weakness, explain the gap, propose a better answer structure, and then ask one precise follow-up or next question.
 - If grading does not exist and the mode is case/mock, present exactly one task or question and stop.
 - Do not become generic, motivational, or verbose.
+${resolveInterviewLanguage(params.vacancyProfile) === 'ru' ? '- Respond in Russian.' : '- Respond in English.'}
 ${isPmRolePack(params.vacancyProfile) ? '- PM/Product role pack is active: explicitly check product sense, metrics, prioritization, experimentation, and stakeholder trade-offs.' : ''}
 ${isAnalyticsRolePack(params.vacancyProfile) ? '- Analytics/Data role pack is active: explicitly check hypothesis quality, metric definitions, causality vs correlation, experiment design, and uncertainty handling.' : ''}`);
 }
@@ -574,6 +603,7 @@ Instructions:
 - Penalize vagueness, missing evidence, weak metrics, missing trade-offs, and poor structure.
 - If the answer is confident but shallow, mark that explicitly.
 - Produce one follow-up question that would best test the weakest area.
+${resolveInterviewLanguage(params.vacancyProfile) === 'ru' ? '- Write fatalGaps, strengths, improvements, followUpToProbe, and modelStructure in Russian.' : '- Write grading fields in English.'}
 ${isPmRolePack(params.vacancyProfile) ? '- PM/Product role pack is active: check whether the answer shows product judgment rather than generic business talk.' : ''}
 ${isAnalyticsRolePack(params.vacancyProfile) ? '- Analytics/Data role pack is active: check whether the answer shows analytical rigor rather than generic metric talk.' : ''}`);
 }
@@ -593,5 +623,6 @@ ${JSON.stringify(params.answers, null, 2)}
 Instructions:
 - Summarize readiness level honestly.
 - Name 3 strongest signals and 3 biggest gaps.
-- Say what to repeat first before the real interview.`);
+- Say what to repeat first before the real interview.
+${resolveInterviewLanguage(params.vacancyProfile) === 'ru' ? '- Write the summary in Russian.' : '- Write the summary in English.'}`);
 }

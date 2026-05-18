@@ -703,6 +703,15 @@ function normalizeTtsText(text: string): string {
   return normalized.length > 1100 ? `${normalized.slice(0, 1090).trim()}...` : normalized;
 }
 
+function detectTtsLang(text: string): string {
+  const cyrillicChars = (text.match(/[а-яё]/gi) || []).length;
+  const latinChars = (text.match(/[a-z]/gi) || []).length;
+  if (latinChars > cyrillicChars * 2 && latinChars > 24) {
+    return 'en-US';
+  }
+  return 'ru-RU';
+}
+
 export async function synthesizeAssistantAudio(params: {
   text: string;
   lang?: string;
@@ -732,7 +741,7 @@ export async function synthesizeAssistantAudio(params: {
       `${AI_SERVICE_URL}/api/ai/tts`,
       {
         text: normalizedText,
-        lang: params.lang ?? 'ru-RU',
+        lang: params.lang ?? detectTtsLang(normalizedText),
         preset: presetName ?? undefined,
         voice: params.voice ?? process.env.TTS_VOICE ?? preset?.voice ?? DEFAULT_TTS_VOICE,
         speed,

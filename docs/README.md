@@ -10,6 +10,7 @@
 - [**ROADMAP.md**](./ROADMAP.md) — Текущий статус, план развития и задачи MVP 1.
 
 ## Быстрые ссылки
+- [**Staging deploy (VPS)**](./STAGING_DEPLOY.md) — `ssh`, `git pull`, `npm run dev:deploy:staging`
 - [Health Check (Production)](https://leo-ai.ru/health)
 - [История изменений и чеклисты](./HISTORY/)
 

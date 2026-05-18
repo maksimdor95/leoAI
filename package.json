@@ -7,6 +7,7 @@
     "dev:up": "bash ./scripts/dev/up.sh",
     "dev:up:docker": "bash ./scripts/dev/up.sh --with-docker",
     "dev:up:staging": "bash ./scripts/dev/up.sh --env-file .env.staging.local",
+    "dev:deploy:staging": "bash ./scripts/dev/deploy-staging.sh",
     "dev:down": "bash ./scripts/dev/down.sh",
     "dev:down:docker": "bash ./scripts/dev/down.sh --with-docker",
     "dev:clean-start": "bash ./scripts/dev/clean-start.sh",

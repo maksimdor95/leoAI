@@ -43,6 +43,20 @@ cd frontend && npm run dev                # порт 3000
 
 Открыть http://localhost:3000
 
+## Staging (VPS)
+
+На сервере (после `git push` с Mac):
+
+```bash
+ssh ubuntu@84.54.57.209
+cd ~/leoAI
+npm run dev:deploy:staging
+```
+
+Скрипт: `git pull` → `npm install` → `docker compose up -d` → остановка портов → `dev:up:staging` → проверка `https://leo-ai.ru`.
+
+Файл секретов на VPS: `.env.staging.local` (не в git). Подробнее: [docs/STAGING_DEPLOY.md](./docs/STAGING_DEPLOY.md).
+
 ## Структура проекта
 
 ```

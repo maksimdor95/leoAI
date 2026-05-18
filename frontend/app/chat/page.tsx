@@ -180,14 +180,9 @@ function getAssistantSpeakableTextForTts(message: Message): string {
   }
   if (message.type === MessageType.INFO_CARD) {
     const ic = message as InfoCardMessage;
-    const parts: string[] = ['Информация'];
+    const parts: string[] = [];
     if (ic.title) parts.push(ic.title);
     if (ic.description) parts.push(ic.description);
-    for (const card of ic.cards || []) {
-      if (card.title || card.content) {
-        parts.push(`${card.title}. ${card.content}`.trim());
-      }
-    }
     const full = parts.join('. ').replace(/\s+/g, ' ').trim();
     return full.length > 1100 ? `${full.slice(0, 1090).trim()}...` : full;
   }

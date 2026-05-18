@@ -1,13 +1,16 @@
 import {
   buildGradingRubric,
   buildInterviewSystemMessage,
+  buildLanguageInstruction,
   buildModePrompt,
+  buildPrepPlanPrompt,
   buildRolePackModePrompt,
   buildRolePackRubric,
   buildRespondPrompt,
   inferRoleTrack,
   inferSeniority,
   parseJsonObject,
+  resolveInterviewLanguage,
 } from '../interviewPrepPrompts';
 
 describe('interviewPrepPrompts', () => {
@@ -74,6 +77,12 @@ describe('interviewPrepPrompts', () => {
     expect(buildRolePackRubric('mock', profile)).toContain('Analytics/Data Role Pack Rubric');
   });
 
+  it('defaults interview language to Russian', () => {
+    expect(resolveInterviewLanguage({ interviewLanguage: 'unknown' })).toBe('ru');
+    expect(resolveInterviewLanguage({ interviewLanguage: 'en' })).toBe('en');
+    expect(buildLanguageInstruction()).toContain('MUST be in Russian');
+  });
+
   it('builds strict trainer system prompt with anti-water rules', () => {
     const systemMessage = buildInterviewSystemMessage('mock', {
       role: 'Senior Product Manager',
@@ -81,6 +90,7 @@ describe('interviewPrepPrompts', () => {
     });
 
     expect(systemMessage.text).toContain('strict, fair');
+    expect(systemMessage.text).toContain('MUST be in Russian');
     expect(systemMessage.text).toContain('Anti-Water Rules');
     expect(systemMessage.text).toContain('Seniority Expectations');
     expect(systemMessage.text).toContain('PM/Product Role Pack');
@@ -142,5 +152,14 @@ describe('interviewPrepPrompts', () => {
     });
 
     expect(prompt.text).toContain('Analytics/Data role pack is active');
+  });
+
+  it('asks for Russian prep plan tasks by default', () => {
+    const prompt = buildPrepPlanPrompt({
+      vacancyProfile: { role: 'Product Manager', interviewLanguage: 'ru' },
+      availableDays: 5,
+    });
+
+    expect(prompt.text).toContain('Write focus and every task in Russian');
   });
 });
