@@ -1,19 +1,16 @@
+import { Suspense } from 'react';
 import { OAuthCallbackClient } from '@/components/auth/OAuthCallbackClient';
 
-type OAuthCallbackPageProps = {
-  searchParams?: {
-    success?: string;
-    token?: string;
-    error?: string;
-  };
-};
-
-export default function OAuthCallbackPage({ searchParams }: OAuthCallbackPageProps) {
+export default function OAuthCallbackPage() {
   return (
-    <OAuthCallbackClient
-      success={searchParams?.success}
-      token={searchParams?.token}
-      error={searchParams?.error}
-    />
+    <Suspense
+      fallback={
+        <main className="min-h-screen flex items-center justify-center bg-[#050913] text-slate-400">
+          Загрузка…
+        </main>
+      }
+    >
+      <OAuthCallbackClient />
+    </Suspense>
   );
 }

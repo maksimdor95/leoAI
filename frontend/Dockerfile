@@ -16,8 +16,9 @@ ARG NEXT_PUBLIC_CONVERSATION_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_CONVERSATION_API_URL=$NEXT_PUBLIC_CONVERSATION_API_URL
 
-# Set NODE_ENV to production for static export build
+# Static export → nginx serves out/ (privacy, terms, landing, etc.)
 ENV NODE_ENV=production
+ENV NEXT_STATIC_EXPORT=1
 
 RUN npm run build
 

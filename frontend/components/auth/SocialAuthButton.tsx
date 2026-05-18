@@ -14,8 +14,8 @@ function GoogleIcon() {
   return (
     <span
       style={{
-        width: 24,
-        height: 24,
+        width: 20,
+        height: 20,
         borderRadius: '50%',
         display: 'inline-flex',
         alignItems: 'center',
@@ -24,7 +24,7 @@ function GoogleIcon() {
           'conic-gradient(from 45deg, #4285F4 0deg 90deg, #34A853 90deg 180deg, #FBBC05 180deg 270deg, #EA4335 270deg 360deg)',
         color: 'white',
         fontWeight: 700,
-        fontSize: 14,
+        fontSize: 12,
       }}
     >
       G
@@ -36,8 +36,8 @@ function YandexIcon() {
   return (
     <span
       style={{
-        width: 24,
-        height: 24,
+        width: 20,
+        height: 20,
         borderRadius: '50%',
         display: 'inline-flex',
         alignItems: 'center',
@@ -45,7 +45,7 @@ function YandexIcon() {
         background: '#ff0000',
         color: 'white',
         fontWeight: 700,
-        fontSize: 14,
+        fontSize: 12,
       }}
     >
       Я
@@ -61,15 +61,7 @@ export function SocialAuthButton({ provider, text, onClick }: SocialAuthButtonPr
       block
       onClick={onClick}
       icon={icon}
-      style={{
-        height: 52,
-        borderRadius: 10,
-        border: '1px solid #cfd3e2',
-        background: '#f5f6fb',
-        color: '#545a78',
-        fontSize: 16,
-        fontWeight: 500,
-      }}
+      className="!h-12 !rounded-xl !border !border-white/10 !bg-black/30 !text-white/90 !font-medium !text-base shadow-none hover:!bg-white/[0.06] hover:!border-white/20 hover:!text-white [&_.ant-btn-icon]:!flex [&_.ant-btn-icon]:!items-center"
     >
       {text}
     </Button>

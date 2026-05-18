@@ -1,16 +1,10 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from 'antd';
 import { CheckCircleFilled, LoadingOutlined } from '@ant-design/icons';
 import { saveToken } from '@/lib/auth';
-
-type OAuthCallbackClientProps = {
-  success?: string;
-  token?: string;
-  error?: string;
-};
 
 function FloatingDots() {
   const dots = [
@@ -38,8 +32,12 @@ function FloatingDots() {
   );
 }
 
-export function OAuthCallbackClient({ success, token, error }: OAuthCallbackClientProps) {
+export function OAuthCallbackClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const success = searchParams.get('success') ?? undefined;
+  const token = searchParams.get('token') ?? undefined;
+  const error = searchParams.get('error') ?? undefined;
   const isSuccess = success === '1';
 
   useEffect(() => {
