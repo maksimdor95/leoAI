@@ -18,9 +18,9 @@ export class JobRepository {
       INSERT INTO jobs (
         title, company, location, salary_min, salary_max, currency,
         description, requirements, skills, experience_level, work_mode,
-        source, source_url, posted_at
+        source, source_url, posted_at, embedding
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       ON CONFLICT (source_url) 
       DO UPDATE SET
         title = EXCLUDED.title,
@@ -35,6 +35,7 @@ export class JobRepository {
         experience_level = EXCLUDED.experience_level,
         work_mode = EXCLUDED.work_mode,
         posted_at = EXCLUDED.posted_at,
+        embedding = COALESCE(EXCLUDED.embedding, jobs.embedding),
         updated_at = NOW()
       RETURNING *
     `;
@@ -54,6 +55,7 @@ export class JobRepository {
       jobInput.source,
       jobInput.source_url,
       jobInput.posted_at || null,
+      jobInput.embedding ? `[${jobInput.embedding.join(',')}]` : null,
     ];
 
     try {
@@ -189,6 +191,7 @@ export class JobRepository {
       posted_at: row.posted_at ? new Date(row.posted_at) : null,
       created_at: new Date(row.created_at),
       updated_at: new Date(row.updated_at),
+      embedding: row.embedding ? (typeof row.embedding === 'string' ? JSON.parse(row.embedding) : row.embedding) : undefined,
     };
   }
 }

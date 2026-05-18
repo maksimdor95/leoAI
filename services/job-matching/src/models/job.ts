@@ -21,6 +21,7 @@ export interface Job {
   posted_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  embedding?: number[];
 }
 
 export interface JobInput {
@@ -38,4 +39,5 @@ export interface JobInput {
   source: string;
   source_url: string;
   posted_at?: Date | null;
+  embedding?: number[];
 }

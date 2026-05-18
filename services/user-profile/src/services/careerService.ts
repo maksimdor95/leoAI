@@ -4,6 +4,7 @@ import path from 'path';
 import pool from '../config/database';
 import { logger } from '../utils/logger';
 import { extractResumeTextFromBuffer } from '../utils/resumeFileExtraction';
+import axios from 'axios';
 import {
   CareerTrack,
   Resume,
@@ -232,6 +233,18 @@ export class CareerService {
       await pool.query(`ALTER TABLE jack.resumes ADD COLUMN IF NOT EXISTS mime_type VARCHAR(128)`);
       await pool.query(`ALTER TABLE jack.resumes ADD COLUMN IF NOT EXISTS storage_path TEXT`);
       await pool.query(`ALTER TABLE jack.resumes ADD COLUMN IF NOT EXISTS content_list JSONB`);
+      
+      // Add pgvector support
+      await pool.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+      await pool.query(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='jack' AND table_name='career_tracks' AND column_name='embedding') THEN
+                ALTER TABLE jack.career_tracks ADD COLUMN embedding vector(256);
+            END IF;
+        END $$;
+      `);
+      
       await CareerService.migrateLegacyCareerData();
       logger.info('✅ Career tracks and Resume tables checked/created successfully');
     } catch (error: unknown) {
@@ -442,6 +455,28 @@ export class CareerService {
     if (sets.length === 0) {
       return CareerService.getTrackById(userId, trackId);
     }
+
+    // Generate embedding if target_role or experience_years changed
+    if (input.target_role !== undefined || input.experience_years !== undefined) {
+      try {
+        const currentTrack = await CareerService.getTrackById(userId, trackId);
+        const targetRole = input.target_role !== undefined ? input.target_role : currentTrack?.target_role;
+        const exp = input.experience_years !== undefined ? input.experience_years : currentTrack?.experience_years;
+        const textToEmbed = `${targetRole || ''} ${exp || ''}`.trim();
+        if (textToEmbed) {
+          const AI_NLP_URL = process.env.AI_NLP_URL || 'http://localhost:3003';
+          const response = await axios.post(`${AI_NLP_URL}/api/ai/embedding`, { text: textToEmbed }, { timeout: 15000 });
+          const embedding = response.data?.embedding;
+          if (embedding && Array.isArray(embedding)) {
+            sets.push(`embedding = $${i++}`);
+            vals.push(`[${embedding.join(',')}]`);
+          }
+        }
+      } catch (err) {
+        logger.error('Failed to generate embedding for track update:', err);
+      }
+    }
+
     sets.push('updated_at = NOW()');
     vals.push(trackId, userId);
     const result = await pool.query<CareerTrack>(
@@ -605,6 +640,22 @@ export class CareerService {
         fieldVals.push(input.experience_years);
       }
 
+      // Generate embedding for user profile
+      try {
+        const textToEmbed = `${input.target_role || ''} ${input.experience_years || ''} ${input.resume_text || ''}`.trim();
+        if (textToEmbed) {
+          const AI_NLP_URL = process.env.AI_NLP_URL || 'http://localhost:3003';
+          const response = await axios.post(`${AI_NLP_URL}/api/ai/embedding`, { text: textToEmbed.substring(0, 8000) }, { timeout: 15000 });
+          const embedding = response.data?.embedding;
+          if (embedding && Array.isArray(embedding)) {
+            sets.push(`embedding = $${pi++}`);
+            fieldVals.push(`[${embedding.join(',')}]`);
+          }
+        }
+      } catch (err) {
+        logger.error('Failed to generate embedding for user profile:', err);
+      }
+
       let careerProfile = track;
       if (sets.length > 0) {
         sets.push('updated_at = NOW()');
@@ -647,8 +698,30 @@ export class CareerService {
   static async getAiReadinessScore(
     userId: string
   ): Promise<{ score: number; summary: string; recommendations: string[] }> {
-    logger.info(`Returning mock AI Readiness Score for user ${userId}`);
+    try {
+      const profile = await CareerService.getCareerProfileWithDetails(userId);
+      const skills = profile.skills.map(s => s.skill.skill_name);
+      const targetRole = profile.careerProfile?.target_role || undefined;
 
+      const AI_NLP_URL = process.env.AI_NLP_URL || 'http://localhost:3003';
+      const response = await axios.post(`${AI_NLP_URL}/api/ai/readiness`, {
+        skills,
+        targetRole
+      }, { timeout: 15000 });
+
+      if (response.data && typeof response.data.score === 'number') {
+        return {
+          score: response.data.score,
+          summary: response.data.summary || '',
+          recommendations: response.data.recommendations || []
+        };
+      }
+    } catch (error) {
+      logger.error(`Failed to generate AI Readiness Score for user ${userId}:`, error);
+    }
+
+    // Fallback
+    logger.info(`Returning fallback AI Readiness Score for user ${userId}`);
     return {
       score: 42,
       summary:

@@ -52,6 +52,7 @@ export interface CollectedData {
   workMode?: string;
   skills?: string[];
   industries?: string[];
+  embedding?: number[];
   [key: string]: unknown;
 }
 
@@ -250,6 +251,17 @@ export async function getCollectedDataFromCareerProfile(
     const expYears = parseExperienceYears(record.experience_years ?? record.experienceYears);
     if (typeof expYears === 'number') {
       collected.totalExperience = expYears;
+    }
+
+    if (Array.isArray(record.embedding) && record.embedding.length > 0) {
+      collected.embedding = record.embedding;
+    } else if (typeof record.embedding === 'string') {
+      try {
+        const parsed = JSON.parse(record.embedding);
+        if (Array.isArray(parsed)) collected.embedding = parsed;
+      } catch (e) {
+        // ignore
+      }
     }
 
     const resumeText = isNonEmptyString(payload?.resume?.resume_text)

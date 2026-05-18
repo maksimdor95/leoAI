@@ -183,6 +183,17 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       );
     }
 
+    if (catalogWarning) {
+      // Trigger background scraping for this user
+      const params = deriveScrapeParams(collectedData);
+      triggerScraping({
+        origin: 'user-profile',
+        userId,
+        keywords: params.keywords.length > 0 ? params.keywords : undefined,
+        locationId: params.locationId,
+      }).catch((err: unknown) => logger.error('Failed to trigger background scraping:', err));
+    }
+
     res.json({
       jobs: topJobs.map((match) => ({
         job: match.job,

@@ -10,6 +10,7 @@ import { logger } from '../utils/logger';
 import { retry, isRetryableError } from '../utils/retry';
 import { getHHUserAgent, hasHHAuthConfig } from './hhAuthService';
 import { buildHhVacancyUrl } from '../utils/vacancyUrl';
+import { enrichJobWithLLM } from './enrichment';
 
 const HH_API_URL = process.env.HH_API_URL || 'https://api.hh.ru';
 const SUPERJOB_API_URL = process.env.SUPERJOB_API_URL || 'https://api.superjob.ru/2.0';
@@ -228,7 +229,9 @@ export async function scrapeHHJobs(
     // Save jobs to database
     for (const job of jobs) {
       try {
-        await jobRepository.createOrUpdate(job);
+        const isMock = job.source === 'demo';
+        const enrichedJob = isMock ? job : await enrichJobWithLLM(job);
+        await jobRepository.createOrUpdate(enrichedJob);
         result.jobsSaved++;
       } catch (error: unknown) {
         const errorMsg = error instanceof Error ? error.message : String(error);

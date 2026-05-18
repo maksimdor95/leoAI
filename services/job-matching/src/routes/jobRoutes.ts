@@ -7,8 +7,15 @@ import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { requireJobCatalogAccess } from '../middleware/jobCatalogAuth';
 import * as jobsController from '../controllers/jobsController';
+import { recordInteraction } from '../controllers/telemetryController';
 
 const router = Router();
+
+/**
+ * POST /api/jobs/interaction
+ * Record user interaction with a job
+ */
+router.post('/interaction', authenticateToken, recordInteraction);
 
 /**
  * GET /api/jobs/catalog

@@ -134,6 +134,8 @@ async function start() {
     try {
       logger.info('Initializing database tables...');
       const createTableQuery = `
+        CREATE EXTENSION IF NOT EXISTS vector;
+
         CREATE TABLE IF NOT EXISTS jobs (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           title VARCHAR(500) NOT NULL,
@@ -151,10 +153,28 @@ async function start() {
           source_url TEXT NOT NULL UNIQUE,
           posted_at TIMESTAMP,
           created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          embedding vector(256)
         );
         CREATE INDEX IF NOT EXISTS idx_jobs_source_url ON jobs(source_url);
         CREATE INDEX IF NOT EXISTS idx_jobs_source ON jobs(source);
+
+        CREATE TABLE IF NOT EXISTS recommendation_interactions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID NOT NULL,
+          job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+          interaction_type VARCHAR(50) NOT NULL, -- 'view', 'like', 'dislike', 'apply'
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_recommendation_interactions_user_id ON recommendation_interactions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_recommendation_interactions_job_id ON recommendation_interactions(job_id);
+
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='jobs' AND column_name='embedding') THEN
+                ALTER TABLE jobs ADD COLUMN embedding vector(256);
+            END IF;
+        END $$;
       `;
       await pool.query(createTableQuery);
       logger.info('✅ Jobs table verified');

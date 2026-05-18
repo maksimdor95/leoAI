@@ -100,3 +100,24 @@ export async function callYandexModel(payload: AIRequest): Promise<AIResponse> {
     raw: response.data,
   };
 }
+
+export async function getYandexEmbedding(text: string): Promise<number[]> {
+  if (!apiKey || !folderId) {
+    throw new Error('YC_API_KEY or YC_FOLDER_ID is missing.');
+  }
+
+  const url = 'https://llm.api.cloud.yandex.net/foundationModels/v1/textEmbedding';
+  const requestBody = {
+    modelUri: `emb://${folderId}/text-search-query/latest`,
+    text,
+  };
+
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Api-Key ${apiKey}`,
+    'x-folder-id': folderId,
+  };
+
+  const response = await axios.post(url, requestBody, { headers });
+  return response.data?.embedding || [];
+}

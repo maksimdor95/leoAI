@@ -424,10 +424,39 @@ function matchExperience(
   return { points: 0, reason: 'Несовпадение по опыту' };
 }
 
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
+  if (vecA.length !== vecB.length || vecA.length === 0) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
 function matchSkills(
   job: Job,
   collectedData: CollectedData
 ): { points: number; reason?: string } {
+  // Use semantic search if embeddings are available
+  if (collectedData.embedding && job.embedding) {
+    const similarity = cosineSimilarity(collectedData.embedding, job.embedding);
+    // Similarity is usually between 0 and 1 for positive embeddings, or -1 to 1.
+    // We map similarity > 0.5 to points up to 25.
+    if (similarity > 0.5) {
+      const points = Math.min(25, Math.round((similarity - 0.5) * 2 * 25));
+      return {
+        points,
+        reason: `Семантическое совпадение навыков (score: ${similarity.toFixed(2)})`,
+      };
+    }
+  }
+
+  // Fallback to text-based matching
   const userSkills = Array.isArray(collectedData.skills) ? collectedData.skills : [];
   const jobText = `${job.title} ${job.description} ${job.requirements}`.toLowerCase();
 

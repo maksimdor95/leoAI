@@ -22,6 +22,9 @@ import {
   gradeInterviewAnswer,
   respondToInterviewMode,
 } from './controllers/interviewPrepController';
+import { enrichJob } from './controllers/enrichJobController';
+import { generateEmbedding } from './controllers/embeddingController';
+import { generateAiReadiness } from './controllers/aiReadinessController';
 import { logger } from './utils/logger';
 import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -114,6 +117,9 @@ app.post('/api/ai/interview/generate-mock-summary', generateMockSummary);
 // Новые эндпоинты для генерации профиля и резюме
 app.post('/api/ai/generate-summary', generateProfileSummary);
 app.post('/api/ai/generate-resume', generateResume);
+app.post('/api/ai/enrich-job', enrichJob);
+app.post('/api/ai/embedding', generateEmbedding);
+app.post('/api/ai/readiness', generateAiReadiness);
 
 // 404 handler (must be before error handler)
 app.use(notFoundHandler);
