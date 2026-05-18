@@ -403,12 +403,14 @@ export function buildResponseFormatPrompt(mode: InterviewPrepMode): string {
 - If grading does not exist yet: present the case clearly and stop.`;
     case 'theory':
       return `# Output Format
-- Use short sections with headers.
+- Use a conversational tone.
+- STRICTLY FORBIDDEN: Do not use markdown headers (like ###) or long bulleted lists.
 - Prefer practical explanation over textbook wording.
-- End with a mini-check if useful.`;
+- End with a short mini-check question.`;
     default:
       return `# Output Format
-- Use structured, concise sections.
+- Use structured, concise paragraphs.
+- STRICTLY FORBIDDEN: Do not use markdown headers (like ###) or bulleted lists.
 - Be specific and high-signal.
 - Avoid filler and generic encouragement.`;
   }
@@ -580,7 +582,10 @@ ${params.userMessage}
 
 Instructions:
 - Generate the next trainer response.
-- If grading exists, use it directly: diagnose the weakness, explain the gap, propose a better answer structure, and then ask one precise follow-up or next question.
+- Act as a live coach in a real conversation.
+- STRICTLY FORBIDDEN: Do not use markdown headers (like ###) or long bulleted lists. Your response must look like a normal chat message.
+- Keep your answer concise (under 600-800 characters).
+- If grading exists, use it directly: diagnose the weakness briefly, explain the gap, propose a better answer structure, and then ALWAYS ask exactly one precise follow-up question.
 - If grading does not exist and the mode is case/mock, present exactly one task or question and stop.
 - Do not become generic, motivational, or verbose.
 ${resolveInterviewLanguage(params.vacancyProfile) === 'ru' ? '- Respond in Russian.' : '- Respond in English.'}
