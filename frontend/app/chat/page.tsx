@@ -444,29 +444,6 @@ function ChatPageContent() {
     setIsTtsSpeaking(false);
   }, []);
 
-  const unlockAudio = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    const el = ensureAssistantAudioChain();
-    if (el && el.paused) {
-      // Play a tiny silent audio to unlock autoplay on mobile/safari
-      const silentSrc = 'data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
-      if (el.src !== silentSrc) {
-        const prevSrc = el.src;
-        el.src = silentSrc;
-        el.play().catch(() => {}).finally(() => {
-          if (el.src === silentSrc) {
-            el.src = prevSrc;
-          }
-        });
-      }
-    }
-    
-    // Also unlock AudioContext if suspended
-    if (assistantAudioCtxRef.current && assistantAudioCtxRef.current.state === 'suspended') {
-      assistantAudioCtxRef.current.resume().catch(() => {});
-    }
-  }, [ensureAssistantAudioChain]);
-
   const ensureAssistantAudioChain = useCallback(() => {
     if (typeof window === 'undefined') return null;
     let el = assistantAudioElRef.current;
@@ -541,6 +518,29 @@ function ChatPageContent() {
 
     return el;
   }, []);
+
+  const unlockAudio = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const el = ensureAssistantAudioChain();
+    if (el && el.paused) {
+      // Play a tiny silent audio to unlock autoplay on mobile/safari
+      const silentSrc = 'data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
+      if (el.src !== silentSrc) {
+        const prevSrc = el.src;
+        el.src = silentSrc;
+        el.play().catch(() => {}).finally(() => {
+          if (el.src === silentSrc) {
+            el.src = prevSrc;
+          }
+        });
+      }
+    }
+
+    // Also unlock AudioContext if suspended
+    if (assistantAudioCtxRef.current && assistantAudioCtxRef.current.state === 'suspended') {
+      assistantAudioCtxRef.current.resume().catch(() => {});
+    }
+  }, [ensureAssistantAudioChain]);
 
   const speakFallback = useCallback(
     (text: string) => {
