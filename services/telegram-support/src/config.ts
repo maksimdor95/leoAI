@@ -25,6 +25,16 @@ function parseOperatorIds(raw: string | undefined): number[] {
 const nodeEnv = process.env.NODE_ENV || 'development';
 const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL?.trim() || '';
 const pollingFlag = process.env.TELEGRAM_USE_POLLING?.trim().toLowerCase();
+const ngrokAutosyncFlag = process.env.TELEGRAM_NGROK_AUTOSYNC?.trim().toLowerCase();
+
+function optionalProxyUrl(): string {
+  return (
+    process.env.TELEGRAM_PROXY_URL?.trim() ||
+    process.env.HTTPS_PROXY?.trim() ||
+    process.env.HTTP_PROXY?.trim() ||
+    ''
+  );
+}
 
 export const config = {
   port: parseInt(process.env.PORT || '3008', 10),
@@ -37,11 +47,23 @@ export const config = {
     ''
   ),
   operatorIds: parseOperatorIds(process.env.TELEGRAM_OPERATOR_IDS),
+  apiRoot: (process.env.TELEGRAM_API_ROOT?.trim() || 'https://api.telegram.org').replace(/\/$/, ''),
+  proxyUrl: optionalProxyUrl,
   webhookUrl,
+  ngrokAutosync: ngrokAutosyncFlag === 'true' || ngrokAutosyncFlag === '1',
+  registerWebhookOnStart:
+    process.env.TELEGRAM_REGISTER_WEBHOOK_ON_START?.trim().toLowerCase() !== 'false',
   usePolling:
     pollingFlag === 'true' ||
-    (pollingFlag !== 'false' && nodeEnv !== 'production' && !webhookUrl),
+    (pollingFlag !== 'false' &&
+      nodeEnv !== 'production' &&
+      !webhookUrl &&
+      !configNgrokAutosyncEnabled()),
 };
+
+function configNgrokAutosyncEnabled(): boolean {
+  return ngrokAutosyncFlag === 'true' || ngrokAutosyncFlag === '1';
+}
 
 export function validateConfig(): void {
   config.botToken();
@@ -53,6 +75,8 @@ export function validateConfig(): void {
     supportChatId: chatId,
     siteUrl: config.siteUrl,
     usePolling: config.usePolling,
+    webhook: config.webhookUrl || (config.ngrokAutosync ? 'ngrok-autosync' : 'none'),
+    proxy: config.proxyUrl() ? 'enabled' : 'disabled',
     operators: config.operatorIds.length ? config.operatorIds.length : 'any',
   });
 }

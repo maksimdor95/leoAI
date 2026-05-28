@@ -2,16 +2,17 @@ import { BOT_COMMANDS } from '../botCommands';
 import { config } from '../config';
 import type { TelegramApiResponse, TelegramMessage, TelegramUpdate } from '../types/telegram';
 import { logger } from '../utils/logger';
+import { telegramFetch } from './telegramFetch';
 
 function apiUrl(method: string): string {
-  return `https://api.telegram.org/bot${config.botToken()}/${method}`;
+  return `${config.apiRoot}/bot${config.botToken()}/${method}`;
 }
 
 async function callTelegram<T>(
   method: string,
   body?: Record<string, unknown>
 ): Promise<T> {
-  const response = await fetch(apiUrl(method), {
+  const response = await telegramFetch(apiUrl(method), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,

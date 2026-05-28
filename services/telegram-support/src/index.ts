@@ -1,9 +1,13 @@
+import { validateConfig, config } from './config';
+import { initSentry } from './utils/sentry';
+initSentry('telegram-support');
+
 import express from 'express';
 import helmet from 'helmet';
-import { validateConfig, config } from './config';
 import { webhookRouter } from './routes/webhook';
 import { startPolling } from './services/polling';
 import { verifyBot } from './services/telegramApi';
+import { registerTelegramWebhook } from './services/webhookRegistration';
 import { ticketCount } from './services/ticketStore';
 import { logger } from './utils/logger';
 
@@ -45,8 +49,13 @@ async function start(): Promise<void> {
 
   if (config.usePolling) {
     await startPolling();
+    return;
+  }
+
+  if (config.registerWebhookOnStart) {
+    await registerTelegramWebhook();
   } else {
-    logger.info(`Webhook mode. Register: npm run set-webhook (TELEGRAM_WEBHOOK_URL)`);
+    logger.info('Webhook mode. Register: npm run set-webhook');
   }
 }
 

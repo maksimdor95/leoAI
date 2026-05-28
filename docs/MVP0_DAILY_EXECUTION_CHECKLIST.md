@@ -1,6 +1,9 @@
 # MVP 0 Daily Execution Checklist
 
-Этот документ — твой ежедневный рабочий трекер до завершения MVP 0.  
+> **MVP 0 завершён (2026-05).** Актуальный статус: [ROADMAP.md](./ROADMAP.md), альфа-тест: [ALPHA_TEST.md](./ALPHA_TEST.md).  
+> MVP 1 чеклист: [HISTORY/MVP1_DAILY_EXECUTION_CHECKLIST.md](./HISTORY/MVP1_DAILY_EXECUTION_CHECKLIST.md).
+
+Этот документ — архивный ежедневный трекер MVP 0.  
 Формат: открываешь нужный день, выполняешь пункты, ставишь отметки, фиксируешь результат.
 
 ---

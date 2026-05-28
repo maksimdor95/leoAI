@@ -83,3 +83,6 @@ sa-key.json
 # Загруженные резюме (user-profile, RESUME_UPLOAD_DIR)
 **/data/uploads/
 
+# Telegram ↔ site user mapping (runtime)
+services/telegram-support/data/user-links.json
+

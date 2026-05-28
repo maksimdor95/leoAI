@@ -99,8 +99,8 @@ export default function TermsPage() {
             <h2 className="text-lg font-semibold text-white">Обратная связь</h2>
             <p className="mt-2 text-sm leading-7 text-slate-300">
               Если у вас есть вопрос по условиям или работе сервиса, напишите на{' '}
-              <a href="mailto:hello@leoai.com" className="text-green-300 hover:text-green-200">
-                hello@leoai.com
+              <a href="mailto:hello@leo-ai.ru" className="text-green-300 hover:text-green-200">
+                hello@leo-ai.ru
               </a>{' '}
               или в Telegram-поддержку{' '}
               <a

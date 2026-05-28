@@ -5,15 +5,9 @@
 
 import axios from 'axios';
 import { buildAuthHeaders } from './authHeaders';
+import { getPublicApiBaseUrl, getPublicConversationBaseUrl } from './publicApiBaseUrl';
 
-function normalizeServiceBaseUrl(url: string): string {
-  return url.trim().replace(/\/+$/, '');
-}
-
-// Empty baseURL sends /api/users/* to the Next.js host → 404; same default as chatSocket/chatApi.
-const API_URL = normalizeServiceBaseUrl(
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-);
+const API_URL = getPublicApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_URL,
@@ -41,9 +35,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-const CONVERSATION_API_URL = normalizeServiceBaseUrl(
-  process.env.NEXT_PUBLIC_CONVERSATION_API_URL || 'http://localhost:3002'
-);
+const CONVERSATION_API_URL = getPublicConversationBaseUrl();
 
 const conversationApi = axios.create({
   baseURL: CONVERSATION_API_URL,

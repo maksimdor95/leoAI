@@ -6,6 +6,7 @@ import { Form, Input, Button, Card, Typography, message } from 'antd';
 import { UserOutlined, MailOutlined, LockOutlined } from '@ant-design/icons';
 import { userAPI } from '@/lib/api';
 import { saveToken } from '@/lib/auth';
+import { captureEvent } from '@/lib/analytics';
 import { useAuth } from '@/contexts/AuthContext';
 import { SocialAuthButton } from '@/components/auth/SocialAuthButton';
 
@@ -54,6 +55,7 @@ export default function RegisterPage() {
       // Save token
       if (result.token) {
         saveToken(result.token);
+        captureEvent('user_registered', { method: 'email' });
       }
 
       message.success('Регистрация успешна!');

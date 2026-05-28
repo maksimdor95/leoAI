@@ -1,13 +1,16 @@
 # LeoAI VPS Staging Runbook (Cloud.ru + Docker Compose + Caddy)
 
-Последнее обновление: 2026-05-06.
+Последнее обновление: 2026-05-27.
 
-Документ фиксирует рабочий контур, который уже проверен на практике:
-- VPS в Cloud.ru (Ubuntu 22.04, Free Tier);
-- запуск сервисов через `docker compose`;
+> **Актуальный деплой:** [../STAGING_DEPLOY.md](../STAGING_DEPLOY.md) (`npm run dev:deploy:staging`)
+
+Документ фиксирует рабочий контур:
+- VPS в Cloud.ru (Ubuntu 22.04);
+- Docker: `postgres`, `redis`, `resume-parser`;
+- Node-сервисы: `npm run dev:up:staging`;
 - reverse proxy и TLS через Caddy;
-- публичный домен `leo-ai.ru` -> `84.54.57.209`;
-- health endpoint: `https://leo-ai.ru/health`.
+- домен `leo-ai.ru` -> `84.54.57.209`;
+- health: `https://leo-ai.ru/api/health` (агрегатор всех сервисов).
 
 ---
 
@@ -92,7 +95,7 @@ curl https://leo-ai.ru/health
 
 - [ ] В security group открыты только нужные входящие порты (`22/80/443`, опционально `3011` временно).
 - [ ] `docker compose ps` показывает `Up`/`healthy` для критичных контейнеров.
-- [ ] Health доступен по HTTPS: `https://leo-ai.ru/health`.
+- [ ] Health доступен по HTTPS: `https://leo-ai.ru/api/health`.
 - [ ] Логи Caddy и контейнеров читаются без ошибок при старте.
 - [ ] Настроен минимальный backup PostgreSQL (cron + retention).
 - [ ] Подготовлен rollback-сценарий (последний рабочий compose + restart).

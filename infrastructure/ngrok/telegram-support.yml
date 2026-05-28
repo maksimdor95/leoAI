@@ -1,0 +1,16 @@
+# ngrok v3 config for LEO telegram-support on VPS.
+# 1. Copy to ~/.config/ngrok/ngrok.yml (or pass: ngrok start --config /path/to/this/file leo-telegram)
+# 2. Set NGROK_AUTHTOKEN in env or replace below.
+# 3. Paid plan: set a reserved domain in url: for a stable webhook URL.
+
+version: 3
+
+agent:
+  authtoken: ${NGROK_AUTHTOKEN}
+
+endpoints:
+  - name: leo-telegram
+    # Free plan: omit url — ngrok assigns a random *.ngrok-free.app URL each start.
+    # Paid plan: url: https://leo-telegram.ngrok.app
+    upstream:
+      url: http://127.0.0.1:3008

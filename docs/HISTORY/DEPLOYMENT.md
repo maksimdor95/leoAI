@@ -1,15 +1,20 @@
 # LeoAI — Руководство по деплою
 
+> **Актуальный runbook:** [../STAGING_DEPLOY.md](../STAGING_DEPLOY.md) · **Ops:** [../OPERATIONS.md](../OPERATIONS.md)
+
 ## Актуальный production-like контур (VPS)
 
-С 2026-05-06 в проекте зафиксирован рабочий контур деплоя на один VPS:
-- Cloud.ru VPS (Ubuntu 22.04);
-- запуск приложения через `docker compose`;
-- reverse proxy + TLS через Caddy;
-- домен `leo-ai.ru` с health: `https://leo-ai.ru/health`.
+*Обновлено: 2026-05-27*
 
-Подробный пошаговый runbook, post-deploy checklist и ops-команды:
-- [`VPS_STAGING_RUNBOOK.md`](./VPS_STAGING_RUNBOOK.md)
+- Cloud.ru VPS (Ubuntu 22.04);
+- Docker: `postgres`, `redis`, `resume-parser`;
+- Node-сервисы: `npm run dev:up:staging` на VPS;
+- reverse proxy + TLS через Caddy;
+- домен `leo-ai.ru`, health: `https://leo-ai.ru/api/health`.
+
+Подробный runbook:
+- [VPS_STAGING_RUNBOOK.md](./VPS_STAGING_RUNBOOK.md)
+- [STAGING_DEPLOY.md](../STAGING_DEPLOY.md)
 
 ---
 

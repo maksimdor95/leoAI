@@ -6,20 +6,14 @@ import {
   SessionJoinedPayload,
   ErrorPayload,
 } from '@/types/chat';
+import { getPublicApiBaseUrl } from './publicApiBaseUrl';
 
-// Use Gateway URL for WebSocket (Gateway proxies to Conversation Service)
+// Gateway / reverse proxy serves /socket.io on the same host as the frontend.
 const getDefaultSocketUrl = () => {
-  // In production, use Gateway URL (which proxies /socket.io/ to Conversation Service)
   if (typeof window !== 'undefined') {
-    // Use relative path to Gateway (same origin)
     return window.location.origin;
   }
-  // Fallback for SSR
-  return (
-    process.env.NEXT_PUBLIC_API_URL ||
-    process.env.NEXT_PUBLIC_CONVERSATION_SERVICE_URL ||
-    'http://localhost:3001'
-  );
+  return getPublicApiBaseUrl();
 };
 
 export type ChatSocketEvents = {

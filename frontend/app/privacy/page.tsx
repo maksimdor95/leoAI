@@ -96,8 +96,8 @@ export default function PrivacyPage() {
             <h2 className="text-lg font-semibold text-green-100">Контакты по вопросам данных</h2>
             <p className="mt-2 text-sm leading-7 text-slate-300">
               По вопросам конфиденциальности и удаления данных напишите на{' '}
-              <a href="mailto:hello@leoai.com" className="text-green-300 hover:text-green-200">
-                hello@leoai.com
+              <a href="mailto:hello@leo-ai.ru" className="text-green-300 hover:text-green-200">
+                hello@leo-ai.ru
               </a>{' '}
               или в Telegram-поддержку{' '}
               <a

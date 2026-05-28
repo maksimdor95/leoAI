@@ -4,12 +4,11 @@
 
 import { getToken } from './auth';
 import { buildAuthHeaders } from './authHeaders';
+import { getPublicAiBaseUrl, getPublicApiBaseUrl } from './publicApiBaseUrl';
 
-const getUserProfileBaseUrl = () =>
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const getUserProfileBaseUrl = () => getPublicApiBaseUrl();
 
-const getAiBaseUrl = () =>
-  process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://localhost:3003';
+const getAiBaseUrl = () => getPublicAiBaseUrl();
 
 export type UploadResumeResponse = {
   resume: {

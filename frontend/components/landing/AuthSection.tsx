@@ -6,6 +6,7 @@ import { Form, Input, Button, Typography, message } from 'antd';
 import { MailOutlined, LockOutlined, UserOutlined } from '@ant-design/icons';
 import { userAPI } from '@/lib/api';
 import { saveToken } from '@/lib/auth';
+import { captureEvent } from '@/lib/analytics';
 
 type ApiError = {
   response?: {
@@ -59,6 +60,7 @@ export function AuthSection() {
       const result = await userAPI.login(values);
       if (result.token) {
         saveToken(result.token);
+        captureEvent('user_logged_in', { method: 'email' });
       }
       message.success('Вход выполнен успешно!');
       router.push('/chat');
@@ -81,6 +83,7 @@ export function AuthSection() {
       const result = await userAPI.register(values);
       if (result.token) {
         saveToken(result.token);
+        captureEvent('user_registered', { method: 'email' });
       }
       message.success('Регистрация успешна!');
       router.push('/chat');

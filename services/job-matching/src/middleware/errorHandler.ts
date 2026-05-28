@@ -4,6 +4,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
+import { Sentry } from '../utils/sentry';
 import { logger } from '../utils/logger';
 
 export interface AppError extends Error {
@@ -115,6 +116,9 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
 
   // Log error if needed
   if (shouldLogError(err)) {
+    Sentry.captureException(err instanceof Error ? err : new Error(message), {
+      extra: { method: req.method, path: req.path, statusCode },
+    });
     logger.error('Request error:', {
       method: req.method,
       path: req.path,

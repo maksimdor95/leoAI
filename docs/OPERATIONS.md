@@ -1,53 +1,84 @@
-# Эксплуатация и Настройка LEO AI
+# Эксплуатация и настройка LEO AI
 
-## 1. Локальная разработка (SETUP)
+*Актуально на 2026-05-27*
+
+## 1. Локальная разработка
 
 ### Требования
-- Node.js 18+, Docker, Docker Compose.
+
+- Node.js 18+, Docker, Docker Compose
 
 ### Быстрый старт
-1. `npm install` в корне и во всех `services/*`.
-2. `docker compose up -d` (запуск Postgres и Redis).
-3. `npm run dev:up` (запуск всех сервисов).
-4. Открыть `http://localhost:3000`.
+
+```bash
+# Корневой .env — DB_PASSWORD, JWT_SECRET, YC_*, SMTP, OAuth (см. HISTORY/CONFIGURATION.md)
+docker compose up -d          # PostgreSQL, Redis, resume-parser
+
+npm install
+npm run dev:up                # все сервисы + frontend (логи в .runlogs/)
+```
+
+Открыть http://localhost:3000
+
+### Полезные команды
+
+| Команда | Описание |
+|---------|----------|
+| `npm run dev:up` | Запуск всех сервисов |
+| `npm run dev:down` | Остановка |
+| `npm run dev:status` | Health по портам |
+| `npm run dev:up:staging` | Локально с `.env.staging.local` (OAuth → leo-ai.ru) |
+| `npm run smoke:mvp0` | Smoke-тест MVP0 |
 
 ---
 
 ## 2. Конфигурация (.env)
 
-Все сервисы требуют единый `JWT_SECRET`.
+Все backend-сервисы используют **один и тот же** `JWT_SECRET`.
 
-### Обязательные переменные
-- `DB_PASSWORD`, `JWT_SECRET`.
-- `YC_API_KEY`, `YC_FOLDER_ID` (для работы AI).
-- `SMTP_USER`, `SMTP_PASSWORD` (для Email).
+### Минимум для работы
+
+| Переменная | Назначение |
+|------------|------------|
+| `DB_PASSWORD` | PostgreSQL |
+| `JWT_SECRET` | Auth между сервисами |
+| `YC_API_KEY`, `YC_FOLDER_ID` | YandexGPT, TTS |
+| `SMTP_USER`, `SMTP_PASSWORD` | Email (или SendGrid) |
+
+Полный справочник: [HISTORY/CONFIGURATION.md](./HISTORY/CONFIGURATION.md)
 
 ### Справочник портов
-- Frontend: 3000
-- User Profile: 3001
-- Conversation: 3002
-- AI/NLP: 3003
-- Job Matching: 3004
-- Email: 3005
-- Report: 3007
+
+| Сервис | Порт |
+|--------|------|
+| Frontend | 3000 |
+| User Profile | 3001 |
+| Conversation | 3002 |
+| AI/NLP | 3003 |
+| Job Matching | 3004 |
+| Email | 3005 |
+| Report | 3007 |
+| Telegram Support | 3008 |
+| Resume Parser (Docker) | 3011 |
 
 ---
 
-## 3. Деплой на VPS (RUNBOOK)
+## 3. Staging / production (VPS)
 
-Актуальный контур: **Cloud.ru VPS + Docker Compose + Caddy**.
+Актуальный контур: **Cloud.ru VPS + Docker Compose + Caddy + `npm run dev:up:staging`**.
 
-### Команды для деплоя
+Подробный runbook: [STAGING_DEPLOY.md](./STAGING_DEPLOY.md)
+
 ```bash
-# Синхронизация кода
-rsync -avz --exclude ".git" --exclude "node_modules" ./ ubuntu@84.54.57.209:/home/ubuntu/leoAI/
-
-# Запуск на сервере
-ssh ubuntu@84.54.57.209 "cd /home/ubuntu/leoAI && docker compose up -d --build"
+ssh ubuntu@84.54.57.209
+cd ~/leoAI
+npm run dev:deploy:staging
 ```
 
-### Caddy (Reverse Proxy)
-Конфиг `/etc/caddy/Caddyfile`:
+Секреты на сервере: `.env.staging.local` (не в git).
+
+### Caddy (пример)
+
 ```caddy
 leo-ai.ru {
     reverse_proxy 127.0.0.1:3011
@@ -56,10 +87,34 @@ leo-ai.ru {
 
 ---
 
-## 4. Операционный чеклист (Ops)
+## 4. Операционный чеклист
 
-- **Статус:** `docker compose ps`.
-- **Логи:** `docker compose logs --tail=100 -f`.
-- **Health Check:** `https://leo-ai.ru/health`.
-- **Бэкап:** Настроен cron для дампа PostgreSQL.
-- **Безопасность:** Открыты только порты 22, 80, 443.
+| Действие | Команда / URL |
+|----------|----------------|
+| Статус сервисов на VPS | `npm run dev:status` |
+| Агрегированный health | `curl -s https://leo-ai.ru/api/health \| jq` |
+| Главная | `curl -s -o /dev/null -w "%{http_code}\n" https://leo-ai.ru/` |
+| Логи | `tail -50 ~/leoAI/.runlogs/frontend.log` |
+| Docker (БД) | `docker compose ps` |
+| Smoke | `npm run smoke:mvp0` |
+| Telegram bot health | `curl -s http://127.0.0.1:3008/health` (на VPS) |
+
+### Мониторинг
+
+- **Sentry:** `SENTRY_DSN` (сервисы), `NEXT_PUBLIC_SENTRY_DSN` (frontend)
+- **PostHog:** `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`
+
+Алерты и SLO-дашборды — в scope MVP 1.
+
+### Безопасность
+
+- Снаружи: порты 22, 80, 443
+- Не публиковать PostgreSQL/Redis наружу
+- Секреты только в `.env` / `.env.staging.local`, не в git
+
+---
+
+## 5. Поддержка пользователей
+
+- Telegram: [@leoaisupportbot](https://t.me/leoaisupportbot)
+- Документация бота: [services/telegram-support/README.md](../services/telegram-support/README.md)

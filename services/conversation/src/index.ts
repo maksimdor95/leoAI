@@ -3,6 +3,12 @@
  * WebSocket server for real-time chat with AI
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
+import { initSentry } from './utils/sentry';
+initSentry('conversation');
+
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -10,7 +16,6 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import { createClient } from 'redis';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import path from 'path';
 import { connectRedis } from './config/database';
 import { verifyToken } from './services/authService';
@@ -44,9 +49,6 @@ import { generateResumeDocxBuffer, generateResumePdfBuffer } from './services/re
 import { handleConversationCompletion } from './services/integrationService';
 import { validateAndLogConfig } from './utils/configValidator';
 import { getHealthStatus } from './utils/healthCheck';
-
-// Load environment variables
-dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
@@ -239,6 +241,17 @@ function getSpeakableTextFromAssistantMessage(message: Message | null): string {
   return '';
 }
 
+type AssistantAudioResult = Awaited<ReturnType<typeof synthesizeAssistantAudio>>;
+
+/** Привязывает TTS к id сообщения, для которого синтезировали аудио (важно при нескольких новых сообщениях в одном ответе). */
+function withAssistantAudioMessageId(
+  message: Message | null | undefined,
+  audio: AssistantAudioResult
+): (NonNullable<AssistantAudioResult> & { messageId: string }) | null {
+  if (!message?.id || !audio?.audioBase64) return null;
+  return { messageId: message.id, ...audio };
+}
+
 // API Routes
 // Get all conversations for authenticated user
 app.get('/api/conversations', authenticateRequest, async (req, res) => {
@@ -334,7 +347,8 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
 
     // Prepare entry step if needed
     const hydratedSession = await getSession(session.id);
-    let assistantAudio: Awaited<ReturnType<typeof synthesizeAssistantAudio>> = null;
+    let assistantAudio: AssistantAudioResult = null;
+    let entryAssistantMessage: Message | null = null;
     const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
     const token = extractBearerToken(
       typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
@@ -347,6 +361,7 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
         await updateSessionMetadata(hydratedSession.id, entryStepResult.metadataUpdates);
       }
       if (entryStepResult.message) {
+        entryAssistantMessage = entryStepResult.message;
         await addMessageToSession(hydratedSession.id, entryStepResult.message);
         const ttsText = getSpeakableTextFromAssistantMessage(entryStepResult.message);
         if (ttsText) {
@@ -365,7 +380,7 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
       sessionId: finalSession?.id,
       messages: finalSession?.messages || [],
       metadata: finalSession?.metadata,
-      assistantAudio,
+      assistantAudio: withAssistantAudioMessageId(entryAssistantMessage, assistantAudio),
     });
   } catch (error: unknown) {
     logger.error('Error creating/getting chat session:', error);
@@ -441,7 +456,7 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
     }
 
     let assistantMessage = null;
-    let assistantAudio: Awaited<ReturnType<typeof synthesizeAssistantAudio>> = null;
+    let assistantAudio: AssistantAudioResult = null;
     if (replyResult.message) {
       await addMessageToSession(session.id, replyResult.message);
       assistantMessage = replyResult.message;
@@ -489,7 +504,7 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
     res.json({
       userMessage,
       assistantMessage,
-      assistantAudio,
+      assistantAudio: withAssistantAudioMessageId(assistantMessage, assistantAudio),
       sessionId: updatedSession?.id,
       messages: updatedSession?.messages || [],
       metadata: updatedSession?.metadata,
@@ -531,7 +546,7 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
     );
 
     let assistantMessage = null;
-    let assistantAudio: Awaited<ReturnType<typeof synthesizeAssistantAudio>> = null;
+    let assistantAudio: AssistantAudioResult = null;
     if (result.message) {
       await addMessageToSession(session.id, result.message);
       assistantMessage = result.message;
@@ -551,7 +566,7 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
       messages: updatedSession?.messages || [],
       metadata: updatedSession?.metadata,
       assistantMessage,
-      assistantAudio,
+      assistantAudio: withAssistantAudioMessageId(assistantMessage, assistantAudio),
     });
   } catch (error: unknown) {
     logger.error('Error merging collected data:', error);
@@ -734,7 +749,7 @@ app.post('/api/chat/session/:id/resume-email', authenticateRequest, async (req, 
     };
 
     await addMessageToSession(session.id, assistantMessage);
-    let assistantAudio = null;
+    let assistantAudio: AssistantAudioResult = null;
     const ttsText = getSpeakableTextFromAssistantMessage(assistantMessage);
     if (ttsText) {
       assistantAudio = await synthesizeAssistantAudio({
@@ -750,7 +765,7 @@ app.post('/api/chat/session/:id/resume-email', authenticateRequest, async (req, 
       messages: updatedSession?.messages || [],
       metadata: updatedSession?.metadata,
       assistantMessage,
-      assistantAudio,
+      assistantAudio: withAssistantAudioMessageId(assistantMessage, assistantAudio),
       success: true,
       email: user.email,
     });
@@ -933,10 +948,11 @@ app.post('/api/chat/session/:id/command', authenticateRequest, async (req, res) 
       await updateSessionMetadata(session.id, commandResult.metadataUpdates);
     }
 
-    let assistantAudio: Awaited<ReturnType<typeof synthesizeAssistantAudio>> = null;
-    if (commandResult.message) {
-      await addMessageToSession(session.id, commandResult.message);
-      const ttsText = getSpeakableTextFromAssistantMessage(commandResult.message);
+    let assistantAudio: AssistantAudioResult = null;
+    const commandAssistantMessage = commandResult.message ?? null;
+    if (commandAssistantMessage) {
+      await addMessageToSession(session.id, commandAssistantMessage);
+      const ttsText = getSpeakableTextFromAssistantMessage(commandAssistantMessage);
       if (ttsText) {
         assistantAudio = await synthesizeAssistantAudio({
           text: ttsText,
@@ -966,7 +982,7 @@ app.post('/api/chat/session/:id/command', authenticateRequest, async (req, res) 
       sessionId: finalSession?.id,
       messages: finalSession?.messages || [],
       metadata: finalSession?.metadata,
-      assistantAudio,
+      assistantAudio: withAssistantAudioMessageId(commandAssistantMessage, assistantAudio),
     });
   } catch (error: unknown) {
     logger.error('Error executing chat command:', error);

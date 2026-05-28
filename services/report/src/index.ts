@@ -1,14 +1,17 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
+import { initSentry } from './utils/sentry';
+initSentry('report');
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import { logger } from './utils/logger';
 import { healthCheck } from './utils/healthCheck';
 import { errorHandler } from './middleware/errorHandler';
 import { reportRoutes } from './routes/reportRoutes';
 import { getRedisClient, closeRedisConnection } from './config/redis';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3007;

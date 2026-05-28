@@ -3,6 +3,7 @@ export interface Ticket {
   username?: string;
   displayName: string;
   source?: string;
+  siteUserId?: string;
   createdAt: number;
 }
 

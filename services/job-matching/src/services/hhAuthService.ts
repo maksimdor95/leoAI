@@ -57,15 +57,26 @@ export function getHHUserAgent(): string {
   return HH_USER_AGENT;
 }
 
+/** Application token from dev.hh.ru («Токен приложения», APPL…). Required for vacancy search (client). */
+export function getHHApplicationToken(): string | null {
+  const apiKey = process.env.HH_API_KEY?.trim();
+  return apiKey || null;
+}
+
 export async function getHHAccessToken(): Promise<string | null> {
+  const userToken = await getHHUserAccessToken();
+  if (userToken) {
+    return userToken;
+  }
+
+  return getHHApplicationToken();
+}
+
+/** User OAuth (USER…) for applicant methods, e.g. salary bank. */
+export async function getHHUserAccessToken(): Promise<string | null> {
   const directToken = process.env.HH_ACCESS_TOKEN?.trim();
   if (directToken) {
     return directToken;
-  }
-
-  const hhApiKey = process.env.HH_API_KEY?.trim();
-  if (hhApiKey) {
-    return hhApiKey;
   }
 
   const now = Date.now();

@@ -228,5 +228,5 @@ Response:
 ## Связанные документы
 
 - [ARCHITECTURE.md](../../docs/ARCHITECTURE.md) — общая архитектура
-- [WANNANEW.md](../../docs/WANNANEW.md) — документация wannanew
+- [WANNANEW.md](../../docs/HISTORY/WANNANEW.md) — документация wannanew
 - [Conversation Service](../conversation/README.md) — интеграция

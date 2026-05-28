@@ -3,10 +3,15 @@
  * Main entry point for the service
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
+import { initSentry } from './utils/sentry';
+initSentry('job-matching');
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import jobRoutes from './routes/jobRoutes';
 import pool from './config/database';
 import { logger } from './utils/logger';
@@ -15,9 +20,6 @@ import { scheduleRegularScraping, closeQueue } from './services/scrapingQueue';
 import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { getHealthStatus } from './utils/healthCheck';
-
-// Load environment variables
-dotenv.config();
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '8080', 10);

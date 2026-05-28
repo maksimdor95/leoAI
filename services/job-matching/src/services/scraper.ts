@@ -8,7 +8,7 @@ import { JobInput } from '../models/job';
 import jobRepository from '../models/jobRepository';
 import { logger } from '../utils/logger';
 import { retry, isRetryableError } from '../utils/retry';
-import { getHHUserAgent, hasHHAuthConfig } from './hhAuthService';
+import { getHHApplicationToken, getHHUserAgent, hasHHAuthConfig } from './hhAuthService';
 import { buildHhVacancyUrl } from '../utils/vacancyUrl';
 import { enrichJobWithLLM } from './enrichment';
 
@@ -16,6 +16,18 @@ const HH_API_URL = process.env.HH_API_URL || 'https://api.hh.ru';
 const SUPERJOB_API_URL = process.env.SUPERJOB_API_URL || 'https://api.superjob.ru/2.0';
 const SCRAPER_USER_AGENT = process.env.SCRAPER_USER_AGENT || getHHUserAgent();
 const USE_MOCK_JOBS = process.env.USE_MOCK_JOBS === 'true';
+
+function buildHHApiHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'User-Agent': SCRAPER_USER_AGENT,
+    'HH-User-Agent': SCRAPER_USER_AGENT,
+  };
+  const appToken = getHHApplicationToken();
+  if (appToken) {
+    headers.Authorization = `Bearer ${appToken}`;
+  }
+  return headers;
+}
 
 /** Москва в справочнике SuperJob `/towns/` (не путать с area id HeadHunter). */
 const SUPERJOB_DEFAULT_TOWN_ID = 4;
@@ -270,6 +282,15 @@ async function scrapeHHViaAPI(keywords: string[], locationId: number): Promise<J
   const jobs: JobInput[] = [];
   const perPage = 100;
 
+  if (!getHHApplicationToken()) {
+    logger.warn(
+      'HH vacancy search needs HH_API_KEY (application token «Токен приложения» on dev.hh.ru, APPL…)'
+    );
+    return jobs;
+  }
+
+  const hhHeaders = buildHHApiHeaders();
+
   for (const keyword of keywords.slice(0, 3)) {
     // Limit to 3 keywords for MVP
     try {
@@ -282,10 +303,7 @@ async function scrapeHHViaAPI(keywords: string[], locationId: number): Promise<J
               per_page: perPage,
               page: 0,
             },
-            headers: {
-              'User-Agent': SCRAPER_USER_AGENT,
-              'HH-User-Agent': SCRAPER_USER_AGENT,
-            },
+            headers: hhHeaders,
             timeout: 10000,
           }),
         {
@@ -516,10 +534,7 @@ async function fetchVacancyDetails(vacancyId: string): Promise<JobInput | null> 
     const response = await retry(
       () =>
         axios.get(`${HH_API_URL}/vacancies/${vacancyId}`, {
-          headers: {
-            'User-Agent': SCRAPER_USER_AGENT,
-            'HH-User-Agent': SCRAPER_USER_AGENT,
-          },
+          headers: buildHHApiHeaders(),
           timeout: 5000,
         }),
       {

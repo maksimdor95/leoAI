@@ -1,9 +1,18 @@
 'use client';
 
-const supportBotUrl = 'https://t.me/leoaisupportbot?start=support_site';
+import { useEffect, useState } from 'react';
+import { buildTelegramSupportUrl, getTelegramSupportUrl } from '@/lib/supportLink';
+
 const linkClass = 'text-slate-300 hover:text-green-200 transition-colors';
+const defaultSupportUrl = buildTelegramSupportUrl();
 
 export function Footer() {
+  const [supportBotUrl, setSupportBotUrl] = useState(defaultSupportUrl);
+
+  useEffect(() => {
+    setSupportBotUrl(getTelegramSupportUrl());
+  }, []);
+
   return (
     <footer className="bg-gradient-to-b from-[#07111f] to-[#050913] border-t border-white/10 py-14">
       <div className="max-w-7xl mx-auto px-6">
@@ -46,8 +55,8 @@ export function Footer() {
             <div className="mt-4 space-y-3 text-sm">
               <p>
                 <span className="text-slate-400">Email: </span>
-                <a href="mailto:hello@leoai.com" className={linkClass}>
-                  hello@leoai.com
+                <a href="mailto:hello@leo-ai.ru" className={linkClass}>
+                  hello@leo-ai.ru
                 </a>
               </p>
               <p>

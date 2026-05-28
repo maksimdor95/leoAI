@@ -2,10 +2,15 @@
  * AI/NLP Service entry point
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
+import { initSentry } from './utils/sentry';
+initSentry('ai-nlp');
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import { connectRedis } from './config/redis';
 import { processMessage } from './controllers/aiController';
 import { generateStepMessage, freeChat, generateProfileSummary, generateResume } from './controllers/generationController';
@@ -31,8 +36,6 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requireAuth } from './middleware/auth';
 import { aiRateLimit } from './middleware/rateLimit';
 import { getHealthStatus } from './utils/healthCheck';
-
-dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT || 3003);

@@ -15,22 +15,27 @@ SITE_URL="${STAGING_SITE_URL:-https://leo-ai.ru}"
 SKIP_PULL=0
 SKIP_INSTALL=0
 SKIP_DOCKER=0
+GIT_BRANCH="${STAGING_GIT_BRANCH:-main}"
+GIT_RESET=0
 
 usage() {
   cat <<'EOF'
 Usage: bash ./scripts/dev/deploy-staging.sh [options]
 
-Full staging deploy on VPS: optional git pull + npm install, docker up,
+Full staging deploy on VPS: optional git sync + npm install, docker up,
 stop stack, free ports, start with .env.staging.local, smoke curl.
 
 Options:
-  --skip-pull      Do not run git pull origin main
+  --skip-pull      Do not sync git
+  --branch NAME    Fetch and deploy this branch (default: main, or STAGING_GIT_BRANCH)
+  --reset          After fetch: git reset --hard origin/BRANCH (discards server edits)
   --skip-install   Do not run npm install (root, frontend, services/*)
   --skip-docker    Do not run docker compose up -d
   -h, --help       Show this help
 
 Examples:
   npm run dev:deploy:staging
+  bash ./scripts/dev/deploy-staging.sh --branch feat/staging-platform --reset
   bash ./scripts/dev/deploy-staging.sh --skip-pull
 EOF
 }
@@ -38,6 +43,11 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-pull) SKIP_PULL=1; shift ;;
+    --branch)
+      GIT_BRANCH="${2:?--branch requires a name}"
+      shift 2
+      ;;
+    --reset) GIT_RESET=1; shift ;;
     --skip-install) SKIP_INSTALL=1; shift ;;
     --skip-docker) SKIP_DOCKER=1; shift ;;
     -h | --help)
@@ -66,10 +76,19 @@ echo "Env:  $ENV_FILE"
 echo
 
 if [[ "$SKIP_PULL" -eq 0 ]]; then
-  echo "[1/6] git pull origin main..."
-  git pull origin main
+  echo "[1/6] git fetch origin ${GIT_BRANCH}..."
+  git fetch origin "$GIT_BRANCH"
+  if [[ "$GIT_RESET" -eq 1 ]]; then
+    echo "      git checkout -B ${GIT_BRANCH} origin/${GIT_BRANCH} && git reset --hard"
+    git checkout -B "$GIT_BRANCH" "origin/${GIT_BRANCH}"
+    git reset --hard "origin/${GIT_BRANCH}"
+  else
+    echo "      git pull origin ${GIT_BRANCH}"
+    git checkout "$GIT_BRANCH" 2>/dev/null || git checkout -b "$GIT_BRANCH" "origin/${GIT_BRANCH}"
+    git pull origin "$GIT_BRANCH"
+  fi
 else
-  echo "[1/6] git pull skipped"
+  echo "[1/6] git sync skipped"
 fi
 
 if [[ "$SKIP_INSTALL" -eq 0 ]]; then

@@ -3,18 +3,20 @@
  * Main entry point for the service
  */
 
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
+
+import { initSentry } from './utils/sentry';
+initSentry('email');
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import emailRoutes from './routes/emailRoutes';
 import { logger } from './utils/logger';
 import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { getHealthStatus } from './utils/healthCheck';
-
-// Load environment variables from local .env and allow overriding inherited shell vars.
-dotenv.config({ override: true });
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '8080', 10);

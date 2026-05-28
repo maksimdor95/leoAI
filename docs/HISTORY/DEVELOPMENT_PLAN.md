@@ -1,7 +1,10 @@
 # LeoAI — План разработки
 
-> Краткий план развития проекта. Детали архитектуры — в `ARCHITECTURE.md`.  
-> **Приоритизированный план улучшений по свежему анализу (анкета, вакансии, окружение):** [IMPROVEMENT_PLAN.md](./IMPROVEMENT_PLAN.md).
+> **Актуальный roadmap:** [../ROADMAP.md](../ROADMAP.md) · **Архитектура:** [../ARCHITECTURE.md](../ARCHITECTURE.md)  
+> Этот файл — расширенный снимок статусов и истории задач.  
+> **Приоритизированный план улучшений:** [IMPROVEMENT_PLAN.md](./IMPROVEMENT_PLAN.md).
+
+*Обновлено: 2026-05-27*
 
 ---
 
@@ -16,14 +19,19 @@
 
 | Компонент | Статус MVP 0 |
 |---|---|
-| User auth + profile | Implemented |
+| User auth + profile + OAuth (Google/Yandex) | Implemented |
 | Conversation orchestration (REST + WS dev) | Implemented |
-| Jack flow (matching + email) | Partial |
-| WannaNew flow (report preview + PDF) | Partial |
+| Interview Prep (Prompt V2) | Implemented |
+| Jack flow (matching + email) | Partial (нужен `HH_API_KEY` для live jobs) |
+| WannaNew flow (report preview + PDF) | Implemented |
 | Career onboarding (production persistence) | Partial |
+| Voice TTS (Yandex SpeechKit) | Implemented |
+| Voice STT (browser) | Partial (server STT — backlog) |
+| Telegram Support | Implemented |
+| Observability (Sentry + PostHog) | Implemented |
 | Security baseline (no fallback secrets, rate-limit, unified auth) | Implemented |
 | Smoke/integration release gate | Implemented |
-| Release runbook + staging rehearsal | Implemented |
+| Release runbook + staging on `leo-ai.ru` | Implemented |
 
 *Смысл статусов в таблице:* `Implemented` — закрыто по смыслу для MVP0; `Partial` — работает, остаётся существенный долг или риск; `Planned` — к релизу по пункту ещё не доведено.
 
@@ -47,7 +55,10 @@
 - [x] Экран выбора продукта (Jack / WannaNew)
 - [x] Темная тема
 - [x] Голосовой ввод (Web Speech API)
+- [x] Озвучка LEO через Yandex SpeechKit TTS (`POST /api/ai/tts`)
 - [x] UI-кнопки social login (Google/Yandex) + OAuth callback page
+- [x] Privacy / Terms, PostHog, Sentry (client)
+- [x] Ссылка на Telegram Support в UI
 
 ### Conversation Service
 - [x] REST API + WebSocket
@@ -58,6 +69,12 @@
 ### AI/NLP Service
 - [x] Интеграция YandexGPT
 - [x] Эндпоинты: generate-step, validate-answer, analyze-profile, check-context, free-chat
+- [x] TTS (Yandex SpeechKit), Interview Prep (`/api/ai/interview/*`)
+- [x] Sentry в error handler
+
+### Telegram Support Service
+- [x] Бот @leoaisupportbot, тикеты в группу LEO Support
+- [x] Polling (dev) / webhook + ngrok (VPS)
 
 ### Job Matching Service
 - [x] HH.ru API scraper + mock-режим
@@ -90,13 +107,17 @@
 
 ## Текущие задачи (приоритет: высокий)
 
-- [ ] Настроить API-ключи (YC_API_KEY, HH_API_KEY, SMTP) для полноценной работы
-- [ ] Настроить production OAuth credentials (Google/Yandex) и redirect URI под `https://leo-ai.ru`
-- [ ] Унифицировать голосовой контур: server-side STT/TTS (SpeechKit) как production baseline
+- [x] Production OAuth (Google/Yandex) + redirect URI `https://leo-ai.ru` (2026-05)
+- [x] TTS на Yandex SpeechKit (2026-05)
+- [x] Sentry + PostHog на стенде (2026-05)
+- [x] Telegram Support на стенде (2026-05)
+- [ ] `HH_API_KEY` / SuperJob для живого Jack matching на проде
+- [ ] Server-side STT (SpeechKit) — остаётся browser STT для ввода
 - [ ] E2E тестирование полного flow (регистрация -> диалог -> результат)
 - [ ] Автоматические тесты (Jest) для всех сервисов
-- [ ] CI/CD pipeline (GitHub Actions -> Yandex Cloud)
-- [ ] API Gateway (nginx) для production
+- [ ] CI/CD pipeline (GitHub Actions)
+- [ ] API Gateway (единая точка `/api/*`) — опционально при росте
+- [ ] Sentry alerts / SLO dashboards (MVP 1)
 
 ### Smoke gate (MVP 0)
 
@@ -124,9 +145,9 @@
 - [ ] Дополнительные источники вакансий
 
 ### Расширение WannaNew
-- [ ] Загрузка резюме
+- [x] Загрузка резюме (career upload + extract-profile-from-resume)
 - [ ] Расширенное интервью (5-7 вопросов)
-- [ ] AI-скоринг ответов
+- [x] AI-скоринг ответов (Interview Prep Prompt V2)
 - [ ] Gap-анализ навыков
 
 ### AI Career Onboarding (Stage 1)
@@ -137,14 +158,17 @@
 - [ ] AI Readiness Score — общая оценка готовности
 
 ### Premium Voice
-- [ ] Интеграция Yandex SpeechKit (TTS + STT)
+- [x] Yandex SpeechKit TTS (production)
+- [ ] Yandex SpeechKit STT (server-side ввод)
 
 ### Production
-- [ ] Мониторинг (Sentry, Prometheus/Grafana)
-- [ ] Аудит безопасности
-- [ ] Rate limiting
-- [x] SSL-сертификаты (Caddy + `leo-ai.ru`, 2026-05-06)
-- [x] VPS runbook зафиксирован (`docs/VPS_STAGING_RUNBOOK.md`, 2026-05-06)
+- [x] Sentry (все сервисы + frontend)
+- [x] PostHog (frontend)
+- [ ] Prometheus/Grafana, формальные SLO
+- [ ] Аудит безопасности (полный)
+- [x] Rate limiting на `/api/ai/*`
+- [x] SSL (Caddy + `leo-ai.ru`, 2026-05-06)
+- [x] VPS runbook ([VPS_STAGING_RUNBOOK.md](./VPS_STAGING_RUNBOOK.md), [../STAGING_DEPLOY.md](../STAGING_DEPLOY.md))
 - [ ] Автоматизированный backup PostgreSQL (cron + retention + restore smoke)
 
 ---
@@ -170,4 +194,4 @@
 
 Уже закрыто в коде (проверять при регрессии): передача `product` при создании сессии по WebSocket; вызов интеграции при завершении по REST; триггер report для wannanew; CORS `localhost` + `127.0.0.1` для user-profile.
 
-Уже закрыто в инфраструктуре (2026-05-06): рабочий VPS-контур (`Cloud.ru + Docker Compose + Caddy HTTPS`) и публичный health-check `https://leo-ai.ru/health`.
+Уже закрыто в инфраструктуре (2026-05): VPS (`Cloud.ru + Docker Compose + Caddy HTTPS`), агрегированный health `https://leo-ai.ru/api/health`, альфа-тест: [../ALPHA_TEST.md](../ALPHA_TEST.md).

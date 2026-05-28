@@ -1,6 +1,8 @@
 # MVP 1 Daily Execution Checklist
 
-Этот документ вынесен из `MVP0_DAILY_EXECUTION_CHECKLIST.md`, чтобы рабочий контур MVP0 был короче и проще.
+> План MVP 1: [MVP1_PRODUCT_PLATFORM_PLAN.md](./MVP1_PRODUCT_PLATFORM_PLAN.md) · Roadmap: [../ROADMAP.md](../ROADMAP.md)
+
+Этот документ вынесен из `MVP0_DAILY_EXECUTION_CHECKLIST.md`. MVP 0 завершён (2026-05).
 
 Фокус MVP1: event-driven контур, управляемое качество AI, cost control, observability и безопасная эксплуатация.
 

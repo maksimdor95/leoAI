@@ -9,6 +9,7 @@
 export function saveToken(token: string): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem('token', token);
+    void import('./analytics').then(({ identifyFromToken }) => identifyFromToken(token));
   }
 }
 
@@ -39,6 +40,7 @@ export function clearClientAuthState(): void {
   if (typeof document !== 'undefined') {
     document.cookie = 'leo_auth=; Max-Age=0; path=/; SameSite=Lax';
   }
+  void import('./analytics').then(({ resetAnalyticsUser }) => resetAnalyticsUser());
 }
 
 /**

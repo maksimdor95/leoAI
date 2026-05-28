@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from 'antd';
 import { CheckCircleFilled, LoadingOutlined } from '@ant-design/icons';
 import { saveToken } from '@/lib/auth';
+import { captureEvent } from '@/lib/analytics';
 
 function FloatingDots() {
   const dots = [
@@ -44,6 +45,7 @@ export function OAuthCallbackClient() {
     if (isSuccess) {
       if (token) {
         saveToken(token);
+        captureEvent('user_logged_in', { method: 'oauth' });
       }
       router.replace('/chat');
     }

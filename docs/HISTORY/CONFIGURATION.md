@@ -397,8 +397,12 @@ USE_MOCK_JOBS=false
 | `NEXT_PUBLIC_JOB_MATCHING_URL`         | URL Job Matching (подбор вакансий в браузере). Если не задан: при `NEXT_PUBLIC_API_URL` с `:3001` — та же схема с портом `3004`; при `https://…` без порта — тот же публичный хост (gateway, `/api/jobs/`); иначе `http://127.0.0.1:3004` | — |
 | `NEXT_PUBLIC_CONVERSATION_API_URL`     | URL Conversation Service API       | `http://localhost:3002` |
 | `NEXT_PUBLIC_CONVERSATION_SERVICE_URL` | URL Conversation Service WebSocket | `http://localhost:3002` |
+| `NEXT_PUBLIC_SENTRY_DSN`               | Sentry DSN (frontend)              | —                       |
+| `NEXT_PUBLIC_POSTHOG_KEY`              | PostHog project key                | —                       |
+| `NEXT_PUBLIC_POSTHOG_HOST`             | PostHog API host                   | `https://eu.i.posthog.com` |
+| `NEXT_PUBLIC_ENABLE_BROWSER_TTS_FALLBACK` | Браузерный TTS если серверный недоступен | `false` |
 
-**Для production:** Используйте публичные URL или CDN.
+**Для production (`leo-ai.ru`):** API-вызовы идут на тот же origin; `NEXT_PUBLIC_API_URL` не обязателен. См. [../STAGING_DEPLOY.md](../STAGING_DEPLOY.md).
 
 ### CORS
 
@@ -427,15 +431,27 @@ USE_MOCK_JOBS=false
 
 ### Sentry
 
-| Переменная   | Описание       | Обязательно |
-| ------------ | -------------- | ----------- |
-| `SENTRY_DSN` | DSN для Sentry | Нет         |
+| Переменная                | Описание                          | Обязательно |
+| ------------------------- | --------------------------------- | ----------- |
+| `SENTRY_DSN`              | DSN для backend-сервисов          | Нет         |
+| `NEXT_PUBLIC_SENTRY_DSN`  | DSN для Next.js (браузер + SSR)   | Нет         |
+
+Подключено в: `user-profile`, `conversation`, `ai-nlp`, `job-matching`, `email`, `report`, `telegram-support`, `frontend`.
 
 **Как получить DSN:**
 
 1. Зарегистрируйтесь на [Sentry](https://sentry.io/)
-2. Создайте проект
-3. Скопируйте DSN в `.env`
+2. Создайте проект(ы) для Node и Next.js
+3. Скопируйте DSN в `.env` / `.env.staging.local`
+
+### PostHog (product analytics)
+
+| Переменная                   | Описание              | Обязательно |
+| ---------------------------- | --------------------- | ----------- |
+| `NEXT_PUBLIC_POSTHOG_KEY`    | Project API key       | Нет         |
+| `NEXT_PUBLIC_POSTHOG_HOST`   | Ingest host           | Нет (`https://eu.i.posthog.com`) |
+
+Без ключа аналитика отключена (`PostHogProvider`).
 
 ### DataDog
 
@@ -443,6 +459,24 @@ USE_MOCK_JOBS=false
 | ------------ | ---------------- | ----------- |
 | `DD_API_KEY` | API ключ DataDog | Нет         |
 | `DD_APP_KEY` | App ключ DataDog | Нет         |
+
+## Telegram Support Service
+
+См. также [services/telegram-support/README.md](../../services/telegram-support/README.md).
+
+| Переменная | Описание | Обязательно |
+| ---------- | -------- | ----------- |
+| `TELEGRAM_BOT_TOKEN` | Токен от @BotFather | Да |
+| `TELEGRAM_SUPPORT_CHAT_ID` | ID группы LEO Support | Да |
+| `TELEGRAM_SITE_URL` | Ссылка на сайт в сообщениях бота | Нет (`https://leo-ai.ru`) |
+| `TELEGRAM_USE_POLLING` | `true` — long polling (локально); `false` — webhook | `true` в dev |
+| `TELEGRAM_WEBHOOK_URL` | Публичный URL webhook | При webhook mode |
+| `TELEGRAM_WEBHOOK_SECRET` | Secret для `X-Telegram-Bot-Api-Secret-Token` | Рекомендуется |
+| `TELEGRAM_PROXY_URL` | HTTP/SOCKS прокси для Bot API (VPS в РФ) | На VPS часто да |
+| `TELEGRAM_NGROK_AUTOSYNC` | Взять URL из ngrok API (`127.0.0.1:4040`) | На VPS с ngrok |
+| `TELEGRAM_OPERATOR_IDS` | Telegram user ID операторов (опционально) | Нет |
+
+Порт сервиса: **3008**.
 
 ## Rate Limiting
 
@@ -536,4 +570,5 @@ Please set the required environment variables and restart the service.
 
 - Полный список переменных: см. этот документ и `.env` в локальной среде
 - Настройка Docker: см. `infrastructure/DOCKER_GUIDE.md`
-- Архитектура: см. `docs/ARCHITECTURE.md`
+- Архитектура: [../ARCHITECTURE.md](../ARCHITECTURE.md)
+- Staging deploy: [../STAGING_DEPLOY.md](../STAGING_DEPLOY.md)

@@ -1,0 +1,24 @@
+# systemd unit for ngrok → telegram-support (port 3008) on VPS.
+#
+#   sudo cp infrastructure/ngrok/telegram-support.service.example /etc/systemd/system/ngrok-telegram.service
+#   sudo nano /etc/systemd/system/ngrok-telegram.service   # set User, paths, NGROK_AUTHTOKEN
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ngrok-telegram
+#
+# ngrok must start BEFORE telegram-support when using TELEGRAM_NGROK_AUTOSYNC=true.
+
+[Unit]
+Description=ngrok tunnel for LEO telegram-support
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Environment=NGROK_AUTHTOKEN=your_token_here
+ExecStart=/usr/local/bin/ngrok start --config /home/ubuntu/leoAI/infrastructure/ngrok/telegram-support.yml leo-telegram
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

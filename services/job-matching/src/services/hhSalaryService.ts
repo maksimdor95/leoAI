@@ -1,6 +1,6 @@
 import axios, { AxiosError, isAxiosError } from 'axios';
 import { logger } from '../utils/logger';
-import { getHHAccessToken, getHHUserAgent } from './hhAuthService';
+import { getHHUserAccessToken, getHHUserAgent } from './hhAuthService';
 
 const HH_API_URL = process.env.HH_API_URL || 'https://api.hh.ru';
 const HH_USER_AGENT = getHHUserAgent();
@@ -186,7 +186,7 @@ export async function getSalaryEvaluation(
     throw new Error('areaId must be a positive integer');
   }
 
-  const token = await getHHAccessToken();
+  const token = await getHHUserAccessToken();
   if (!token) {
     throw new Error('Failed to obtain HH access token for salary API');
   }

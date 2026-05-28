@@ -10,12 +10,19 @@ import {
 } from '../messages';
 import * as telegram from '../services/telegramApi';
 import { nextTicketNumber, saveTicket, type Ticket } from '../services/ticketStore';
+import { getSiteUserId, linkTelegramToSite } from '../services/userLinkStore';
 import type { TelegramMessage } from '../types/telegram';
 import { logger } from '../utils/logger';
 
 function parseStartParam(text: string): string | undefined {
   const match = text.trim().match(/^\/start(?:@\w+)?(?:\s+(.+))?$/i);
   return match?.[1]?.trim() || undefined;
+}
+
+function parseSiteUserIdFromStart(startParam?: string): string | undefined {
+  if (!startParam?.startsWith('u_')) return undefined;
+  const siteUserId = startParam.slice(2).trim();
+  return siteUserId || undefined;
 }
 
 function isCommand(text: string, command: string): boolean {
@@ -37,7 +44,16 @@ export async function handlePrivateMessage(message: TelegramMessage): Promise<vo
   const text = message.text?.trim() || '';
 
   if (text && isCommand(text, '/start')) {
-    await telegram.sendMessage(userId, welcomeText(parseStartParam(text)));
+    const startParam = parseStartParam(text);
+    const siteUserIdFromStart = parseSiteUserIdFromStart(startParam);
+    if (siteUserIdFromStart) {
+      linkTelegramToSite(userId, siteUserIdFromStart);
+      logger.info(`Linked Telegram ${userId} → site user ${siteUserIdFromStart}`);
+    }
+    await telegram.sendMessage(
+      userId,
+      welcomeText(startParam, Boolean(siteUserIdFromStart || getSiteUserId(userId)))
+    );
     return;
   }
 
@@ -63,14 +79,24 @@ async function forwardToSupport(
   const ticketNo = nextTicketNumber();
   const name = displayName(from);
 
+  const siteUserId = getSiteUserId(from.id);
+
   const ticket: Ticket = {
     userId: from.id,
     username: from.username,
     displayName: name,
+    siteUserId,
     createdAt: Date.now(),
   };
 
-  const header = formatTicketHeader(ticketNo, name, from.username, from.id, ticket.source);
+  const header = formatTicketHeader(
+    ticketNo,
+    name,
+    from.username,
+    from.id,
+    ticket.source,
+    siteUserId
+  );
   const userText = message.text || message.caption;
 
   if (userText && !userText.startsWith('/')) {

@@ -28,6 +28,7 @@ import {
 } from '@/types/chat';
 import { createChatApi, ChatApi } from '@/lib/chatApi';
 import { clearClientAuthState, getToken, isAuthenticated } from '@/lib/auth';
+import { captureEvent } from '@/lib/analytics';
 import { userAPI } from '@/lib/api';
 import { jackCollectedDataReadyForJobMatch } from '@/lib/jackProfileGating';
 import { getPublicJobMatchingBaseUrl } from '@/lib/publicJobMatchingUrl';
@@ -243,6 +244,7 @@ function ChatPageContent() {
   const ttsBeatAtRef = useRef(0);
   const assistantVoiceLevelRef = useRef(0);
   const assistantAudioElRef = useRef<HTMLAudioElement | null>(null);
+  const unlockAudioElRef = useRef<HTMLAudioElement | null>(null);
   const assistantAudioCtxRef = useRef<AudioContext | null>(null);
   const assistantAudioAnalyserRef = useRef<AnalyserNode | null>(null);
   const assistantAudioSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
@@ -253,8 +255,10 @@ function ChatPageContent() {
   >(new Map());
   const typingMessageIdRef = useRef<string | null>(null);
   const handledSpeechMessageIdsRef = useRef<Set<string>>(new Set());
+  const speechChainRef = useRef(Promise.resolve());
+  /** Браузерный speechSynthesis только если явно включён — иначе только Яндекс TTS с сервера. */
   const enableBrowserTtsFallbackRef = useRef(
-    process.env.NEXT_PUBLIC_ENABLE_BROWSER_TTS_FALLBACK !== 'false'
+    process.env.NEXT_PUBLIC_ENABLE_BROWSER_TTS_FALLBACK === 'true'
   );
   const lastSpokenTextRef = useRef<string>('');
   const lastSpokenAtRef = useRef<number>(0);
@@ -444,6 +448,37 @@ function ChatPageContent() {
     setIsTtsSpeaking(false);
   }, []);
 
+  const isAssistantAudioPlaying = useCallback(() => {
+    const el = assistantAudioElRef.current;
+    return Boolean(el && !el.paused && !el.ended);
+  }, []);
+
+  const waitForAssistantAudioEnd = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        const el = assistantAudioElRef.current;
+        if (!el || el.paused || el.ended) {
+          resolve();
+          return;
+        }
+        const done = () => {
+          el.removeEventListener('ended', done);
+          resolve();
+        };
+        el.addEventListener('ended', done);
+      }),
+    []
+  );
+
+  const runSpeechExclusive = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
+    const next = speechChainRef.current.then(task, task);
+    speechChainRef.current = next.then(
+      () => undefined,
+      () => undefined
+    );
+    return next;
+  }, []);
+
   const ensureAssistantAudioChain = useCallback(() => {
     if (typeof window === 'undefined') return null;
     let el = assistantAudioElRef.current;
@@ -521,23 +556,19 @@ function ChatPageContent() {
 
   const unlockAudio = useCallback(() => {
     if (typeof window === 'undefined') return;
-    const el = ensureAssistantAudioChain();
-    if (el && el.paused) {
-      // Play a tiny silent audio to unlock autoplay on mobile/safari
-      const silentSrc = 'data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
-      if (el.src !== silentSrc) {
-        const prevSrc = el.src;
-        el.src = silentSrc;
-        el.play().catch(() => {}).finally(() => {
-          if (el.src === silentSrc) {
-            el.src = prevSrc;
-          }
-        });
-      }
+    // Отдельный элемент — не трогаем assistantAudioElRef, иначе сбивается Яндекс TTS при отправке сообщения.
+    let el = unlockAudioElRef.current;
+    if (!el) {
+      el = new Audio();
+      unlockAudioElRef.current = el;
     }
+    const silentSrc =
+      'data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
+    el.src = silentSrc;
+    void el.play().catch(() => {});
 
-    // Also unlock AudioContext if suspended
-    if (assistantAudioCtxRef.current && assistantAudioCtxRef.current.state === 'suspended') {
+    void ensureAssistantAudioChain();
+    if (assistantAudioCtxRef.current?.state === 'suspended') {
       assistantAudioCtxRef.current.resume().catch(() => {});
     }
   }, [ensureAssistantAudioChain]);
@@ -545,15 +576,15 @@ function ChatPageContent() {
   const speakFallback = useCallback(
     (text: string) => {
       if (typeof window === 'undefined' || isMuted || !text?.trim()) return;
-      
-      // Stop any currently playing assistant audio (e.g. Yandex TTS)
-      stopAssistantAudio();
+      if (isAssistantAudioPlaying()) return;
 
       const normalized = text.trim().toLowerCase().replace(/\s+/g, ' ');
       const now = Date.now();
       if (normalized && normalized === lastSpokenTextRef.current && now - lastSpokenAtRef.current < 4500) {
         return;
       }
+
+      stopAssistantAudio();
       lastSpokenTextRef.current = normalized;
       lastSpokenAtRef.current = now;
       window.speechSynthesis.cancel();
@@ -569,16 +600,16 @@ function ChatPageContent() {
       utterance.onerror = () => setIsTtsSpeaking(false);
       window.speechSynthesis.speak(utterance);
     },
-    [isMuted, stopAssistantAudio]
+    [isAssistantAudioPlaying, isMuted, stopAssistantAudio]
   );
 
   const playAssistantAudio = useCallback(
     async (payload: { audioBase64: string; mimeType?: string }) => {
       if (isMuted || !payload.audioBase64) return false;
       if (typeof window !== 'undefined') {
-        // Prevent overlap with browser TTS fallback.
         window.speechSynthesis.cancel();
       }
+      stopAssistantAudio();
       const el = ensureAssistantAudioChain();
       if (!el) return false;
       const mime = payload.mimeType || 'audio/mpeg';
@@ -595,11 +626,11 @@ function ChatPageContent() {
         return false;
       }
     },
-    [ensureAssistantAudioChain, isMuted]
+    [ensureAssistantAudioChain, isMuted, stopAssistantAudio]
   );
 
   const waitForAssistantAudio = useCallback(
-    (messageId: string, timeoutMs = 4000) =>
+    (messageId: string, timeoutMs = 8000) =>
       new Promise<{ audioBase64: string; mimeType?: string; format?: 'mp3' | 'oggopus' } | null>(
         (resolve) => {
           const startedAt = Date.now();
@@ -622,78 +653,96 @@ function ChatPageContent() {
   );
 
   const speakQuestionWithPriority = useCallback(
-    async (message: QuestionMessage) => {
-      const messageId = message?.id;
-      if (!messageId || handledSpeechMessageIdsRef.current.has(messageId)) return;
-      handledSpeechMessageIdsRef.current.add(messageId);
-      if (handledSpeechMessageIdsRef.current.size > 300) {
-        const first = handledSpeechMessageIdsRef.current.values().next().value;
-        if (first) handledSpeechMessageIdsRef.current.delete(first);
-      }
-
-      let payload = assistantAudioByMessageIdRef.current.get(messageId) || null;
-      if (!payload) {
-        payload = await waitForAssistantAudio(messageId);
-      }
-
-      if (payload) {
-        assistantAudioByMessageIdRef.current.delete(messageId);
-        const played = await playAssistantAudio(payload);
-        if (!played && enableBrowserTtsFallbackRef.current) {
-          speakFallback(message.question);
-        } else if (played) {
-          lastSpokenTextRef.current = message.question.trim().toLowerCase().replace(/\s+/g, ' ');
-          lastSpokenAtRef.current = Date.now();
+    (message: QuestionMessage) =>
+      runSpeechExclusive(async () => {
+        const messageId = message?.id;
+        if (!messageId || handledSpeechMessageIdsRef.current.has(messageId)) return;
+        handledSpeechMessageIdsRef.current.add(messageId);
+        if (handledSpeechMessageIdsRef.current.size > 300) {
+          const first = handledSpeechMessageIdsRef.current.values().next().value;
+          if (first) handledSpeechMessageIdsRef.current.delete(first);
         }
-        return;
-      }
 
-      if (enableBrowserTtsFallbackRef.current) {
+        let payload = assistantAudioByMessageIdRef.current.get(messageId) || null;
+        if (!payload) {
+          payload = await waitForAssistantAudio(messageId);
+        }
+
+        if (payload) {
+          assistantAudioByMessageIdRef.current.delete(messageId);
+          const played = await playAssistantAudio(payload);
+          if (played) {
+            lastSpokenTextRef.current = message.question.trim().toLowerCase().replace(/\s+/g, ' ');
+            lastSpokenAtRef.current = Date.now();
+            await waitForAssistantAudioEnd();
+            return;
+          }
+          if (!enableBrowserTtsFallbackRef.current || isAssistantAudioPlaying()) return;
+          speakFallback(message.question);
+          return;
+        }
+
+        if (!enableBrowserTtsFallbackRef.current || isAssistantAudioPlaying()) return;
         speakFallback(message.question);
-      }
-    },
-    [playAssistantAudio, speakFallback, waitForAssistantAudio]
+      }),
+    [
+      isAssistantAudioPlaying,
+      playAssistantAudio,
+      runSpeechExclusive,
+      speakFallback,
+      waitForAssistantAudio,
+      waitForAssistantAudioEnd,
+    ]
   );
 
   /** Озвучка ответов text / info_card (план, карточка вакансии, диагностика и т.д.) — раньше в очередь попадали только question. */
   const speakAssistantMessageWithPriority = useCallback(
-    async (message: Message) => {
-      if (message.role !== MessageRole.ASSISTANT) return;
-      if (message.type === MessageType.QUESTION) return;
+    (message: Message) =>
+      runSpeechExclusive(async () => {
+        if (message.role !== MessageRole.ASSISTANT) return;
+        if (message.type === MessageType.QUESTION) return;
 
-      const text = getAssistantSpeakableTextForTts(message);
-      if (!text) return;
+        const text = getAssistantSpeakableTextForTts(message);
+        if (!text) return;
 
-      const messageId = message.id;
-      if (!messageId || handledSpeechMessageIdsRef.current.has(messageId)) return;
-      handledSpeechMessageIdsRef.current.add(messageId);
-      if (handledSpeechMessageIdsRef.current.size > 300) {
-        const first = handledSpeechMessageIdsRef.current.values().next().value;
-        if (first) handledSpeechMessageIdsRef.current.delete(first);
-      }
-
-      let payload = assistantAudioByMessageIdRef.current.get(messageId) || null;
-      if (!payload) {
-        payload = await waitForAssistantAudio(messageId);
-      }
-
-      if (payload) {
-        assistantAudioByMessageIdRef.current.delete(messageId);
-        const played = await playAssistantAudio(payload);
-        if (!played && enableBrowserTtsFallbackRef.current) {
-          speakFallback(text);
-        } else if (played) {
-          lastSpokenTextRef.current = text.trim().toLowerCase().replace(/\s+/g, ' ');
-          lastSpokenAtRef.current = Date.now();
+        const messageId = message.id;
+        if (!messageId || handledSpeechMessageIdsRef.current.has(messageId)) return;
+        handledSpeechMessageIdsRef.current.add(messageId);
+        if (handledSpeechMessageIdsRef.current.size > 300) {
+          const first = handledSpeechMessageIdsRef.current.values().next().value;
+          if (first) handledSpeechMessageIdsRef.current.delete(first);
         }
-        return;
-      }
 
-      if (enableBrowserTtsFallbackRef.current) {
+        let payload = assistantAudioByMessageIdRef.current.get(messageId) || null;
+        if (!payload) {
+          payload = await waitForAssistantAudio(messageId);
+        }
+
+        if (payload) {
+          assistantAudioByMessageIdRef.current.delete(messageId);
+          const played = await playAssistantAudio(payload);
+          if (played) {
+            lastSpokenTextRef.current = text.trim().toLowerCase().replace(/\s+/g, ' ');
+            lastSpokenAtRef.current = Date.now();
+            await waitForAssistantAudioEnd();
+            return;
+          }
+          if (!enableBrowserTtsFallbackRef.current || isAssistantAudioPlaying()) return;
+          speakFallback(text);
+          return;
+        }
+
+        if (!enableBrowserTtsFallbackRef.current || isAssistantAudioPlaying()) return;
         speakFallback(text);
-      }
-    },
-    [playAssistantAudio, speakFallback, waitForAssistantAudio]
+      }),
+    [
+      isAssistantAudioPlaying,
+      playAssistantAudio,
+      runSpeechExclusive,
+      speakFallback,
+      waitForAssistantAudio,
+      waitForAssistantAudioEnd,
+    ]
   );
 
   const voiceMode = useMemo((): VoiceIndicatorMode => {
@@ -754,6 +803,7 @@ function ChatPageContent() {
     setError(null);
     setMessages([]);
     handledSpeechMessageIdsRef.current.clear();
+    speechChainRef.current = Promise.resolve();
     setSessionId(null);
     setCurrentProduct(product);
     autoStarterSentRef.current = false;
@@ -1711,6 +1761,7 @@ function ChatPageContent() {
         } catch {
           // Even if backend logout fails, clear local auth state.
         }
+        captureEvent('user_logged_out');
         clearClientAuthState();
         // Disconnect chat
         chatRef.current?.disconnect();

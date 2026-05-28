@@ -6,15 +6,9 @@
 import { getToken } from '@/lib/auth';
 import { buildAuthHeaders } from '@/lib/authHeaders';
 import { Message } from '@/types/chat';
+import { getPublicConversationBaseUrl } from './publicApiBaseUrl';
 
-const getApiUrl = () => {
-  // Всегда используем переменную окружения, даже в браузере
-  // В dev: из .env.local
-  // В production: встроено в код при сборке из Dockerfile ARG
-  return process.env.NEXT_PUBLIC_CONVERSATION_API_URL || 
-         process.env.NEXT_PUBLIC_API_URL || 
-         'http://localhost:3002';
-};
+const getApiUrl = () => getPublicConversationBaseUrl();
 
 type ProductType = 'jack' | 'wannanew' | 'interview-prep';
 
@@ -26,34 +20,29 @@ interface SessionMetadata {
   [key: string]: unknown;
 }
 
+interface AssistantAudioPayload {
+  messageId?: string;
+  audioBase64: string;
+  mimeType?: string;
+  format?: 'mp3' | 'oggopus';
+}
+
 interface ChatSession {
   sessionId: string;
   messages: Message[];
   metadata: SessionMetadata;
-  assistantAudio?: {
-    audioBase64: string;
-    mimeType?: string;
-    format?: 'mp3' | 'oggopus';
-  } | null;
+  assistantAudio?: AssistantAudioPayload | null;
 }
 
 interface SendMessageResponse extends ChatSession {
   userMessage: Message;
   assistantMessage: Message | null;
-  assistantAudio?: {
-    audioBase64: string;
-    mimeType?: string;
-    format?: 'mp3' | 'oggopus';
-  } | null;
+  assistantAudio?: AssistantAudioPayload | null;
 }
 
 interface MergeCollectedResponse extends ChatSession {
   assistantMessage: Message | null;
-  assistantAudio?: {
-    audioBase64: string;
-    mimeType?: string;
-    format?: 'mp3' | 'oggopus';
-  } | null;
+  assistantAudio?: AssistantAudioPayload | null;
 }
 
 interface GenerateResumeResponse extends ChatSession {
@@ -61,22 +50,14 @@ interface GenerateResumeResponse extends ChatSession {
   format: 'markdown' | 'text' | 'json';
   assistantMessage: Message | null;
   downloadCommand?: Message | null;
-  assistantAudio?: {
-    audioBase64: string;
-    mimeType?: string;
-    format?: 'mp3' | 'oggopus';
-  } | null;
+  assistantAudio?: AssistantAudioPayload | null;
 }
 
 interface SendResumeEmailResponse extends ChatSession {
   success: boolean;
   email: string;
   assistantMessage: Message | null;
-  assistantAudio?: {
-    audioBase64: string;
-    mimeType?: string;
-    format?: 'mp3' | 'oggopus';
-  } | null;
+  assistantAudio?: AssistantAudioPayload | null;
 }
 
 class ChatApiClient {
@@ -104,6 +85,21 @@ class ChatApiClient {
 
   constructor(baseUrl?: string) {
     this.baseUrl = baseUrl || getApiUrl();
+  }
+
+  private emitAssistantAudio(
+    audio: AssistantAudioPayload | null | undefined,
+    fallbackMessage: Message | null | undefined
+  ): void {
+    if (!audio?.audioBase64) return;
+    const messageId = audio.messageId ?? fallbackMessage?.id;
+    if (!messageId) return;
+    this.onAssistantAudio?.({
+      messageId,
+      audioBase64: audio.audioBase64,
+      mimeType: audio.mimeType,
+      format: audio.format,
+    });
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -171,17 +167,11 @@ class ChatApiClient {
       this.onSessionJoined?.(session.sessionId, session.metadata);
 
       if (session.assistantAudio?.audioBase64) {
-        const lastAssistant = [...session.messages]
-          .reverse()
-          .find((msg) => msg.role === 'assistant');
-        if (lastAssistant) {
-          this.onAssistantAudio?.({
-            messageId: lastAssistant.id,
-            audioBase64: session.assistantAudio.audioBase64,
-            mimeType: session.assistantAudio.mimeType,
-            format: session.assistantAudio.format,
-          });
-        }
+        const audioTarget =
+          (session.assistantAudio.messageId &&
+            session.messages.find((msg) => msg.id === session.assistantAudio?.messageId)) ||
+          [...session.messages].reverse().find((msg) => msg.role === 'assistant');
+        this.emitAssistantAudio(session.assistantAudio, audioTarget ?? null);
       }
 
       if (session.messages.length > 0) {
@@ -240,14 +230,7 @@ class ChatApiClient {
 
       // Emit assistant message
       if (response.assistantMessage) {
-        if (response.assistantAudio?.audioBase64) {
-          this.onAssistantAudio?.({
-            messageId: response.assistantMessage.id,
-            audioBase64: response.assistantAudio.audioBase64,
-            mimeType: response.assistantAudio.mimeType,
-            format: response.assistantAudio.format,
-          });
-        }
+        this.emitAssistantAudio(response.assistantAudio, response.assistantMessage);
         this.onMessage?.(response.assistantMessage);
       }
 
@@ -282,14 +265,7 @@ class ChatApiClient {
       }
 
       if (response.assistantMessage) {
-        if (response.assistantAudio?.audioBase64) {
-          this.onAssistantAudio?.({
-            messageId: response.assistantMessage.id,
-            audioBase64: response.assistantAudio.audioBase64,
-            mimeType: response.assistantAudio.mimeType,
-            format: response.assistantAudio.format,
-          });
-        }
+        this.emitAssistantAudio(response.assistantAudio, response.assistantMessage);
         this.onMessage?.(response.assistantMessage);
       }
 
@@ -326,19 +302,11 @@ class ChatApiClient {
       // Check for new messages
       if (response.messages.length > this.lastMessageCount) {
         const newMessages = response.messages.slice(this.lastMessageCount);
-        if (response.assistantAudio?.audioBase64) {
-          const lastAssistant = [...newMessages]
-            .reverse()
-            .find((msg) => msg.role === 'assistant');
-          if (lastAssistant) {
-            this.onAssistantAudio?.({
-              messageId: lastAssistant.id,
-              audioBase64: response.assistantAudio.audioBase64,
-              mimeType: response.assistantAudio.mimeType,
-              format: response.assistantAudio.format,
-            });
-          }
-        }
+        const audioTarget =
+          (response.assistantAudio?.messageId &&
+            newMessages.find((msg) => msg.id === response.assistantAudio?.messageId)) ||
+          [...newMessages].reverse().find((msg) => msg.role === 'assistant');
+        this.emitAssistantAudio(response.assistantAudio, audioTarget ?? null);
         newMessages.forEach((msg) => this.onMessage?.(msg));
       }
 
@@ -365,14 +333,7 @@ class ChatApiClient {
     }
 
     if (response.assistantMessage) {
-      if (response.assistantAudio?.audioBase64) {
-        this.onAssistantAudio?.({
-          messageId: response.assistantMessage.id,
-          audioBase64: response.assistantAudio.audioBase64,
-          mimeType: response.assistantAudio.mimeType,
-          format: response.assistantAudio.format,
-        });
-      }
+      this.emitAssistantAudio(response.assistantAudio, response.assistantMessage);
       this.onMessage?.(response.assistantMessage);
     }
     if (response.downloadCommand) {
@@ -425,14 +386,7 @@ class ChatApiClient {
     }
 
     if (response.assistantMessage) {
-      if (response.assistantAudio?.audioBase64) {
-        this.onAssistantAudio?.({
-          messageId: response.assistantMessage.id,
-          audioBase64: response.assistantAudio.audioBase64,
-          mimeType: response.assistantAudio.mimeType,
-          format: response.assistantAudio.format,
-        });
-      }
+      this.emitAssistantAudio(response.assistantAudio, response.assistantMessage);
       this.onMessage?.(response.assistantMessage);
     }
 

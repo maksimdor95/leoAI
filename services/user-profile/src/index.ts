@@ -3,10 +3,15 @@
  * Main entry point for the service
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
+import { initSentry } from './utils/sentry';
+initSentry('user-profile');
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import path from 'path';
 import userRoutes from './routes/userRoutes';
 import careerRoutes from './routes/careerRoutes';
@@ -16,9 +21,6 @@ import { logger } from './utils/logger';
 import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { getHealthStatus } from './utils/healthCheck';
-
-// Load environment variables
-dotenv.config();
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '8080', 10);

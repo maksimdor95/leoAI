@@ -380,6 +380,6 @@ Response:
 
 ## Связанные документы
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — общая архитектура платформы
+- [ARCHITECTURE.md](../ARCHITECTURE.md) — общая архитектура платформы
 - [services/conversation/README.md](../services/conversation/README.md) — документация Conversation Service
 - [План реализации](.cursor/plans/wannanew_pivot_additive_1ada3969.plan.md) — детальный план пивота
