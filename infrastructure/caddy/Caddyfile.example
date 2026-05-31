@@ -1,0 +1,34 @@
+# VPS example: /etc/caddy/Caddyfile
+# Order matters — specific /api/* routes before the catch-all to user-profile (3001).
+
+leo-ai.ru {
+    encode gzip
+
+    handle /api/health {
+        reverse_proxy 127.0.0.1:3000
+    }
+    handle /socket.io/* {
+        reverse_proxy 127.0.0.1:3002
+    }
+    handle /api/chat* {
+        reverse_proxy 127.0.0.1:3002
+    }
+    handle /api/conversations* {
+        reverse_proxy 127.0.0.1:3002
+    }
+    handle /api/ai* {
+        reverse_proxy 127.0.0.1:3003
+    }
+    handle /api/jobs* {
+        reverse_proxy 127.0.0.1:3004
+    }
+    handle /api/email* {
+        reverse_proxy 127.0.0.1:3005
+    }
+    handle /api/* {
+        reverse_proxy 127.0.0.1:3001
+    }
+    handle {
+        reverse_proxy 127.0.0.1:3000
+    }
+}

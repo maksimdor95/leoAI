@@ -77,12 +77,20 @@ npm run dev:deploy:staging
 
 Секреты на сервере: `.env.staging.local` (не в git).
 
-### Caddy (пример)
+### Caddy (маршрутизация `/api/*`)
 
-```caddy
-leo-ai.ru {
-    reverse_proxy 127.0.0.1:3011
-}
+Пример актуального конфига: [infrastructure/caddy/Caddyfile.example](../infrastructure/caddy/Caddyfile.example).
+
+Важно: **`/api/email*`** → порт **3005** (email-service), до catch-all `/api/*` → 3001. Без этого форма «Написать нам» даёт 404.
+
+После правки Caddy на VPS:
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://leo-ai.ru/api/email/send-consultation \
+  -H "Content-Type: application/json" -d '{"message":"test","consent":true}'
+# ожидается 200
 ```
 
 ---
