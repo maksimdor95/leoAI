@@ -225,6 +225,8 @@ function ChatPageContent() {
   const [error, setError] = useState<string | null>(null);
   const chatRef = useRef<ChatApi | null>(null);
   const chatInitializedRef = useRef(false);
+  /** Пропускаем перезапуск init-эффекта, когда мы сами добавили sessionId в URL после подключения. */
+  const skipParamsEffectRef = useRef(false);
   const [isMuted, setIsMuted] = useState(false);
   const [typingMessage, setTypingMessage] = useState<Message | null>(null);
   const [typingOptions, setTypingOptions] = useState<{ speed: number; delay: number }>({
@@ -852,7 +854,16 @@ function ChatPageContent() {
           if (payload.metadata?.product) {
             setCurrentProduct(payload.metadata.product);
           }
-          // Keep sessionId in URL to avoid re-triggering "new chat" mode
+          // Keep sessionId in URL to avoid re-triggering "new chat" mode.
+          // Не дёргаем replace повторно, если в URL уже наш sessionId — иначе init-эффект
+          // перезапустится и чат начнёт «моргать» (disconnect + reconnect).
+          if (typeof window !== 'undefined') {
+            const currentSessionId = new URLSearchParams(window.location.search).get('sessionId');
+            if (currentSessionId === payload.sessionId) {
+              return;
+            }
+          }
+          skipParamsEffectRef.current = true;
           router.replace(`/chat?sessionId=${encodeURIComponent(payload.sessionId)}`, { scroll: false });
         },
         onHistory: (payload) => {
@@ -966,7 +977,33 @@ function ChatPageContent() {
     speakQuestionWithPriority,
   ]);
 
+  // Держим актуальную ссылку на initializeChat, чтобы init-эффект не зависел от неё в deps
+  // (иначе смена isMuted/TTS пересоздаёт initializeChat и перезапускает чат).
+  const initializeChatRef = useRef(initializeChat);
   useEffect(() => {
+    initializeChatRef.current = initializeChat;
+  }, [initializeChat]);
+
+  // Финальный teardown только при размонтировании страницы.
+  useEffect(() => {
+    return () => {
+      if (chatConnectTimeoutRef.current) {
+        clearTimeout(chatConnectTimeoutRef.current);
+        chatConnectTimeoutRef.current = null;
+      }
+      chatRef.current?.disconnect();
+      chatRef.current = null;
+      chatInitializedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Перезапуск пришёл от нашего же router.replace(sessionId) — чат уже подключён, выходим.
+    if (skipParamsEffectRef.current) {
+      skipParamsEffectRef.current = false;
+      return;
+    }
+
     if (!isAuthenticated()) {
       messageApi.warning('Авторизуйтесь, чтобы продолжить диалог с LEO.');
       openAuthModal('login');
@@ -997,7 +1034,7 @@ function ChatPageContent() {
         }
       }
       const product = requestedProduct || 'jack';
-      initializeChat(product, requestedSessionId ?? undefined, isNewChat);
+      initializeChatRef.current(product, requestedSessionId ?? undefined, isNewChat);
     } else {
       // Default: show product selection for new users
       setIsNewChatMode(true);
@@ -1005,16 +1042,16 @@ function ChatPageContent() {
       setConnecting(false);
     }
 
+    // Не отключаем чат в cleanup при смене searchParams: повторная инициализация
+    // (genuine-навигация) сама вызовет disconnect старого чата внутри initializeChat,
+    // а финальный teardown делает mount-only эффект выше.
     return () => {
       if (chatConnectTimeoutRef.current) {
         clearTimeout(chatConnectTimeoutRef.current);
         chatConnectTimeoutRef.current = null;
       }
-      chatRef.current?.disconnect();
-      chatRef.current = null;
-      chatInitializedRef.current = false;
     };
-  }, [messageApi, router, searchParams, openAuthModal, initializeChat]);
+  }, [messageApi, router, searchParams, openAuthModal]);
 
   // Handler for product selection
   const handleProductScenarioSelect = useCallback((product: ProductType, starterMessage?: string) => {
