@@ -19,6 +19,7 @@ import {
   onboardingStepTitles,
   readCareerOnboardingProgress,
 } from '@/lib/careerOnboardingProgress';
+import { SupportWidget } from '@/components/support/SupportWidget';
 
 const { Title, Text } = Typography;
 const { Content } = Layout;
@@ -265,6 +266,7 @@ export default function ChatsPage() {
           )}
         </div>
       </Content>
+      <SupportWidget />
     </Layout>
   );
 }

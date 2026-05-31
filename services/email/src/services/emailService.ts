@@ -44,6 +44,9 @@ if (SMTP_HOST && SMTP_USER && SMTP_PASSWORD) {
         user: SMTP_USER,
         pass: SMTP_PASSWORD,
       },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
     });
     logger.info(`SMTP transporter initialized for ${SMTP_HOST}:${SMTP_PORT}`);
   } catch (error) {
@@ -51,6 +54,24 @@ if (SMTP_HOST && SMTP_USER && SMTP_PASSWORD) {
   }
 } else if (!SENDGRID_API_KEY) {
   logger.warn('Neither SMTP nor SendGrid configured. Email sending will be disabled.');
+}
+
+function shouldAcceptEmailWithoutDelivery(): boolean {
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  if (nodeEnv === 'production') return false;
+  return process.env.EMAIL_DEV_ACCEPT_WITHOUT_SEND !== 'false';
+}
+
+function logDevEmailFallback(options: SendEmailOptions): void {
+  const preview = (options.text || options.html.replace(/<[^>]*>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 500);
+  logger.warn('[dev] Email delivery skipped — request logged only', {
+    to: options.to,
+    subject: options.subject,
+    preview,
+  });
 }
 
 export interface SendEmailOptions {
@@ -84,6 +105,9 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
       // Fallback to SendGrid if SMTP fails
       if (SENDGRID_API_KEY) {
         logger.info('Falling back to SendGrid...');
+      } else if (shouldAcceptEmailWithoutDelivery()) {
+        logDevEmailFallback(options);
+        return true;
       } else {
         return false;
       }
@@ -113,11 +137,20 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
         const sgError = error as { response?: { body?: unknown } };
         logger.error('SendGrid error details:', sgError.response?.body);
       }
+      if (shouldAcceptEmailWithoutDelivery()) {
+        logDevEmailFallback(options);
+        return true;
+      }
       return false;
     }
   }
 
   // No email service configured
+  if (shouldAcceptEmailWithoutDelivery()) {
+    logDevEmailFallback(options);
+    return true;
+  }
+
   logger.warn('No email service configured. Email not sent.');
   logger.info('Would send email:', {
     to: options.to,
@@ -230,6 +263,70 @@ export async function sendResumePackageEmail(params: {
   return sendEmail({
     to: userEmail,
     subject: 'Ваше резюме и сопроводительное письмо от LEO',
+    html,
+  });
+}
+
+export interface ConsultationLeadPayload {
+  name?: string;
+  email?: string;
+  phone?: string;
+  service?: string;
+  message: string;
+  source?: string;
+  sourceUrl?: string;
+}
+
+function escapeHtmlValue(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Отправка заявки на консультацию («Написать нам») команде LEO.
+ */
+export async function sendConsultationEmail(lead: ConsultationLeadPayload): Promise<boolean> {
+  const to =
+    process.env.CONSULTATION_TO_EMAIL ||
+    process.env.SUPPORT_EMAIL ||
+    FROM_EMAIL ||
+    'hello@leo-ai.ru';
+
+  const rows: Array<[string, string | undefined]> = [
+    ['Имя', lead.name],
+    ['Email', lead.email],
+    ['Телефон', lead.phone],
+    ['Услуга', lead.service],
+    ['Источник', lead.sourceUrl || lead.source],
+  ];
+
+  const rowsHtml = rows
+    .filter(([, value]) => Boolean(value && value.trim()))
+    .map(
+      ([label, value]) =>
+        `<tr><td style="padding:4px 12px 4px 0;color:#64748b;white-space:nowrap;vertical-align:top;">${label}</td><td style="padding:4px 0;color:#0f172a;">${escapeHtmlValue(
+          String(value)
+        )}</td></tr>`
+    )
+    .join('');
+
+  const messageHtml = escapeHtmlValue(lead.message).replace(/\n/g, '<br/>');
+
+  const html = `
+  <div style="font-family:Inter,Arial,sans-serif;line-height:1.5;color:#0f172a;max-width:640px;margin:0 auto;">
+    <h2 style="margin:0 0 12px;">Новая заявка на консультацию</h2>
+    <table style="border-collapse:collapse;margin:0 0 16px;">${rowsHtml}</table>
+    <h3 style="margin:16px 0 8px;">Задача</h3>
+    <div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px;background:#f8fafc;">${messageHtml}</div>
+  </div>`;
+
+  const replyContact = lead.email || lead.phone || 'без контактов';
+
+  return sendEmail({
+    to,
+    subject: `Заявка на консультацию LEO (${replyContact})`,
     html,
   });
 }

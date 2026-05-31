@@ -3,12 +3,13 @@
  * Handles HTTP requests for email notifications
  */
 
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import {
   sendWelcomeEmail,
   sendJobsDigestEmail,
   sendResumePackageEmail,
+  sendConsultationEmail,
 } from '../services/emailService';
 import { getUserProfile } from '../services/userService';
 import { getJobsByIds } from '../services/jobService';
@@ -170,6 +171,60 @@ export async function sendResumePackage(req: AuthRequest, res: Response): Promis
     }
   } catch (error: unknown) {
     logger.error('Error sending resume package email:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * Публичная заявка на консультацию с виджета поддержки (без авторизации).
+ */
+export async function sendConsultation(req: Request, res: Response): Promise<void> {
+  try {
+    const { name, email, phone, service, message, consent, source, sourceUrl } = req.body as {
+      name?: string;
+      email?: string;
+      phone?: string;
+      service?: string;
+      message?: string;
+      consent?: boolean;
+      source?: string;
+      sourceUrl?: string;
+    };
+
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      res.status(400).json({ error: 'message is required' });
+      return;
+    }
+
+    if (consent !== true) {
+      res.status(400).json({ error: 'consent is required' });
+      return;
+    }
+
+    const trimmedMessage = message.trim();
+    if (trimmedMessage.length > 5000) {
+      res.status(400).json({ error: 'message is too long' });
+      return;
+    }
+
+    const success = await sendConsultationEmail({
+      name: typeof name === 'string' ? name.trim().slice(0, 200) : undefined,
+      email: typeof email === 'string' ? email.trim().slice(0, 320) : undefined,
+      phone: typeof phone === 'string' ? phone.trim().slice(0, 50) : undefined,
+      service: typeof service === 'string' ? service.trim().slice(0, 200) : undefined,
+      message: trimmedMessage,
+      source: typeof source === 'string' ? source.trim().slice(0, 100) : undefined,
+      sourceUrl: typeof sourceUrl === 'string' ? sourceUrl.trim().slice(0, 500) : undefined,
+    });
+
+    if (success) {
+      res.json({ success: true, message: 'Consultation request sent' });
+      return;
+    }
+
+    res.status(500).json({ error: 'Failed to send consultation request' });
+  } catch (error: unknown) {
+    logger.error('Error sending consultation email:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

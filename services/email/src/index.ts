@@ -98,6 +98,7 @@ app.get('/', (_req, res) => {
       health: '/health',
       sendJobs: 'POST /api/email/send-jobs',
       sendWelcome: 'POST /api/email/send-welcome',
+      sendConsultation: 'POST /api/email/send-consultation',
     },
   });
 });

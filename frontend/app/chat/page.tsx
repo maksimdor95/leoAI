@@ -44,6 +44,7 @@ import type { InterviewReportPreview } from '@/components/chat/InterviewReportCa
 import { TypingMessage } from '@/components/chat/TypingMessage';
 import { ProfileModal } from '@/components/chat/ProfileModal';
 import { ProductSelectionScreen, ProductType } from '@/components/chat/ProductSelectionScreen';
+import { SupportWidget } from '@/components/support/SupportWidget';
 import {
   SoundOutlined,
   AudioMutedOutlined,
@@ -2398,6 +2399,7 @@ function ChatPageContent() {
           </div>
         </Form>
       </Modal>
+      <SupportWidget elevated={productSelected} />
     </Layout>
   );
 }

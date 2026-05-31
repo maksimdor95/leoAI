@@ -27,4 +27,10 @@ router.post('/send-welcome', authenticateToken, emailController.sendWelcome);
  */
 router.post('/send-resume-package', authenticateToken, emailController.sendResumePackage);
 
+/**
+ * POST /api/email/send-consultation
+ * Public consultation lead from support widget
+ */
+router.post('/send-consultation', emailController.sendConsultation);
+
 export default router;

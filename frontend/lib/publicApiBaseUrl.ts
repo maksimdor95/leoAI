@@ -48,3 +48,11 @@ export function getPublicAiBaseUrl(): string {
     'http://localhost:3003'
   );
 }
+
+export function getPublicEmailBaseUrl(): string {
+  return (
+    envBaseUrl('NEXT_PUBLIC_EMAIL_API_URL') ??
+    browserOriginUnlessLocalhost() ??
+    'http://localhost:3005'
+  );
+}

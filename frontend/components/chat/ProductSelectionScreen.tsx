@@ -16,7 +16,7 @@ interface ProductSelectionScreenProps {
 
 export function ProductSelectionScreen({ onSelect }: ProductSelectionScreenProps) {
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full min-h-[400px] gap-8 px-4">
+    <div className="flex flex-col items-center justify-center w-full h-full min-h-[400px] gap-8 px-4 pb-28 sm:pb-32">
       {/* Greeting */}
       <div className="text-center space-y-4 max-w-xl">
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight">
