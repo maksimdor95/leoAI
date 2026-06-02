@@ -52,6 +52,10 @@ Google OAuth: те же redirect URI для `https://leo-ai.ru`.
 # Email
 SMTP_USER=...
 SMTP_PASSWORD=...
+# Заявки «Написать нам». Нужен MX у домена leo-ai.ru и ящик hello@ (см. ниже).
+CONSULTATION_TO_EMAIL=hello@leo-ai.ru
+# Пока hello@ не настроен — копия на рабочую почту:
+CONSULTATION_BCC=dorochov.maxim@yandex.ru
 
 # Jobs: «Токен приложения» (APPL…) с dev.hh.ru — для поиска вакансий
 HH_API_KEY=APPL...
@@ -73,7 +77,7 @@ TELEGRAM_SITE_URL=https://leo-ai.ru
 TELEGRAM_USE_POLLING=true
 # На VPS в РФ при webhook:
 # TELEGRAM_USE_POLLING=false
-# TELEGRAM_PROXY_URL=http://...
+# TELEGRAM_PROXY_URL=socks5h://127.0.0.1:40000
 # TELEGRAM_NGROK_AUTOSYNC=true
 ```
 

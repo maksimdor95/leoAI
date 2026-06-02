@@ -22,12 +22,18 @@ function isSocksUrl(url: string): boolean {
   return /^socks[45]?h?:\/\//i.test(url);
 }
 
+/** socks5 resolves DNS locally (blocked TG IPs in RU); socks5h resolves via proxy. */
+function socksUrlWithRemoteDns(proxyUrl: string): string {
+  return proxyUrl.replace(/^socks5:\/\//i, 'socks5h://');
+}
+
 function makeSocksAgent(proxyUrl: string): SocksProxyAgent {
+  const agentUrl = socksUrlWithRemoteDns(proxyUrl);
   if (!socksLogged) {
-    logger.info(`Telegram API proxy (SOCKS): ${redactProxyUrl(proxyUrl)}`);
+    logger.info(`Telegram API proxy (SOCKS): ${redactProxyUrl(agentUrl)}`);
     socksLogged = true;
   }
-  return new SocksProxyAgent(proxyUrl);
+  return new SocksProxyAgent(agentUrl);
 }
 
 export function getTelegramDispatcher(): Dispatcher | undefined {

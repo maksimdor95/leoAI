@@ -103,6 +103,10 @@ export async function setMyCommands(): Promise<void> {
 export async function verifyBot(): Promise<void> {
   const me = await getMe();
   logger.info(`Bot connected: @${me.username || 'unknown'}`);
-  await setMyCommands();
-  logger.info('Bot commands registered: /start, /help, /privacy');
+  try {
+    await setMyCommands();
+    logger.info('Bot commands registered: /start, /help, /privacy');
+  } catch (error) {
+    logger.warn('setMyCommands failed (bot will still handle messages)', error);
+  }
 }
