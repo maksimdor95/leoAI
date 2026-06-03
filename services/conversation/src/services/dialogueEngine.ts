@@ -1353,7 +1353,13 @@ export async function handleUserReply(
     return { message: null, metadataUpdates: scenarioUpdates };
   }
 
-  if (isInterviewPrepSession(session)) {
+  // Тренажёр по вакансии обрабатывается отдельным движком только на своих шагах
+  // (ввод вакансии и выбор режима). Приветствие-развилка и ветка пробного
+  // собеседования идут через обычную обработку сценария (collectKey + next).
+  if (
+    isInterviewPrepSession(session) &&
+    (currentStep.id === 'vacancy_input' || currentStep.id === 'mode_select')
+  ) {
     return handleInterviewPrepReply(session, currentStep, userMessageContent, authToken);
   }
 
@@ -1732,12 +1738,14 @@ export async function handleUserReply(
     }
   }
 
-  // Check context for non-clarify, non-completion-gap, and non-pause steps
+  // Check context for non-clarify, non-completion-gap, non-pause, and non-choice steps.
+  // 'greeting' is a scenario chooser (быстрый/детальный) — не прогоняем через context-redirect.
   if (
     currentStep.type === 'question' &&
     currentStep.id !== 'clarify' &&
     currentStep.id !== 'completion_gap' &&
-    currentStep.id !== 'pause_reminder'
+    currentStep.id !== 'pause_reminder' &&
+    currentStep.id !== 'greeting'
   ) {
     // Check if user is staying on topic
     const contextCheck = await checkContext({
@@ -1774,11 +1782,13 @@ export async function handleUserReply(
 
   // Validate answer for non-clarify, non-completion-gap, and non-pause steps
   // pause_reminder doesn't need validation - "сейчас" or "позже" are both valid
+  // greeting — это выбор сценария (быстрый/детальный), валидация не нужна и мешает ветвлению
   if (
     currentStep.type === 'question' &&
     currentStep.id !== 'clarify' &&
     currentStep.id !== 'completion_gap' &&
-    currentStep.id !== 'pause_reminder'
+    currentStep.id !== 'pause_reminder' &&
+    currentStep.id !== 'greeting'
   ) {
     let validation: ValidationResult;
     if (currentStep.collectKey === 'positionsCount') {

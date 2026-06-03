@@ -79,6 +79,7 @@ export interface SendEmailOptions {
   subject: string;
   html: string;
   text?: string;
+  bcc?: string;
 }
 
 /**
@@ -93,6 +94,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
       await transporter.sendMail({
         from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
         to: options.to,
+        bcc: options.bcc,
         subject: options.subject,
         text: textContent,
         html: options.html,
@@ -284,15 +286,52 @@ function escapeHtmlValue(value: string): string {
     .replace(/>/g, '&gt;');
 }
 
+export async function sendPasswordResetEmail(params: {
+  to: string;
+  resetUrl: string;
+  userName?: string;
+}): Promise<boolean> {
+  try {
+    const html = await compileTemplate(TemplateName.PASSWORD_RESET, {
+      resetUrl: params.resetUrl,
+      userName: params.userName || '',
+    });
+
+    return await sendEmail({
+      to: params.to,
+      subject: 'Сброс пароля LEO AI',
+      html,
+    });
+  } catch (error: unknown) {
+    logger.error('Failed to send password reset email:', error);
+    return false;
+  }
+}
+
 /**
  * Отправка заявки на консультацию («Написать нам») команде LEO.
  */
 export async function sendConsultationEmail(lead: ConsultationLeadPayload): Promise<boolean> {
-  const to =
+  const toRaw =
     process.env.CONSULTATION_TO_EMAIL ||
     process.env.SUPPORT_EMAIL ||
     FROM_EMAIL ||
     'hello@leo-ai.ru';
+
+  const to = toRaw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(', ');
+
+  const bccRaw = process.env.CONSULTATION_BCC?.trim();
+  const bcc = bccRaw
+    ? bccRaw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(', ')
+    : undefined;
 
   const rows: Array<[string, string | undefined]> = [
     ['Имя', lead.name],
@@ -326,6 +365,7 @@ export async function sendConsultationEmail(lead: ConsultationLeadPayload): Prom
 
   return sendEmail({
     to,
+    bcc,
     subject: `Заявка на консультацию LEO (${replyContact})`,
     html,
   });

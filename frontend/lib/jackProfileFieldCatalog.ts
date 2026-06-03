@@ -9,7 +9,7 @@ export type JackFieldDef = {
   section: string;
 };
 
-const OMIT_DISPLAY_KEYS = new Set(['clarifiedAnswer']);
+const OMIT_DISPLAY_KEYS = new Set(['clarifiedAnswer', 'scenarioMode']);
 
 export const JACK_PROFILE_FIELD_ORDER: JackFieldDef[] = [
   { section: 'Старт', key: 'readyToStart', label: 'Готовность начать' },

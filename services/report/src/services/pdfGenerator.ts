@@ -33,7 +33,7 @@ const REPORT_TEMPLATE = `
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PM Interview Report - {{candidateName}}</title>
+  <title>Отчёт по пробному интервью - {{candidateName}}</title>
   <style>
     * {
       margin: 0;
@@ -294,18 +294,18 @@ const REPORT_TEMPLATE = `
     <header class="header">
       <div class="logo">wannanew</div>
       <h1 class="title">Отчёт по пробному интервью</h1>
-      <p class="subtitle">Product Manager · {{formatDate generatedAt}}</p>
+      <p class="subtitle">{{positionTitle}} · {{formatDate generatedAt}}</p>
     </header>
     
     <section class="section">
       <h2 class="section-title">Профиль кандидата</h2>
       <div class="profile-grid">
         <div class="profile-item">
-          <div class="profile-label">Целевой уровень</div>
-          <div class="profile-value">{{targetRole}} PM</div>
+          <div class="profile-label">Целевая позиция</div>
+          <div class="profile-value">{{positionTitle}}</div>
         </div>
         <div class="profile-item">
-          <div class="profile-label">Тип продукта</div>
+          <div class="profile-label">Сфера / контекст</div>
           <div class="profile-value">{{targetProductType}}</div>
         </div>
       </div>
@@ -386,7 +386,7 @@ const REPORT_TEMPLATE = `
     </section>
     
     <section class="section">
-      <h2 class="section-title">Типовые вопросы для {{targetRole}} PM</h2>
+      <h2 class="section-title">Типовые вопросы для подготовки</h2>
       <div class="list-section questions">
         <ul>
           {{#each typicalQuestions}}
@@ -419,8 +419,8 @@ function buildFallbackPdf(reportData: ReportData): Buffer {
   const lines = [
     'wannanew interview report',
     `Candidate: ${reportData.candidateName || 'Candidate'}`,
-    `Target role: ${reportData.targetRole}`,
-    `Product type: ${reportData.targetProductType}`,
+    `Position: ${reportData.positionTitle}`,
+    `Context: ${reportData.targetProductType}`,
     `Score: ${reportData.evaluation?.overallScore ?? 0}/10`,
     `Generated at: ${reportData.generatedAt}`,
   ];
@@ -498,7 +498,7 @@ async function getBrowser(): Promise<Browser> {
 
 export const pdfGenerator = {
   async generatePdf(reportData: ReportData): Promise<Buffer> {
-    logger.info('Generating PDF for report', { targetRole: reportData.targetRole });
+    logger.info('Generating PDF for report', { positionTitle: reportData.positionTitle });
 
     // Compile template
     const template = Handlebars.compile(REPORT_TEMPLATE);

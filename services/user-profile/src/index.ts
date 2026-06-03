@@ -16,6 +16,7 @@ import path from 'path';
 import userRoutes from './routes/userRoutes';
 import careerRoutes from './routes/careerRoutes';
 import { UserRepository } from './models/userRepository';
+import { PasswordResetRepository } from './models/passwordResetRepository';
 import { CareerService } from './services/careerService';
 import { logger } from './utils/logger';
 import { validateAndLogConfig } from './utils/configValidator';
@@ -100,6 +101,9 @@ app.get('/', (_req, res) => {
       oauthYandex: 'GET /api/users/oauth/yandex/start',
       profile: 'GET /api/users/profile',
       updateProfile: 'PUT /api/users/profile',
+      forgotPassword: 'POST /api/users/forgot-password',
+      resetPassword: 'POST /api/users/reset-password',
+      validateResetToken: 'GET /api/users/reset-password/validate?token=...',
       careerTracks: 'GET /api/career/tracks',
       careerTrackCreate: 'POST /api/career/tracks',
       careerTrackUpdate: 'PATCH /api/career/tracks/:trackId',
@@ -147,6 +151,7 @@ async function start() {
   try {
     logger.info('Initializing database schema and tables...');
     await UserRepository.createTable();
+    await PasswordResetRepository.createTable();
     await CareerService.createTables();
   } catch (err) {
     logger.error('Database initialization warning:', err);

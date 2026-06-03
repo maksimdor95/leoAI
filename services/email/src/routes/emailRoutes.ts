@@ -33,4 +33,10 @@ router.post('/send-resume-package', authenticateToken, emailController.sendResum
  */
 router.post('/send-consultation', emailController.sendConsultation);
 
+/**
+ * POST /api/email/send-password-reset
+ * Password reset link (internal — user-profile service)
+ */
+router.post('/send-password-reset', emailController.sendPasswordReset);
+
 export default router;

@@ -10,6 +10,7 @@ import {
   sendJobsDigestEmail,
   sendResumePackageEmail,
   sendConsultationEmail,
+  sendPasswordResetEmail,
 } from '../services/emailService';
 import { getUserProfile } from '../services/userService';
 import { getJobsByIds } from '../services/jobService';
@@ -225,6 +226,77 @@ export async function sendConsultation(req: Request, res: Response): Promise<voi
     res.status(500).json({ error: 'Failed to send consultation request' });
   } catch (error: unknown) {
     logger.error('Error sending consultation email:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+function isAllowedResetUrl(resetUrl: string): boolean {
+  try {
+    const parsed = new URL(resetUrl);
+    const allowedBases = [
+      process.env.FRONTEND_URL,
+      process.env.BASE_URL,
+      process.env.CORS_ORIGIN?.split(',')[0]?.trim(),
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+    ]
+      .filter(Boolean)
+      .map((base) => base!.replace(/\/+$/, ''));
+
+    const origin = `${parsed.protocol}//${parsed.host}`;
+    return allowedBases.some((base) => resetUrl.startsWith(base) || origin === new URL(base).origin);
+  } catch {
+    return false;
+  }
+}
+
+function assertInternalCaller(req: Request): boolean {
+  const expected = process.env.INTERNAL_API_KEY?.trim();
+  if (!expected) return true;
+  const provided = req.header('X-Internal-Key')?.trim();
+  return provided === expected;
+}
+
+/**
+ * Отправка письма со ссылкой сброса пароля (вызывается user-profile service).
+ */
+export async function sendPasswordReset(req: Request, res: Response): Promise<void> {
+  try {
+    if (!assertInternalCaller(req)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const { to, resetUrl, userName } = req.body as {
+      to?: string;
+      resetUrl?: string;
+      userName?: string;
+    };
+
+    if (!to || typeof to !== 'string' || !to.includes('@')) {
+      res.status(400).json({ error: 'Valid to email is required' });
+      return;
+    }
+
+    if (!resetUrl || typeof resetUrl !== 'string' || !isAllowedResetUrl(resetUrl)) {
+      res.status(400).json({ error: 'Invalid resetUrl' });
+      return;
+    }
+
+    const success = await sendPasswordResetEmail({
+      to: to.trim(),
+      resetUrl: resetUrl.trim(),
+      userName: typeof userName === 'string' ? userName.trim().slice(0, 100) : undefined,
+    });
+
+    if (success) {
+      res.json({ success: true, message: 'Password reset email sent' });
+      return;
+    }
+
+    res.status(500).json({ error: 'Failed to send password reset email' });
+  } catch (error: unknown) {
+    logger.error('Error sending password reset email:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

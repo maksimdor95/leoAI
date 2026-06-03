@@ -11,6 +11,7 @@ import { logger } from '../utils/logger';
 export enum TemplateName {
   WELCOME = 'welcome-email',
   JOBS_DIGEST = 'jobs-digest',
+  PASSWORD_RESET = 'password-reset',
 }
 
 const templatesDir = path.join(__dirname, '../templates');

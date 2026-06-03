@@ -6,6 +6,7 @@
 import { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import { UserService } from '../services/userService';
+import { PasswordResetService } from '../services/passwordResetService';
 import { OAuthProvider, OAuthService } from '../services/oauthService';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
@@ -236,5 +237,69 @@ export class UserController {
   static async logout(_req: Request, res: Response) {
     clearAuthCookies(res);
     return res.json({ message: 'Logout successful' });
+  }
+
+  static forgotPasswordValidation = [
+    body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+  ];
+
+  static async forgotPassword(req: Request, res: Response) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { email } = req.body as { email: string };
+      await PasswordResetService.requestReset(email);
+
+      return res.json({
+        message:
+          'Если аккаунт с таким email существует, мы отправили ссылку для сброса пароля.',
+      });
+    } catch (error: unknown) {
+      logger.error('Forgot password error:', error);
+      return res.status(500).json({ error: 'Не удалось отправить письмо. Попробуйте позже.' });
+    }
+  }
+
+  static resetPasswordValidation = [
+    body('token').isString().trim().notEmpty().withMessage('Reset token is required'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  ];
+
+  static async resetPassword(req: Request, res: Response) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { token, password } = req.body as { token: string; password: string };
+      await PasswordResetService.resetPassword(token, password);
+
+      return res.json({ message: 'Пароль успешно обновлён. Теперь можно войти.' });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      logger.error('Reset password error:', error);
+      if (message === 'Invalid or expired reset token') {
+        return res.status(400).json({ error: 'Ссылка недействительна или устарела. Запросите новую.' });
+      }
+      return res.status(500).json({ error: 'Не удалось обновить пароль. Попробуйте позже.' });
+    }
+  }
+
+  static async validateResetToken(req: Request, res: Response) {
+    try {
+      const token = typeof req.query.token === 'string' ? req.query.token : '';
+      const valid = await PasswordResetService.validateToken(token);
+      if (!valid) {
+        return res.status(400).json({ valid: false, error: 'Ссылка недействительна или устарела.' });
+      }
+      return res.json({ valid: true });
+    } catch (error: unknown) {
+      logger.error('Validate reset token error:', error);
+      return res.status(500).json({ valid: false, error: 'Internal server error' });
+    }
   }
 }

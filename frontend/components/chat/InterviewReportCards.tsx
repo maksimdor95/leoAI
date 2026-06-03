@@ -7,6 +7,7 @@ import type { InfoCardMessage } from '@/types/chat';
 
 /** Ответ GET /api/chat/session/:id/report-preview (совпадает с ReportData в report-service). */
 export type InterviewReportPreview = {
+  positionTitle?: string;
   targetRole: string;
   targetProductType?: string;
   evaluation: {
@@ -101,7 +102,7 @@ export function InterviewReportCards({
   const ev = preview?.evaluation;
   const recs = preview?.recommendations ?? [];
   const questions = preview?.typicalQuestions ?? [];
-  const roleLabel = preview?.targetRole ?? '—';
+  const roleLabel = preview?.positionTitle ?? preview?.targetRole ?? '—';
 
   const scoreTeaser = ev
     ? `Итог ${ev.overallScore}/10 · ${ev.strengths.slice(0, 2).join(', ')}`
@@ -112,8 +113,8 @@ export function InterviewReportCards({
 
   const qTeaser =
     questions.length > 0
-      ? `${questions.length} вопросов для уровня «${roleLabel}»`
-      : 'Подборка вопросов под твой целевой грейд.';
+      ? `${questions.length} вопросов для подготовки`
+      : 'Подборка вопросов под твою позицию.';
 
   const pdfTeaser = 'Скачать PDF или пройти пробное интервью заново.';
 
@@ -154,7 +155,7 @@ export function InterviewReportCards({
             <div className="space-y-4 text-xs text-slate-200 leading-relaxed">
               <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
                 <p>
-                  <span className="text-slate-500">Целевая роль</span>
+                  <span className="text-slate-500">Целевая позиция</span>
                   <span className="ml-2 text-sm font-semibold text-white">{roleLabel}</span>
                 </p>
                 <p className="flex items-center gap-2">
@@ -187,7 +188,7 @@ export function InterviewReportCards({
                 ) : (
                   <p className="text-[11px] text-slate-500 leading-relaxed">
                     Нет сохранённых ответов на вопросы интервью в этой сессии — оценка опирается на
-                    продуктовый кейс и общие данные.
+                    релевантный кейс и общие данные.
                   </p>
                 )}
               </div>
@@ -258,7 +259,7 @@ export function InterviewReportCards({
               ))}
             </ol>
           ) : (
-            <p className="text-xs text-slate-500">Список вопросов подготовится по твоему уровню.</p>
+            <p className="text-xs text-slate-500">Список вопросов подготовится по твоей позиции.</p>
           )}
         </ReportSection>
 

@@ -38,6 +38,9 @@ type StagePanelProps = {
     loading?: boolean;
     disabled?: boolean;
   };
+  /** Быстрые ответы-чипы под вопросом (например, выбор сценария подбора). */
+  quickReplies?: Array<{ label: string; value: string; hint?: string }>;
+  onQuickReply?: (value: string) => void;
 };
 
 export function StagePanel({
@@ -50,6 +53,8 @@ export function StagePanel({
   interviewReport,
   profileCompletion,
   resumeUpload,
+  quickReplies,
+  onQuickReply,
 }: StagePanelProps) {
   const hasQuestion = Boolean(question);
   const hasInfoCard = Boolean(infoCard);
@@ -116,6 +121,23 @@ export function StagePanel({
                 {question.placeholder}
               </p>
             )}
+            {quickReplies && quickReplies.length > 0 && onQuickReply ? (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {quickReplies.map((reply) => (
+                  <button
+                    key={reply.value}
+                    type="button"
+                    onClick={() => onQuickReply(reply.value)}
+                    className="group/qr inline-flex flex-col items-start rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-left transition-all hover:border-green-500/40 hover:bg-white/[0.08] active:scale-[0.98]"
+                  >
+                    <span className="text-sm font-semibold text-white">{reply.label}</span>
+                    {reply.hint ? (
+                      <span className="mt-0.5 text-xs text-slate-400">{reply.hint}</span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {resumeUpload ? (
               <ResumeUploadDropzone
                 onFile={resumeUpload.onFile}

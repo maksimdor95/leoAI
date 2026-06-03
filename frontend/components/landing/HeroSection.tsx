@@ -37,8 +37,7 @@ const previewScenarios: PreviewScenario[] = [
     accentClass: 'text-cyan-300 border-cyan-400/30 bg-cyan-400/10',
     icon: <RocketOutlined />,
     href: '/chat?new=true&product=jack',
-    starter:
-      'Запусти быстрый старт подбора: задай 3 уточняющих вопроса и предложи первые релевантные вакансии.',
+    starter: 'Быстрый подбор',
     metrics: ['3 вопроса', 'shortlist', 'профиль'],
     spotlight: 'Мини-диагностика без длинной анкеты: LEO быстро понимает цель и переводит разговор к первым вакансиям.',
     messages: [
@@ -131,31 +130,6 @@ const previewScenarios: PreviewScenario[] = [
       },
     ],
   },
-  {
-    id: 'career-onboarding',
-    label: 'Онбординг',
-    title: 'Карьерный AI-онбординг',
-    description: 'Быстрый анализ карьеры и AI-навыков с персональными рекомендациями',
-    accentClass: 'text-blue-300 border-blue-400/30 bg-blue-400/10',
-    icon: <RocketOutlined />,
-    href: '/career/onboarding',
-    metrics: ['карьера', 'AI-навыки', 'план'],
-    spotlight: 'Помогает понять следующий карьерный шаг, какие AI-навыки усилить и что делать в ближайшие недели.',
-    messages: [
-      {
-        role: 'leo',
-        text: 'Оценим текущую карьерную траекторию и где AI может усилить твой профиль.',
-      },
-      {
-        role: 'user',
-        text: 'Хочу понять, какие навыки прокачать для следующего уровня.',
-      },
-      {
-        role: 'leo',
-        text: 'Соберу краткую диагностику, покажу пробелы и предложу персональные следующие шаги.',
-      },
-    ],
-  },
 ];
 
 export function HeroSection() {
@@ -239,18 +213,12 @@ export function HeroSection() {
               Находим идеальные вакансии, которые подходят именно вам, и помогаем с подготовкой.
             </p>
 
-            <div className="flex flex-col items-center gap-3 sm:flex-row lg:items-start">
+            <div className="flex flex-col items-center lg:items-start">
               <button
                 onClick={() => openAuthModal('register')}
                 className="rounded-full bg-green-500 px-6 py-3 text-sm font-semibold leading-tight text-white shadow-lg shadow-green-950/30 transition-all hover:bg-green-400 hover:scale-[1.03] active:scale-95 sm:text-base"
               >
                 Начать поиск
-              </button>
-              <button
-                onClick={() => handleStart()}
-                className="rounded-full border border-white/15 bg-white/[0.04] px-6 py-3 text-sm font-semibold leading-tight text-white backdrop-blur transition-all hover:border-green-400/40 hover:bg-white/[0.08] active:scale-95 sm:text-base"
-              >
-                Попробовать
               </button>
             </div>
           </div>
@@ -384,7 +352,7 @@ export function HeroSection() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
+          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
             {previewScenarios.map((scenario, index) => (
               <button
                 key={scenario.id}

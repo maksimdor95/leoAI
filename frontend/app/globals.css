@@ -555,6 +555,47 @@ body {
   animation: float 4s ease-in-out infinite;
 }
 
+@keyframes scenarioPreviewIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-scenario-preview-in {
+  animation: scenarioPreviewIn 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes cinematicGlowPulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(1.06);
+  }
+}
+
+.animate-cinematic-glow {
+  animation: cinematicGlowPulse 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-scenario-preview-in,
+  .animate-cinematic-glow {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes bounceSlow {
   0%, 100% {
     transform: translateY(0);
@@ -743,6 +784,63 @@ body {
 .auth-modal .ant-input-focused {
   border-color: rgba(74, 222, 128, 0.7) !important;
   box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.18) !important;
+}
+
+.auth-modal .ant-btn-primary {
+  height: 3rem !important;
+  border: none !important;
+  border-radius: 0.75rem !important;
+  background: #22c55e !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  box-shadow: 0 10px 25px -12px rgba(34, 197, 94, 0.45) !important;
+}
+
+.auth-modal .ant-btn-primary:not(:disabled):hover {
+  background: #4ade80 !important;
+  color: #fff !important;
+}
+
+.auth-modal .ant-btn-primary:not(:disabled):active {
+  background: #16a34a !important;
+}
+
+/* Текстовые кнопки (Забыли пароль?, назад) — без белого фона браузера */
+.auth-modal button.auth-text-btn {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+}
+
+.auth-modal button.auth-text-btn:hover {
+  background: transparent;
+}
+
+.auth-modal button.auth-text-btn:focus-visible {
+  outline: 2px solid rgba(74, 222, 128, 0.45);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Переключатель Вход / Регистрация */
+.auth-modal button.auth-tab-btn {
+  margin: 0;
+  border: none;
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+}
+
+.auth-modal button.auth-tab-btn:focus-visible {
+  outline: 2px solid rgba(74, 222, 128, 0.45);
+  outline-offset: 2px;
 }
 
 /* Consultation modal: dark fields + autofill + select dropdown */

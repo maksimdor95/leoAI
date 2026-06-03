@@ -21,6 +21,9 @@ router.get('/login', (_req, res) => {
 
 router.post('/login', UserController.loginValidation, UserController.login);
 router.post('/logout', UserController.logout);
+router.post('/forgot-password', UserController.forgotPasswordValidation, UserController.forgotPassword);
+router.post('/reset-password', UserController.resetPasswordValidation, UserController.resetPassword);
+router.get('/reset-password/validate', UserController.validateResetToken);
 router.get('/oauth/:provider/start', UserController.oauthStart);
 router.get('/oauth/:provider/callback', UserController.oauthCallback);
 

@@ -230,4 +230,14 @@ export class UserRepository {
       userId,
     ]);
   }
+
+  static async updatePassword(userId: string, passwordHash: string): Promise<void> {
+    const result = await pool.query(
+      'UPDATE jack.users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [passwordHash, userId]
+    );
+    if (result.rowCount === 0) {
+      throw new Error('User not found');
+    }
+  }
 }

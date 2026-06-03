@@ -787,9 +787,9 @@ app.post('/api/chat/session/:id/report', authenticateRequest, async (req, res) =
       return;
     }
 
-    // Check if session is for wannanew product
-    if (session.metadata.product !== 'wannanew') {
-      res.status(400).json({ error: 'Reports are only available for wannanew sessions' });
+    // Reports are available for interview sessions (mock-interview branch)
+    if (session.metadata.product !== 'wannanew' && session.metadata.product !== 'interview-prep') {
+      res.status(400).json({ error: 'Reports are only available for interview sessions' });
       return;
     }
 
@@ -834,7 +834,7 @@ app.get('/api/chat/session/:id/report-preview', authenticateRequest, async (req,
       return;
     }
 
-    if (session.metadata.product !== 'wannanew') {
+    if (session.metadata.product !== 'wannanew' && session.metadata.product !== 'interview-prep') {
       res.status(400).json({ error: 'Report preview is only available for interview sessions' });
       return;
     }

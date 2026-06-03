@@ -30,6 +30,12 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 
 const { Title } = Typography;
 
+const AUTH_PRIMARY_BTN_CLASS =
+  '!h-12 !rounded-xl !border-none !bg-green-500 !text-white !font-semibold !shadow-lg !shadow-green-500/20 hover:!bg-green-400 hover:!text-white active:!scale-[0.98]';
+
+const AUTH_LINK_BTN_CLASS =
+  'auth-text-btn text-sm text-slate-400 transition-colors hover:text-green-300';
+
 interface AuthModalProps {
   open: boolean;
   onClose: () => void;
@@ -38,9 +44,10 @@ interface AuthModalProps {
 
 export function AuthModal({ open, onClose, initialMode = 'login' }: AuthModalProps) {
   const router = useRouter();
-  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'forgot-sent'>(initialMode);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
+  const [forgotEmail, setForgotEmail] = useState('');
 
   const startOAuth = (provider: 'google' | 'yandex') => {
     const url = userAPI.getOAuthStartUrl(provider);
@@ -51,9 +58,24 @@ export function AuthModal({ open, onClose, initialMode = 'login' }: AuthModalPro
   useEffect(() => {
     if (open) {
       setMode(initialMode);
+      setForgotEmail('');
       form.resetFields();
     }
   }, [open, initialMode, form]);
+
+  const handleForgotPassword = async (values: { email: string }) => {
+    setLoading(true);
+    try {
+      const result = await userAPI.forgotPassword(values.email);
+      setForgotEmail(values.email);
+      setMode('forgot-sent');
+      message.success(result.message);
+    } catch (error: unknown) {
+      message.error(getErrorMessage(error, 'Не удалось отправить письмо'));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async (values: { email: string; password: string }) => {
     setLoading(true);
@@ -119,23 +141,36 @@ export function AuthModal({ open, onClose, initialMode = 'login' }: AuthModalPro
       <div className="py-4">
         <div className="text-center mb-6">
           <Title level={3} className="text-white text-2xl mb-2">
-            {mode === 'login' ? 'Войдите в свой аккаунт' : 'Начни свой путь к идеальной работе'}
+            {mode === 'login'
+              ? 'Войдите в свой аккаунт'
+              : mode === 'register'
+                ? 'Начни свой путь к идеальной работе'
+                : mode === 'forgot-sent'
+                  ? 'Проверьте почту'
+                  : 'Забыли пароль?'}
           </Title>
           <p className="text-slate-300 text-sm">
             {mode === 'login'
               ? 'Войдите, чтобы продолжить работу с LEO'
-              : 'Зарегистрируйся и начни диалог с LEO уже сегодня'}
+              : mode === 'register'
+                ? 'Зарегистрируйся и начни диалог с LEO уже сегодня'
+                : mode === 'forgot-sent'
+                  ? `Если аккаунт ${forgotEmail} существует, мы отправили ссылку для сброса пароля. Ссылка действует 1 час.`
+                  : 'Введите email — отправим ссылку для сброса пароля'}
           </p>
         </div>
 
+        {mode === 'login' || mode === 'register' ? (
+          <>
         {/* Tabs */}
         <div className="flex gap-4 mb-6 p-1 bg-white/[0.05] rounded-2xl">
           <button
+            type="button"
             onClick={() => {
               setMode('login');
               form.resetFields();
             }}
-            className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all ${
+            className={`auth-tab-btn flex-1 py-3 px-4 rounded-xl font-semibold transition-all ${
               mode === 'login'
                 ? 'bg-green-500 text-white'
                 : 'text-white/80 hover:text-white bg-white/[0.03] hover:bg-white/[0.06]'
@@ -144,11 +179,12 @@ export function AuthModal({ open, onClose, initialMode = 'login' }: AuthModalPro
             Вход
           </button>
           <button
+            type="button"
             onClick={() => {
               setMode('register');
               form.resetFields();
             }}
-            className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all ${
+            className={`auth-tab-btn flex-1 py-3 px-4 rounded-xl font-semibold transition-all ${
               mode === 'register'
                 ? 'bg-green-500 text-white'
                 : 'text-white/80 hover:text-white bg-white/[0.03] hover:bg-white/[0.06]'
@@ -196,6 +232,21 @@ export function AuthModal({ open, onClose, initialMode = 'login' }: AuthModalPro
             />
           </Form.Item>
 
+          {mode === 'login' && (
+            <div className="-mt-2 mb-4 text-right">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('forgot');
+                  form.resetFields();
+                }}
+                className={`${AUTH_LINK_BTN_CLASS} text-xs sm:text-sm`}
+              >
+                Забыли пароль?
+              </button>
+            </div>
+          )}
+
           {mode === 'register' && (
             <>
               <Form.Item name="first_name">
@@ -221,7 +272,7 @@ export function AuthModal({ open, onClose, initialMode = 'login' }: AuthModalPro
               htmlType="submit"
               block
               loading={loading}
-              className="h-12 bg-green-500 border-none hover:bg-green-400 text-white font-semibold rounded-xl"
+              className={AUTH_PRIMARY_BTN_CLASS}
             >
               {mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
             </Button>
@@ -242,6 +293,68 @@ export function AuthModal({ open, onClose, initialMode = 'login' }: AuthModalPro
             />
           </div>
         </div>
+          </>
+        ) : mode === 'forgot' ? (
+          <Form form={form} onFinish={handleForgotPassword} layout="vertical" size="large">
+            <Form.Item
+              name="email"
+              rules={[
+                { required: true, message: 'Введите email' },
+                { type: 'email', message: 'Введите корректный email' },
+              ]}
+            >
+              <Input
+                prefix={<MailOutlined className="text-slate-400" />}
+                placeholder="your@email.com"
+                className="!bg-black/30 !border-white/10 !text-white !placeholder:text-slate-500 hover:!border-white/20 focus:!border-green-500/50"
+              />
+            </Form.Item>
+            <Form.Item className="mb-2">
+              <Button
+                type="primary"
+                htmlType="submit"
+                block
+                loading={loading}
+                className={AUTH_PRIMARY_BTN_CLASS}
+              >
+                Отправить ссылку
+              </Button>
+            </Form.Item>
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => setMode('login')}
+                className={AUTH_LINK_BTN_CLASS}
+              >
+                ← Вернуться ко входу
+              </button>
+            </div>
+          </Form>
+        ) : (
+          <div className="space-y-4">
+            <Button
+              type="primary"
+              block
+              size="large"
+              className={AUTH_PRIMARY_BTN_CLASS}
+              onClick={() => {
+                setMode('login');
+                form.resetFields();
+              }}
+            >
+              Вернуться ко входу
+            </Button>
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => setMode('forgot')}
+                className={AUTH_LINK_BTN_CLASS}
+              >
+                Отправить ссылку ещё раз
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </Modal>
   );

@@ -18,7 +18,13 @@ const api = axios.create({
 });
 
 // Add token to requests if available (except public endpoints)
-const PUBLIC_ENDPOINTS = ['/api/users/register', '/api/users/login'];
+const PUBLIC_ENDPOINTS = [
+  '/api/users/register',
+  '/api/users/login',
+  '/api/users/forgot-password',
+  '/api/users/reset-password',
+  '/api/users/reset-password/validate',
+];
 
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
@@ -77,6 +83,23 @@ export const userAPI = {
   login: async (data: { email: string; password: string }) => {
     const response = await api.post('/api/users/login', data);
     return response.data;
+  },
+
+  forgotPassword: async (email: string) => {
+    const response = await api.post('/api/users/forgot-password', { email });
+    return response.data as { message: string };
+  },
+
+  validateResetToken: async (token: string) => {
+    const response = await api.get('/api/users/reset-password/validate', {
+      params: { token },
+    });
+    return response.data as { valid: boolean };
+  },
+
+  resetPassword: async (data: { token: string; password: string }) => {
+    const response = await api.post('/api/users/reset-password', data);
+    return response.data as { message: string };
   },
 
   logout: async () => {

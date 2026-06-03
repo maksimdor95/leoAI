@@ -1151,7 +1151,7 @@ function ChatPageContent() {
   }, [messageApi]);
 
   const handleInterviewRestart = useCallback(() => {
-    router.push('/chat?new=true&product=wannanew');
+    router.push('/chat?new=true&product=interview-prep');
   }, [router]);
 
   const handleGenerateResumeDraft = useCallback(async () => {
@@ -1267,7 +1267,10 @@ function ChatPageContent() {
 
   /** Кнопки сценария (не показываем для экрана «Интервью завершено!» — там действия внутри карточек) */
   const stagePanelCommands = useMemo(() => {
-    if (currentProduct === 'wannanew' && latestInfoCard?.title === 'Интервью завершено!') {
+    if (
+      (currentProduct === 'wannanew' || currentProduct === 'interview-prep') &&
+      latestInfoCard?.title === 'Интервью завершено!'
+    ) {
       return undefined;
     }
     const fromCard = latestInfoCard?.commands;
@@ -1284,7 +1287,7 @@ function ChatPageContent() {
     if (!connected || !sessionId) {
       return;
     }
-    if (currentProduct !== 'wannanew') {
+    if (currentProduct !== 'wannanew' && currentProduct !== 'interview-prep') {
       setInterviewReportPreview(null);
       setInterviewReportError(null);
       return;
@@ -1339,6 +1342,51 @@ function ChatPageContent() {
     }
     return /резюме|pdf|docx|cv\b/.test(t);
   }, [connected, latestQuestion, currentProduct]);
+
+  /** Чипы выбора сценария под первым вопросом (jack — подбор; interview-prep — собеседование). */
+  const scenarioQuickReplies = useMemo(() => {
+    if (!connected) return undefined;
+    const q = latestQuestion;
+    if (!q) return undefined;
+    const ph = (q.placeholder || '').toLowerCase();
+    const text = `${q.question} ${q.placeholder || ''}`.toLowerCase();
+
+    if (currentProduct === 'jack') {
+      const looksLikeScenarioChooser =
+        (ph.includes('быстрый подбор') && ph.includes('детализированный анализ')) ||
+        (text.includes('быстр') && text.includes('детал') && text.includes('сценар'));
+      if (!looksLikeScenarioChooser) return undefined;
+      return [
+        { label: 'Быстрый подбор', value: 'Быстрый подбор', hint: '3 вопроса · 1–2 минуты' },
+        {
+          label: 'Детальный анализ',
+          value: 'Детализированный анализ',
+          hint: 'Полный профиль · 5–7 минут',
+        },
+      ];
+    }
+
+    if (currentProduct === 'interview-prep') {
+      const looksLikeInterviewChooser =
+        (ph.includes('пробное собеседование') && ph.includes('разбор вакансии')) ||
+        (text.includes('пробн') && text.includes('разбор') && text.includes('ваканс'));
+      if (!looksLikeInterviewChooser) return undefined;
+      return [
+        {
+          label: 'Пробное собеседование',
+          value: 'Пробное собеседование',
+          hint: 'Интервью на вашу позицию + отчёт',
+        },
+        {
+          label: 'Разбор вакансии',
+          value: 'Разбор вакансии',
+          hint: 'План, теория, кейсы, мок-интервью',
+        },
+      ];
+    }
+
+    return undefined;
+  }, [connected, currentProduct, latestQuestion]);
 
   const latestUserMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -1814,7 +1862,7 @@ function ChatPageContent() {
     <Layout className="min-h-screen bg-[#050913] text-white">
       {contextHolder}
       <Content className="flex flex-col h-screen px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-        <div className="flex h-full w-full max-w-[1400px] mx-auto flex-col gap-3 sm:gap-4 lg:gap-5 overflow-hidden">
+        <div className="flex min-h-0 flex-1 w-full max-w-[1400px] mx-auto flex-col gap-3 overflow-hidden sm:gap-4 lg:gap-5">
           <header className="flex-shrink-0 flex flex-col gap-2 sm:gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <Title
@@ -1831,7 +1879,11 @@ function ChatPageContent() {
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
               <Link href="/chats">
-                <Button type="text" size="small" className="!text-slate-200 text-xs sm:text-sm">
+                <Button
+                  type="text"
+                  size="small"
+                  className="!text-slate-200 hover:!text-green-300 hover:!bg-white/[0.06] text-xs sm:text-sm"
+                >
                   <span className="hidden sm:inline">Мои чаты</span>
                   <span className="sm:hidden">Чаты</span>
                 </Button>
@@ -1849,17 +1901,23 @@ function ChatPageContent() {
             </div>
           </header>
 
-          <div className={`grid gap-3 sm:gap-4 lg:gap-5 h-full overflow-hidden min-h-0 ${
-            !productSelected && isNewChatMode
-              ? 'grid-cols-1'
-              : 'grid-cols-1 lg:grid-cols-[1fr_minmax(320px,380px)]'
-          }`}>
-            <section className="flex flex-col gap-3 sm:gap-4 lg:gap-5 rounded-2xl sm:rounded-3xl border border-white/10 bg-white/[0.04] p-3 sm:p-4 lg:p-5 backdrop-blur overflow-auto min-h-0">
+          <div
+            className={`grid min-h-0 gap-3 sm:gap-4 lg:gap-5 ${
+              !productSelected && isNewChatMode
+                ? 'flex-1 grid-cols-1 overflow-hidden'
+                : 'h-full grid-cols-1 overflow-hidden lg:grid-cols-[1fr_minmax(320px,380px)]'
+            }`}
+          >
+            <section
+              className={`flex min-h-0 flex-col ${
+                !productSelected && isNewChatMode
+                  ? 'flex-1 overflow-y-auto overscroll-y-contain rounded-2xl border border-white/[0.08] bg-[#050913]/50 sm:rounded-3xl [-webkit-overflow-scrolling:touch]'
+                  : 'gap-3 overflow-auto rounded-2xl border border-white/10 bg-white/[0.04] p-3 backdrop-blur sm:gap-4 sm:p-4 lg:gap-5 lg:p-5'
+              }`}
+            >
               {/* Show product selection screen for new chats */}
               {!productSelected && isNewChatMode ? (
-                <div className="flex-1 flex items-center justify-center">
-                  <ProductSelectionScreen onSelect={handleProductScenarioSelect} />
-                </div>
+                <ProductSelectionScreen onSelect={handleProductScenarioSelect} />
               ) : (
                 <>
                   <div className="flex-shrink-0">
@@ -1897,6 +1955,11 @@ function ChatPageContent() {
                           infoCard={latestInfoCard}
                           commands={stagePanelCommands}
                           onCommandSelect={handleCommandSelect}
+                          quickReplies={scenarioQuickReplies}
+                          onQuickReply={(value) => {
+                            unlockAudio();
+                            chatRef.current?.sendMessage(value);
+                          }}
                           interviewPrepOnOpenOverview={
                             currentProduct === 'interview-prep' &&
                             latestQuestion &&
@@ -1910,7 +1973,8 @@ function ChatPageContent() {
                             }
                           }}
                           interviewReport={
-                            currentProduct === 'wannanew' &&
+                            (currentProduct === 'wannanew' ||
+                              currentProduct === 'interview-prep') &&
                             latestInfoCard?.title === 'Интервью завершено!'
                               ? {
                                   loading: interviewReportLoading,
@@ -2324,6 +2388,9 @@ function ChatPageContent() {
                 >
                   <div className="flex items-center gap-2 sm:gap-3 rounded-xl sm:rounded-2xl border border-white/10 bg-white/[0.04] px-2 sm:px-3 lg:px-4 py-2 sm:py-3 backdrop-blur">
                     <div className="flex items-center gap-1 sm:gap-2">
+                      <div className="lg:hidden">
+                        <SupportWidget placement="toolbar" showTeaser={false} />
+                      </div>
                       <Tooltip title={isMuted ? 'Включить звук' : 'Выключить звук'}>
                         <Button
                           type="text"
@@ -2436,7 +2503,12 @@ function ChatPageContent() {
           </div>
         </Form>
       </Modal>
-      <SupportWidget elevated={productSelected} />
+      {!productSelected && <SupportWidget showTeaser={false} />}
+      {productSelected && (
+        <div className="hidden lg:block">
+          <SupportWidget showTeaser />
+        </div>
+      )}
     </Layout>
   );
 }

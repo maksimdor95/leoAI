@@ -3,6 +3,7 @@ export interface CollectedData {
   pauseChoice?: string;
   clarifiedAnswer?: string;
   resumeOrIntro?: string;
+  targetPosition?: string;
   targetRole?: string;
   targetProductType?: string;
   pmCase?: string;
@@ -15,6 +16,8 @@ export interface CollectedData {
 export interface ReportData {
   candidateName?: string;
   email?: string;
+  /** Человекочитаемое название целевой позиции (любая профессия). */
+  positionTitle: string;
   targetRole: string;
   targetProductType: string;
   experience: string;

@@ -10,74 +10,42 @@ import {
 
 const CONVERSATION_SERVICE_URL = process.env.CONVERSATION_SERVICE_URL || 'http://localhost:3002';
 
-// Interview questions mapping
+// Interview questions mapping (role-agnostic — соответствует шагам сценария wannanew)
 const INTERVIEW_QUESTIONS: Record<string, { question: string; category: string }> = {
   interviewAnswer1: {
-    question:
-      'Как ты приоритизируешь задачи и фичи в бэклоге? Какие фреймворки используешь и почему?',
-    category: 'Приоритизация',
+    question: 'Ключевые навыки и опыт, релевантные целевой позиции.',
+    category: 'Ключевые компетенции',
   },
   interviewAnswer2: {
-    question:
-      'Как ты определяешь, что продукт успешен? Какие метрики отслеживаешь и как принимаешь решения на их основе?',
-    category: 'Метрики',
+    question: 'Сложная рабочая ситуация и как кандидат её решил.',
+    category: 'Рабочая ситуация',
   },
   interviewAnswer3: {
-    question:
-      'Расскажи о сложной ситуации со стейкхолдерами: конфликт интересов, несогласие по приоритетам. Как ты это разрешил?',
-    category: 'Работа со стейкхолдерами',
+    question: 'Мотивация кандидата и соответствие позиции.',
+    category: 'Мотивация и соответствие',
   },
 };
 
-function normalizeTargetRole(raw: string | undefined): keyof typeof TYPICAL_QUESTIONS {
-  if (!raw) return 'Middle';
-  const lower = String(raw).toLowerCase();
-  if (lower.includes('junior')) return 'Junior';
-  if (lower.includes('middle')) return 'Middle';
-  if (lower.includes('senior')) return 'Senior';
-  if (lower.includes('lead')) return 'Lead';
-  if (lower.includes('vp') || lower.includes('vice')) return 'VP';
-  return 'Middle';
-}
+/** Универсальные вопросы для подготовки к собеседованию на любую роль. */
+const TYPICAL_QUESTIONS: string[] = [
+  'Расскажите о себе и почему вас заинтересовала эта позиция.',
+  'Какие ваши сильные стороны делают вас подходящим кандидатом на эту роль?',
+  'Опишите сложную рабочую ситуацию и то, как вы её решили.',
+  'Приведите пример достижения, которым вы гордитесь, и вашу роль в нём.',
+  'Какие вопросы вы бы задали работодателю об этой позиции и компании?',
+];
 
-// Typical PM interview questions by level
-const TYPICAL_QUESTIONS: Record<string, string[]> = {
-  Junior: [
-    'Расскажи о продукте, над которым ты работал. Какой была твоя роль?',
-    'Как ты собираешь и приоритизируешь требования?',
-    'Что для тебя значит хороший пользовательский опыт?',
-    'Как ты взаимодействуешь с командой разработки?',
-    'Опиши ситуацию, когда тебе пришлось принять сложное решение.',
-  ],
-  Middle: [
-    'Как ты определяешь успех продукта?',
-    'Расскажи о запуске фичи от идеи до релиза.',
-    'Как ты работаешь с техническим долгом?',
-    'Как приоритизируешь backlog при ограниченных ресурсах?',
-    'Опиши конфликт со стейкхолдерами и как ты его решил.',
-  ],
-  Senior: [
-    'Как ты строишь продуктовую стратегию?',
-    'Расскажи о продукте, который ты вырастил с нуля.',
-    'Как ты принимаешь решения о отказе от фичи или продукта?',
-    'Как выстраиваешь работу с несколькими командами?',
-    'Как ты развиваешь продуктовую культуру в компании?',
-  ],
-  Lead: [
-    'Как ты формируешь и развиваешь продуктовую команду?',
-    'Расскажи о трансформации продукта или компании под твоим руководством.',
-    'Как балансируешь краткосрочные и долгосрочные цели?',
-    'Как ты работаешь с C-level менеджментом?',
-    'Как определяешь product-market fit для нового продукта?',
-  ],
-  VP: [
-    'Как ты выстраиваешь продуктовую организацию в масштабе?',
-    'Расскажи о стратегическом повороте продукта.',
-    'Как ты работаешь с советом директоров и инвесторами?',
-    'Как формируешь долгосрочное видение продуктового портфеля?',
-    'Как ты оцениваешь M&A возможности с продуктовой точки зрения?',
-  ],
-};
+/**
+ * Человекочитаемое название позиции для отчёта.
+ * Приоритет: явно названная позиция -> уровень/грейд -> общий фолбэк.
+ */
+function resolvePositionTitle(collectedData: CollectedData): string {
+  const position = collectedData.targetPosition?.trim();
+  if (position) return position;
+  const role = collectedData.targetRole?.trim();
+  if (role) return role;
+  return 'выбранную позицию';
+}
 
 export type GenerateReportDataOptions = {
   /** Bearer-токен пользователя — нужен для GET /api/chat/session (иначе conversation не отдаёт сессию). */
@@ -93,16 +61,17 @@ export const reportGenerator = {
 
     const interviewAnswers = this.extractInterviewAnswers(collectedData);
     const evaluation = this.generateEvaluation(collectedData, interviewAnswers);
-    const targetRoleKey = normalizeTargetRole(collectedData.targetRole);
-    const typicalQuestions = TYPICAL_QUESTIONS[targetRoleKey] || TYPICAL_QUESTIONS.Middle;
-    const targetRole = collectedData.targetRole || targetRoleKey;
-    const recommendations = this.generateRecommendations(evaluation, targetRoleKey);
+    const positionTitle = resolvePositionTitle(collectedData);
+    const typicalQuestions = TYPICAL_QUESTIONS;
+    const targetRole = collectedData.targetRole || positionTitle;
+    const recommendations = this.generateRecommendations(evaluation);
 
     return {
       candidateName: email?.split('@')[0] || 'Кандидат',
       email,
+      positionTitle,
       targetRole,
-      targetProductType: collectedData.targetProductType || 'B2C',
+      targetProductType: collectedData.targetProductType || 'Не указано',
       experience: collectedData.resumeOrIntro || 'Не указан',
       pmCase: collectedData.pmCase || 'Не указан',
       interviewAnswers,
@@ -194,12 +163,12 @@ export const reportGenerator = {
       }
     }
 
-    // Evaluate PM case
+    // Evaluate key case / relevant experience
     const caseScore = this.evaluateAnswer(collectedData.pmCase || '');
     if (caseScore >= 7) {
-      strengths.push('Продуктовый кейс');
+      strengths.push('Релевантный кейс');
     } else if (caseScore < 5) {
-      areasForImprovement.push('Описание продуктового опыта');
+      areasForImprovement.push('Описание релевантного опыта');
     }
 
     const overallScore = interviewAnswers.length > 0
@@ -239,38 +208,32 @@ export const reportGenerator = {
     return `Рекомендуется углубить знания в области ${category.toLowerCase()}`;
   },
 
-  generateRecommendations(evaluation: ReportEvaluation, targetRole: string): string[] {
+  generateRecommendations(evaluation: ReportEvaluation): string[] {
     const recommendations: string[] = [];
 
     // Based on overall score
     if (evaluation.overallScore < 5) {
-      recommendations.push('Рекомендуем пройти курс по основам Product Management');
-      recommendations.push('Изучите фреймворки приоритизации (RICE, ICE, MoSCoW)');
+      recommendations.push('Изучите ключевые требования и навыки для целевой позиции');
+      recommendations.push('Подготовьте короткий рассказ о себе и своём опыте под эту роль');
     } else if (evaluation.overallScore < 7) {
-      recommendations.push('Подготовьте 3-5 детальных кейсов из своего опыта');
+      recommendations.push('Подготовьте 3-5 детальных примеров из своего опыта');
       recommendations.push('Потренируйтесь структурировать ответы по методу STAR');
     } else {
-      recommendations.push('Фокусируйтесь на стратегических аспектах в ответах');
-      recommendations.push('Готовьте вопросы для интервьюера о компании и продукте');
+      recommendations.push('Подчёркивайте измеримые результаты и свой вклад в ответах');
+      recommendations.push('Подготовьте вопросы для интервьюера о позиции и компании');
     }
 
     // Based on areas for improvement
     for (const area of evaluation.areasForImprovement) {
-      if (area.includes('Приоритизация')) {
-        recommendations.push('Изучите методологии приоритизации: RICE, Kano, Story Mapping');
+      if (area.includes('Ключевые компетенции')) {
+        recommendations.push('Систематизируйте ключевые навыки и подкрепите их примерами');
       }
-      if (area.includes('Метрики')) {
-        recommendations.push('Разберите пирамиду метрик (AARRR, NSM, Health metrics)');
+      if (area.includes('Рабочая ситуация')) {
+        recommendations.push('Подготовьте кейсы по методу STAR: ситуация, задача, действия, результат');
       }
-      if (area.includes('стейкхолдер')) {
-        recommendations.push('Практикуйте техники переговоров и управления конфликтами');
+      if (area.includes('Мотивация')) {
+        recommendations.push('Сформулируйте, почему вам интересна эта позиция и компания');
       }
-    }
-
-    // Role-specific recommendations
-    if (targetRole === 'Senior' || targetRole === 'Lead' || targetRole === 'VP') {
-      recommendations.push('Подготовьте примеры влияния на бизнес-метрики');
-      recommendations.push('Продумайте ваше видение развития продукта на 2-3 года');
     }
 
     return recommendations.slice(0, 5); // Limit to 5 recommendations
