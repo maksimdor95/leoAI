@@ -116,6 +116,20 @@ const ACCENT_STYLES: Record<
   },
 };
 
+function useCanHover() {
+  const [canHover, setCanHover] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(hover: hover) and (pointer: fine)');
+    const update = () => setCanHover(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  return canHover;
+}
+
 function useTypingText(text: string, speedMs = 30, startDelayMs = 450) {
   const [displayed, setDisplayed] = useState('');
   const [isComplete, setIsComplete] = useState(false);
@@ -189,9 +203,13 @@ function CinematicBackground({ accent }: { accent: ProductAccent }) {
 function ScenarioPreviewPanel({
   scenario,
   previewKey,
+  canHover,
+  onStart,
 }: {
   scenario: ProductScenario;
   previewKey: number;
+  canHover: boolean;
+  onStart: () => void;
 }) {
   const styles = ACCENT_STYLES[scenario.accent];
 
@@ -248,40 +266,68 @@ function ScenarioPreviewPanel({
         </div>
       </div>
 
-      <div className="mt-4 flex shrink-0 items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
-        <div className="flex-1 text-xs text-slate-500 sm:text-sm">
-          <span className="lg:hidden">Нажмите карточку выше, чтобы начать</span>
-          <span className="hidden lg:inline">Нажмите карточку слева, чтобы начать</span>
+      <div className="mt-4 flex shrink-0 items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
+        <div className="min-w-0 flex-1 text-xs text-slate-500 sm:text-sm">
+          {canHover ? (
+            <>
+              <span className="lg:hidden">Нажмите карточку выше, чтобы начать</span>
+              <span className="hidden lg:inline">Нажмите карточку слева, чтобы начать</span>
+            </>
+          ) : (
+            'Нажмите «Начать», когда выберете сценарий'
+          )}
         </div>
-        <div className="flex shrink-0 gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-red-400/70" />
-          <span className="h-2 w-2 rounded-full bg-amber-300/70" />
-          <span className="h-2 w-2 rounded-full bg-green-400/80" />
-        </div>
+        {!canHover ? (
+          <button
+            type="button"
+            onClick={onStart}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold transition-all active:scale-[0.98] ${styles.previewBadge}`}
+          >
+            Начать
+            <ArrowRightOutlined className="text-[10px]" />
+          </button>
+        ) : (
+          <div className="flex shrink-0 gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-red-400/70" />
+            <span className="h-2 w-2 rounded-full bg-amber-300/70" />
+            <span className="h-2 w-2 rounded-full bg-green-400/80" />
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 export function ProductSelectionScreen({ onSelect }: ProductSelectionScreenProps) {
+  const canHover = useCanHover();
   const [activeProduct, setActiveProduct] = useState<ProductType>('jack');
   const [previewKey, setPreviewKey] = useState(0);
   const ttsBeatAtRef = useRef(0);
   const assistantLevelRef = useRef(0);
+  const previewPanelRef = useRef<HTMLDivElement>(null);
 
   const activeScenario =
     PRODUCT_SCENARIOS.find((scenario) => scenario.product === activeProduct) ?? PRODUCT_SCENARIOS[0];
 
   const { displayed: typedGreeting, isComplete: greetingComplete } = useTypingText(GREETING_TEXT);
 
-  const activateScenario = useCallback((product: ProductType) => {
-    setActiveProduct((current) => {
-      if (current !== product) {
-        setPreviewKey((key) => key + 1);
+  const activateScenario = useCallback(
+    (product: ProductType) => {
+      setActiveProduct((current) => {
+        if (current !== product) {
+          setPreviewKey((key) => key + 1);
+        }
+        return product;
+      });
+
+      if (!canHover) {
+        requestAnimationFrame(() => {
+          previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
       }
-      return product;
-    });
-  }, []);
+    },
+    [canHover],
+  );
 
   return (
     <div className="relative flex w-full flex-col px-3 py-4 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] sm:px-5 sm:py-6 lg:min-h-full lg:px-6 lg:py-7">
@@ -320,10 +366,16 @@ export function ProductSelectionScreen({ onSelect }: ProductSelectionScreenProps
               className="animate-fadeIn text-sm text-slate-300 sm:text-lg"
               style={{ animationDelay: '0.25s' }}
             >
-              <span className="lg:hidden">Выбери с чего хочешь начать</span>
-              <span className="hidden lg:inline">
-                Выбери с чего хочешь начать — справа покажу, как будет выглядеть диалог
-              </span>
+              {canHover ? (
+                <>
+                  <span className="lg:hidden">Выбери с чего хочешь начать</span>
+                  <span className="hidden lg:inline">
+                    Выбери с чего хочешь начать — справа покажу, как будет выглядеть диалог
+                  </span>
+                </>
+              ) : (
+                'Нажми на карточку — ниже покажу, как будет выглядеть диалог'
+              )}
             </p>
           </div>
 
@@ -353,8 +405,10 @@ export function ProductSelectionScreen({ onSelect }: ProductSelectionScreenProps
                 <button
                   key={scenario.product}
                   type="button"
-                  onClick={() => onSelect(scenario.product)}
-                  onMouseEnter={() => activateScenario(scenario.product)}
+                  onClick={() =>
+                    canHover ? onSelect(scenario.product) : activateScenario(scenario.product)
+                  }
+                  onMouseEnter={canHover ? () => activateScenario(scenario.product) : undefined}
                   onFocus={() => activateScenario(scenario.product)}
                   className={`group relative overflow-hidden rounded-2xl border bg-white/[0.04] p-4 text-left backdrop-blur transition-all duration-300 animate-fadeIn focus:outline-none focus-visible:ring-2 focus-visible:ring-green-400/45 sm:rounded-3xl sm:p-5 ${
                     isActive
@@ -406,10 +460,16 @@ export function ProductSelectionScreen({ onSelect }: ProductSelectionScreenProps
           </div>
 
           <div
+            ref={previewPanelRef}
             className="animate-fadeIn min-h-[280px] lg:min-h-0"
             style={{ animationDelay: '0.55s' }}
           >
-            <ScenarioPreviewPanel scenario={activeScenario} previewKey={previewKey} />
+            <ScenarioPreviewPanel
+              scenario={activeScenario}
+              previewKey={previewKey}
+              canHover={canHover}
+              onStart={() => onSelect(activeProduct)}
+            />
           </div>
         </div>
       </div>

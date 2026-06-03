@@ -751,6 +751,160 @@ function buildInfoCardMessage(
   return msg;
 }
 
+export function wantsDetailedProfileAnalysis(message: string): boolean {
+  const normalized = message.toLowerCase().trim();
+  if (normalized.includes('детализ') || normalized.includes('развернут')) {
+    return true;
+  }
+  if (/перейти\s+(к\s+)?детальн/.test(normalized)) {
+    return true;
+  }
+  if (/детальн\w*\s+анализ/.test(normalized)) {
+    return true;
+  }
+  if (normalized.includes('полный') && (normalized.includes('профил') || normalized.includes('разбор'))) {
+    return true;
+  }
+  return false;
+}
+
+export function isQuickReadyMetaClarifyRequest(message: string): boolean {
+  const normalized = message.toLowerCase().trim();
+  if (normalized.length > 80 || wantsDetailedProfileAnalysis(message)) {
+    return false;
+  }
+
+  const metaClarifyPatterns = [
+    /^можно\s+уточнить(\s+детали)?[.!?\s]*$/,
+    /^уточнить(\s+детали)?[.!?\s]*$/,
+    /^хочу\s+уточнить(\s+детали)?[.!?\s]*$/,
+    /^уточни(\s+детали)?[.!?\s]*$/,
+  ];
+
+  return metaClarifyPatterns.some((pattern) => pattern.test(normalized));
+}
+
+async function buildFreeChatAssistantReply(
+  session: ConversationSession,
+  scenarioId: string,
+  userMessageContent: string,
+  metadataUpdates: PreparedStepResult['metadataUpdates'],
+  authToken?: string
+): Promise<PreparedStepResult> {
+  const conversationHistory = (session.messages || [])
+    .filter(
+      (msg) =>
+        msg.type === MessageType.TEXT &&
+        (msg.role === MessageRole.USER || msg.role === MessageRole.ASSISTANT)
+    )
+    .slice(-10)
+    .map((msg) => ({
+      role: msg.role === MessageRole.USER ? ('user' as const) : ('assistant' as const),
+      content: 'content' in msg ? String(msg.content) : '',
+    }));
+
+  const contentList =
+    typeof session.metadata.collectedData[RESUME_CONTENT_LIST_KEY] === 'object' &&
+    session.metadata.collectedData[RESUME_CONTENT_LIST_KEY] !== null
+      ? (session.metadata.collectedData[RESUME_CONTENT_LIST_KEY] as {
+          docId?: string;
+          chunks: Array<{
+            chunkId: string;
+            type: 'text';
+            text: string;
+            page?: number;
+            section?: string;
+            tags?: string[];
+            confidence?: number;
+            lang?: 'ru' | 'en' | 'unknown';
+          }>;
+        })
+      : undefined;
+
+  const retrieval = await retrieveContext({
+    sessionId: session.id,
+    scenarioId,
+    query: userMessageContent,
+    topK: 3,
+    collectedData: session.metadata.collectedData,
+    contentList,
+    authToken,
+  });
+  const contextText = retrieval.items.map((item) => `- ${item.text}`).join('\n');
+  const enrichedMessage =
+    contextText.length > 0
+      ? `${userMessageContent}\n\nРелевантный контекст профиля:\n${contextText}`
+      : userMessageContent;
+
+  const freeChatResponse = await generateFreeChatResponse({
+    message: enrichedMessage,
+    collectedData: session.metadata.collectedData,
+    authToken,
+    conversationHistory,
+  });
+
+  return {
+    message: {
+      id: uuidv4(),
+      type: MessageType.TEXT,
+      role: MessageRole.ASSISTANT,
+      timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      content: freeChatResponse,
+    },
+    metadataUpdates,
+    nextStepId: null,
+  };
+}
+
+async function handleQuickReadyReply(
+  session: ConversationSession,
+  scenarioId: string,
+  userMessageContent: string,
+  scenarioUpdates: PreparedStepResult['metadataUpdates'],
+  authToken?: string
+): Promise<PreparedStepResult> {
+  if (wantsDetailedProfileAnalysis(userMessageContent)) {
+    logger.info('User chose detailed analysis from quick_ready, advancing to career_overview');
+    const metadataUpdates: PreparedStepResult['metadataUpdates'] = {
+      ...scenarioUpdates,
+      collectedData: {
+        scenarioMode: 'детализированный анализ',
+      },
+      completedSteps: ['quick_ready'],
+    };
+    session.metadata.collectedData = {
+      ...session.metadata.collectedData,
+      scenarioMode: 'детализированный анализ',
+    };
+    return prepareAssistantMessageForStepId(session, scenarioId, 'career_overview', metadataUpdates);
+  }
+
+  if (isQuickReadyMetaClarifyRequest(userMessageContent)) {
+    return {
+      message: {
+        id: uuidv4(),
+        type: MessageType.TEXT,
+        role: MessageRole.ASSISTANT,
+        timestamp: new Date().toISOString(),
+        sessionId: session.id,
+        content:
+          'Конечно! Что именно хотите уточнить — роль, опыт, локацию, формат или зарплатные ожидания? Напишите свободным текстом.',
+      },
+      metadataUpdates: scenarioUpdates,
+      nextStepId: null,
+    };
+  }
+
+  return buildFreeChatAssistantReply(
+    session,
+    scenarioId,
+    userMessageContent,
+    scenarioUpdates,
+    authToken
+  );
+}
+
 /**
  * После clarify: собрать ответ ассистента для следующего шага (question / info_card / command).
  * Совпадает с логикой основного потока после сохранения ответа на вопрос.
@@ -1436,6 +1590,14 @@ export async function handleUserReply(
           metadataUpdates: scenarioUpdates,
         };
       }
+    } else if (currentStep.id === 'quick_ready') {
+      return handleQuickReadyReply(
+        session,
+        scenarioId,
+        userMessageContent,
+        scenarioUpdates,
+        authToken
+      );
     } else {
       // For other info_card steps, automatically advance (existing behavior)
       const nextStepId = resolveNextStep(currentStep.next, session.metadata.collectedData);

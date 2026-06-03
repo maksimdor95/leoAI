@@ -1,4 +1,10 @@
-import { evaluateCondition, getScenarioIdByProduct, resolveNextStep } from '../dialogueEngine';
+import {
+  evaluateCondition,
+  getScenarioIdByProduct,
+  isQuickReadyMetaClarifyRequest,
+  resolveNextStep,
+  wantsDetailedProfileAnalysis,
+} from '../dialogueEngine';
 import { ScenarioNextValue } from '../../types/scenario';
 
 // Mock the logger
@@ -154,6 +160,27 @@ describe('dialogueEngine', () => {
   describe('getScenarioIdByProduct', () => {
     it('should route interview prep product to interview scenario', () => {
       expect(getScenarioIdByProduct('interview-prep')).toBe('interview-prep-v1');
+    });
+  });
+
+  describe('quick_ready intent detection', () => {
+    it('detects detailed analysis requests', () => {
+      expect(wantsDetailedProfileAnalysis('перейти к детальному анализу')).toBe(true);
+      expect(wantsDetailedProfileAnalysis('детализированный анализ')).toBe(true);
+      expect(wantsDetailedProfileAnalysis('хочу развернутый разбор')).toBe(true);
+    });
+
+    it('detects meta clarify requests without treating them as detailed analysis', () => {
+      expect(isQuickReadyMetaClarifyRequest('Можно уточнить детали')).toBe(true);
+      expect(wantsDetailedProfileAnalysis('Можно уточнить детали')).toBe(false);
+    });
+
+    it('treats substantive clarifications as free chat, not meta prompts', () => {
+      expect(
+        isQuickReadyMetaClarifyRequest(
+          'Хочу уточнить зарплатные ожидания — готов рассматривать от 120 000 в Подольске'
+        )
+      ).toBe(false);
     });
   });
 });

@@ -11,6 +11,7 @@ import {
   message as antdMessage,
 } from 'antd';
 import { CloseOutlined, MessageOutlined } from '@ant-design/icons';
+import { getBoostyUrl } from '@/lib/boostyLink';
 import { buildTelegramSupportUrl, getTelegramSupportUrl } from '@/lib/supportLink';
 import { submitConsultationLead } from '@/lib/consultationApi';
 import { captureEvent } from '@/lib/analytics';
@@ -63,9 +64,17 @@ type SupportWidgetProps = {
 const FLOATING_BUTTON_CLASS =
   'flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-green-500 text-white shadow-lg shadow-green-500/25 transition-all hover:scale-105 hover:bg-green-400 active:scale-95';
 
+const boostyUrl = getBoostyUrl();
+
 const TelegramIcon = () => (
   <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden>
     <path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71l-4.14-3.05-1.99 1.93c-.23.23-.42.42-.83.42z" />
+  </svg>
+);
+
+const BoostyIcon = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden>
+    <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" />
   </svg>
 );
 
@@ -113,6 +122,11 @@ export function SupportWidget({
 
   const handleTelegram = () => {
     captureEvent('support_widget_telegram_clicked');
+    closeMenu();
+  };
+
+  const handleBoosty = () => {
+    captureEvent('support_widget_boosty_clicked');
     closeMenu();
   };
 
@@ -166,6 +180,16 @@ export function SupportWidget({
       >
         <TelegramIcon />
         Telegram
+      </a>
+      <a
+        href={boostyUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={handleBoosty}
+        className={`${CONSULTATION_SECONDARY_BTN_CLASS} text-orange-300 hover:border-orange-500/30 hover:text-orange-200`}
+      >
+        <BoostyIcon />
+        Boosty
       </a>
     </div>
   );

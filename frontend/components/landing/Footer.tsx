@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getBoostyUrl } from '@/lib/boostyLink';
 import { buildTelegramSupportUrl, getTelegramSupportUrl } from '@/lib/supportLink';
+
+const boostyUrl = getBoostyUrl();
 
 const linkClass = 'text-slate-300 hover:text-green-200 transition-colors';
 const defaultSupportUrl = buildTelegramSupportUrl();
@@ -69,6 +72,16 @@ export function Footer() {
                   Обратная связь в Telegram
                 </a>
               </p>
+              <p>
+                <a
+                  href={boostyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  Поддержать на Boosty
+                </a>
+              </p>
               <p className="max-w-xs text-xs leading-6 text-slate-500">
                 Для поддержки не передавайте пароли, токены и банковские данные.
               </p>
@@ -112,6 +125,14 @@ export function Footer() {
               className="text-slate-400 hover:text-green-200 transition-colors"
             >
               Обратная связь
+            </a>
+            <a
+              href={boostyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-slate-400 hover:text-green-200 transition-colors"
+            >
+              Boosty
             </a>
           </div>
         </div>
