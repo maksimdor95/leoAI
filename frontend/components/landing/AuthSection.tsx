@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Form, Input, Button, Typography, message } from 'antd';
-import { MailOutlined, LockOutlined, UserOutlined } from '@ant-design/icons';
+import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { userAPI } from '@/lib/api';
 import { saveToken } from '@/lib/auth';
 import { captureEvent } from '@/lib/analytics';
@@ -72,12 +72,7 @@ export function AuthSection() {
     }
   };
 
-  const handleRegister = async (values: {
-    email: string;
-    password: string;
-    first_name?: string;
-    last_name?: string;
-  }) => {
+  const handleRegister = async (values: { email: string; password: string }) => {
     setLoading(true);
     try {
       const result = await userAPI.register(values);
@@ -169,25 +164,6 @@ export function AuthSection() {
                   className="!bg-black/30 !border-white/10 !text-white !placeholder:text-slate-500 hover:!border-white/20 focus:!border-green-500/50"
                 />
               </Form.Item>
-
-              {mode === 'register' && (
-                <>
-                  <Form.Item name="first_name">
-                    <Input
-                      prefix={<UserOutlined className="text-slate-400" />}
-                      placeholder="Ваше имя (необязательно)"
-                      className="!bg-black/30 !border-white/10 !text-white !placeholder:text-slate-500 hover:!border-white/20 focus:!border-green-500/50"
-                    />
-                  </Form.Item>
-                  <Form.Item name="last_name">
-                    <Input
-                      prefix={<UserOutlined className="text-slate-400" />}
-                      placeholder="Ваша фамилия (необязательно)"
-                      className="!bg-black/30 !border-white/10 !text-white !placeholder:text-slate-500 hover:!border-white/20 focus:!border-green-500/50"
-                    />
-                  </Form.Item>
-                </>
-              )}
 
               <Form.Item className="mb-0">
                 <Button

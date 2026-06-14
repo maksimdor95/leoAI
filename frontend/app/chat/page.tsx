@@ -2138,21 +2138,17 @@ function ChatPageContent() {
                             </span>
                             {currentProduct === 'jack' ? (
                               <div className="flex shrink-0 items-center gap-1">
-                                <Tooltip
-                                  title="Обновить подбор: запускает сбор свежих вакансий под ваш профиль и фоном пересчитывает совпадения в каталоге."
-                                >
-                                  <Button
-                                    type="text"
-                                    size="small"
-                                    icon={<ReloadOutlined />}
-                                    loading={isJobsLoading}
-                                    onClick={() => {
-                                      void requestFreshJobsForProfile();
-                                    }}
-                                    className="!shrink-0 !text-slate-400 hover:!text-slate-200"
-                                    aria-label="Обновить подбор под профиль"
-                                  />
-                                </Tooltip>
+                                <Button
+                                  type="text"
+                                  size="small"
+                                  icon={<ReloadOutlined />}
+                                  loading={isJobsLoading}
+                                  onClick={() => {
+                                    void requestFreshJobsForProfile();
+                                  }}
+                                  className="!shrink-0 !text-slate-400 hover:!text-slate-200"
+                                  aria-label="Обновить подбор под профиль"
+                                />
                               </div>
                             ) : null}
                           </div>

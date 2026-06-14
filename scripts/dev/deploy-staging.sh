@@ -23,7 +23,7 @@ usage() {
 Usage: bash ./scripts/dev/deploy-staging.sh [options]
 
 Full staging deploy on VPS: optional git sync + npm install, docker up,
-stop stack, free ports, start with .env.staging.local, smoke curl.
+stop stack, build frontend, start with .env.staging.local (frontend prod, services dev), smoke curl.
 
 Options:
   --skip-pull      Do not sync git
@@ -76,7 +76,7 @@ echo "Env:  $ENV_FILE"
 echo
 
 if [[ "$SKIP_PULL" -eq 0 ]]; then
-  echo "[1/6] git fetch origin ${GIT_BRANCH}..."
+  echo "[1/7] git fetch origin ${GIT_BRANCH}..."
   git fetch origin "$GIT_BRANCH"
   if [[ "$GIT_RESET" -eq 1 ]]; then
     echo "      git checkout -B ${GIT_BRANCH} origin/${GIT_BRANCH} && git reset --hard"
@@ -88,11 +88,11 @@ if [[ "$SKIP_PULL" -eq 0 ]]; then
     git pull origin "$GIT_BRANCH"
   fi
 else
-  echo "[1/6] git sync skipped"
+  echo "[1/7] git sync skipped"
 fi
 
 if [[ "$SKIP_INSTALL" -eq 0 ]]; then
-  echo "[2/6] npm install (root, frontend, services/*)..."
+  echo "[2/7] npm install (root, frontend, services/*)..."
   npm install
   (cd "$ROOT_DIR/frontend" && npm install)
   for d in "$ROOT_DIR"/services/*/; do
@@ -102,24 +102,32 @@ if [[ "$SKIP_INSTALL" -eq 0 ]]; then
     fi
   done
 else
-  echo "[2/6] npm install skipped"
+  echo "[2/7] npm install skipped"
 fi
 
 if [[ "$SKIP_DOCKER" -eq 0 ]]; then
-  echo "[3/6] docker compose up -d..."
+  echo "[3/7] docker compose up -d..."
   docker compose up -d
 else
-  echo "[3/6] docker compose skipped"
+  echo "[3/7] docker compose skipped"
 fi
 
-echo "[4/6] stopping dev stack..."
+build_production() {
+  echo "[build] frontend..."
+  (cd "$ROOT_DIR/frontend" && npm run build)
+}
+
+echo "[4/7] stopping dev stack..."
 npm run dev:down
 
-echo "[5/6] freeing ports 3000-3007..."
+echo "[5/7] freeing ports 3000-3007..."
 npm run dev:kill-ports
 
-echo "[6/6] starting staging stack..."
-npm run dev:up:staging
+echo "[6/7] building frontend..."
+build_production
+
+echo "[7/7] starting staging stack (frontend production, services dev)..."
+npm run dev:up:staging:frontend-prod
 
 echo
 echo "Waiting 20s for Next.js and services..."

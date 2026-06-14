@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Form, Input, Button, Card, Typography, message } from 'antd';
-import { UserOutlined, MailOutlined, LockOutlined } from '@ant-design/icons';
+import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { userAPI } from '@/lib/api';
 import { saveToken } from '@/lib/auth';
 import { captureEvent } from '@/lib/analytics';
@@ -42,12 +42,7 @@ export default function RegisterPage() {
     window.location.href = url;
   };
 
-  const onFinish = async (values: {
-    email: string;
-    password: string;
-    first_name?: string;
-    last_name?: string;
-  }) => {
+  const onFinish = async (values: { email: string; password: string }) => {
     setLoading(true);
     try {
       const result = await userAPI.register(values);
@@ -107,14 +102,6 @@ export default function RegisterPage() {
             ]}
           >
             <Input.Password prefix={<LockOutlined />} placeholder="Минимум 6 символов" />
-          </Form.Item>
-
-          <Form.Item name="first_name" label="Имя (необязательно)">
-            <Input prefix={<UserOutlined />} placeholder="Ваше имя" />
-          </Form.Item>
-
-          <Form.Item name="last_name" label="Фамилия (необязательно)">
-            <Input prefix={<UserOutlined />} placeholder="Ваша фамилия" />
           </Form.Item>
 
           <Form.Item>

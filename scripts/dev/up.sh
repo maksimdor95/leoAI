@@ -6,12 +6,22 @@ RUNLOGS_DIR="$ROOT_DIR/.runlogs"
 PID_DIR="$RUNLOGS_DIR/pids"
 
 WITH_DOCKER=0
+PRODUCTION=0
+FRONTEND_PRODUCTION=0
 ENV_FILE="$ROOT_DIR/.env"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --with-docker)
       WITH_DOCKER=1
+      shift
+      ;;
+    --production)
+      PRODUCTION=1
+      shift
+      ;;
+    --frontend-production)
+      FRONTEND_PRODUCTION=1
       shift
       ;;
     --env-file)
@@ -21,7 +31,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--with-docker] [--env-file <path>]"
+      echo "Usage: $0 [--with-docker] [--production | --frontend-production] [--env-file <path>]"
       exit 1
       ;;
   esac
@@ -51,9 +61,18 @@ start_service() {
   local log_file="$RUNLOGS_DIR/$name.log"
   local pid_file="$PID_DIR/$name.pid"
   local post_env=""
+  local run_cmd="npm run dev"
 
-  # next dev + NODE_ENV=production (e.g. staging env file) breaks PostCSS/Tailwind (@tailwind in globals.css).
-  if [[ "$mode" == "next-dev" ]]; then
+  if [[ "$PRODUCTION" -eq 1 ]]; then
+    run_cmd="npm run start"
+    if [[ "$mode" == "next-dev" ]]; then
+      post_env="export NODE_ENV=production"
+    fi
+  elif [[ "$FRONTEND_PRODUCTION" -eq 1 && "$mode" == "next-dev" ]]; then
+    run_cmd="npm run start"
+    post_env="export NODE_ENV=production"
+  elif [[ "$mode" == "next-dev" ]]; then
+    # next dev + NODE_ENV=production (e.g. staging env file) breaks PostCSS/Tailwind (@tailwind in globals.css).
     post_env="export NODE_ENV=development"
   fi
 
@@ -62,7 +81,14 @@ start_service() {
     return 0
   fi
 
-  echo "[$name] Starting on port $port (env: $ENV_FILE)..."
+  local mode_label="dev"
+  if [[ "$PRODUCTION" -eq 1 ]]; then
+    mode_label="production"
+  elif [[ "$FRONTEND_PRODUCTION" -eq 1 && "$mode" == "next-dev" ]]; then
+    mode_label="frontend-production"
+  fi
+
+  echo "[$name] Starting on port $port ($mode_label, env: $ENV_FILE)..."
   nohup bash -lc "
 while IFS= read -r line || [[ -n \"\$line\" ]]; do
   [[ -z \"\$line\" || \"\$line\" =~ ^[[:space:]]*# ]] && continue
@@ -74,7 +100,7 @@ while IFS= read -r line || [[ -n \"\$line\" ]]; do
   export \"\$key=\$value\"
 done < \"$ENV_FILE\"
 $post_env
-cd \"$ROOT_DIR/$rel_dir\" && npm run dev
+cd \"$ROOT_DIR/$rel_dir\" && $run_cmd
 " >"$log_file" 2>&1 &
   local pid="$!"
   echo "$pid" >"$pid_file"

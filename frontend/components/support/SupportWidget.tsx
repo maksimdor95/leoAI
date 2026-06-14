@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Button,
   Checkbox,
@@ -56,13 +57,21 @@ type ConsultationFormValues = {
 type SupportWidgetProps = {
   /** Плашка «Есть вопрос?» — скрываем там, где наезжает на контент (экран выбора продукта). */
   showTeaser?: boolean;
-  /** floating — угол экрана; toolbar — в панели ввода чата (мобилка). */
+  /** floating — FAB в углу; toolbar — компактная кнопка в панели ввода чата. */
   placement?: 'floating' | 'toolbar';
 };
 
 /** Единый размер плавающей кнопки поддержки (FAB) во всех контекстах. */
 const FLOATING_BUTTON_CLASS =
   'flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-green-500 text-white shadow-lg shadow-green-500/25 transition-all hover:scale-105 hover:bg-green-400 active:scale-95';
+
+const TOOLBAR_BUTTON_CLASS =
+  'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-200 transition-all hover:bg-white/[0.08] active:scale-95 sm:h-9 sm:w-9';
+
+const PANEL_ANCHOR_CLASS =
+  'right-[calc(1.25rem+env(safe-area-inset-right,0px))] sm:right-6';
+
+const TOOLBAR_OVERLAY_Z = 'z-[2500]';
 
 const boostyUrl = getBoostyUrl();
 
@@ -83,30 +92,37 @@ export function SupportWidget({
   placement = 'floating',
 }: SupportWidgetProps) {
   const [open, setOpen] = useState(false);
-  const [menuModalOpen, setMenuModalOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [telegramUrl, setTelegramUrl] = useState(() => buildTelegramSupportUrl());
   const [form] = Form.useForm<ConsultationFormValues>();
   const [messageApi, contextHolder] = antdMessage.useMessage();
+
+  const isToolbar = placement === 'toolbar';
 
   useEffect(() => {
     setTelegramUrl(getTelegramSupportUrl());
   }, []);
 
-  const isToolbar = placement === 'toolbar';
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isToolbar || !open) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isToolbar, open]);
 
   const closeMenu = () => {
     setOpen(false);
-    setMenuModalOpen(false);
   };
 
   const togglePanel = () => {
-    if (isToolbar) {
-      setMenuModalOpen(true);
-      captureEvent('support_widget_opened');
-      return;
-    }
     setOpen((prev) => {
       const next = !prev;
       if (next) captureEvent('support_widget_opened');
@@ -160,11 +176,11 @@ export function SupportWidget({
     }
   };
 
-  const positionClass =
+  const floatingBottomClass =
     'bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))]';
 
-  const anchorClass =
-    'right-[calc(1.25rem+env(safe-area-inset-right,0px))] sm:right-6';
+  const toolbarPanelBottomClass =
+    'bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))]';
 
   const renderConsultationActions = () => (
     <div className="flex flex-col gap-2.5">
@@ -206,193 +222,202 @@ export function SupportWidget({
     </>
   );
 
-  const triggerButton = (
-    <button
-      type="button"
-      onClick={togglePanel}
-      aria-label="Открыть консультацию"
-      aria-expanded={isToolbar ? menuModalOpen : open}
-      aria-haspopup="dialog"
-      className={
-        isToolbar
-          ? 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-200 transition-all hover:bg-white/[0.08] active:scale-95 sm:h-9 sm:w-9'
-          : FLOATING_BUTTON_CLASS
-      }
-    >
-      {open && !isToolbar ? (
-        <CloseOutlined style={{ fontSize: 22 }} />
-      ) : (
-        <MessageOutlined style={{ fontSize: isToolbar ? 16 : 22 }} />
-      )}
-    </button>
-  );
-
-  const anchor = (
+  const consultationPanel = (
     <div
-      className={
-        isToolbar
-          ? 'flex shrink-0'
-          : 'group pointer-events-auto flex w-14 flex-col items-end gap-3'
-      }
+      className={CONSULTATION_PANEL_CLASS}
+      role="dialog"
+      aria-label="Получить консультацию"
     >
-      {showTeaser && !open && !isToolbar && (
-        <div
-          role="tooltip"
-          className="pointer-events-none hidden w-[13.5rem] max-w-[calc(100vw-5rem)] translate-y-1 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left opacity-0 shadow-xl shadow-black/30 backdrop-blur transition-all duration-200 invisible [@media(hover:hover)]:block [@media(hover:hover)]:group-hover:pointer-events-auto [@media(hover:hover)]:group-hover:translate-y-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:visible"
-        >
-          <div className="text-sm font-semibold text-white">Есть вопрос?</div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
-            <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]" />
-            AI-ассистент онлайн
-          </div>
-        </div>
-      )}
-
-      {open && !isToolbar && (
-        <div className={CONSULTATION_PANEL_CLASS}>{renderConsultationPanel()}</div>
-      )}
-
-      {triggerButton}
+      {renderConsultationPanel()}
     </div>
   );
+
+  const toolbarPanelLayer =
+    open && isToolbar && mounted
+      ? createPortal(
+          <div className={`fixed inset-0 ${TOOLBAR_OVERLAY_Z}`}>
+            <button
+              type="button"
+              className="absolute inset-0 bg-[#050913]/75 backdrop-blur-[2px]"
+              onClick={closeMenu}
+              aria-label="Закрыть консультацию"
+            />
+            <div
+              className={`pointer-events-none absolute ${toolbarPanelBottomClass} inset-x-3 sm:inset-x-auto sm:right-6`}
+            >
+              <div className="pointer-events-auto ml-auto w-full max-w-[17.5rem] sm:w-[17.5rem]">
+                {consultationPanel}
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
+  const formModal = (
+    <Modal
+      open={formOpen}
+      onCancel={handleCloseForm}
+      footer={null}
+      centered
+      width={460}
+      destroyOnHidden
+      title={
+        <div>
+          <div className="text-base font-semibold text-white">Написать нам</div>
+          <div className="mt-1 text-sm font-normal text-slate-400">
+            Оставьте контакты — свяжемся в течение 2 часов.
+          </div>
+        </div>
+      }
+      className="consultation-modal"
+      styles={CONSULTATION_MODAL_STYLES}
+    >
+      <Form
+        form={form}
+        layout="vertical"
+        requiredMark={false}
+        onFinish={handleSubmit}
+        initialValues={{ consent: false }}
+        className="mt-2"
+      >
+        <Form.Item name="name" label={<span className="text-slate-300">Имя</span>}>
+          <Input placeholder="Александр" size="large" className={FIELD_CLASS} />
+        </Form.Item>
+        <Form.Item
+          name="email"
+          label={<span className="text-slate-300">Email</span>}
+          rules={[{ type: 'email', message: 'Введите корректный email' }]}
+        >
+          <Input placeholder="alex@company.ru" size="large" className={FIELD_CLASS} />
+        </Form.Item>
+        <Form.Item name="phone" label={<span className="text-slate-300">Телефон</span>}>
+          <Input placeholder="+7 (903) 601-42-22" size="large" className={FIELD_CLASS} />
+        </Form.Item>
+        <Form.Item
+          name="service"
+          label={<span className="text-slate-300">Интересующая услуга</span>}
+        >
+          <Select
+            size="large"
+            placeholder="Выберите услугу"
+            options={SERVICE_OPTIONS.map((s) => ({ label: s, value: s }))}
+            allowClear
+            classNames={{ popup: { root: 'consultation-select-dropdown' } }}
+          />
+        </Form.Item>
+        <Form.Item
+          name="message"
+          label={<span className="text-slate-300">Расскажите о задаче</span>}
+          rules={[{ required: true, message: 'Опишите вашу задачу' }]}
+        >
+          <Input.TextArea
+            placeholder="Опишите вашу задачу, текущие процессы и ожидаемый результат…"
+            autoSize={{ minRows: 3, maxRows: 6 }}
+            className={FIELD_CLASS}
+          />
+        </Form.Item>
+        <Form.Item
+          name="consent"
+          valuePropName="checked"
+          rules={[
+            {
+              validator: (_, value) =>
+                value
+                  ? Promise.resolve()
+                  : Promise.reject(new Error('Необходимо согласие на обработку данных')),
+            },
+          ]}
+        >
+          <Checkbox className="text-xs text-slate-400">
+            Я соглашаюсь на обработку персональных данных в соответствии с{' '}
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-green-400 hover:text-green-300"
+              onClick={(e) => e.stopPropagation()}
+            >
+              политикой конфиденциальности
+            </a>
+            .
+          </Checkbox>
+        </Form.Item>
+        <Button
+          type="primary"
+          htmlType="submit"
+          size="large"
+          loading={submitting}
+          block
+          className="!h-12 rounded-xl border-none bg-green-500 text-base font-semibold text-white shadow-lg hover:bg-green-400"
+        >
+          Отправить заявку
+        </Button>
+      </Form>
+    </Modal>
+  );
+
+  if (isToolbar) {
+    return (
+      <>
+        {contextHolder}
+        {toolbarPanelLayer}
+        <button
+          type="button"
+          onClick={togglePanel}
+          aria-label="Открыть консультацию"
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          className={TOOLBAR_BUTTON_CLASS}
+        >
+          <MessageOutlined style={{ fontSize: 16 }} />
+        </button>
+        {formModal}
+      </>
+    );
+  }
 
   return (
     <>
       {contextHolder}
 
-      {isToolbar ? (
-        anchor
-      ) : (
-        <div
-          className={`pointer-events-none fixed ${positionClass} ${anchorClass} z-[1000]`}
-        >
-          {anchor}
-        </div>
-      )}
-
-      {isToolbar && (
-        <Modal
-          open={menuModalOpen}
-          onCancel={() => setMenuModalOpen(false)}
-          footer={null}
-          centered
-          width={400}
-          destroyOnClose
-          title={
-            <div>
-              <div className="text-base font-semibold text-white">Получить консультацию</div>
-              <div className="mt-1 text-sm font-normal text-slate-400">
-                Ответим за 2 часа. Без спама и навязчивых звонков.
+      <div
+        className={`pointer-events-none fixed ${floatingBottomClass} ${PANEL_ANCHOR_CLASS} z-[1000]`}
+      >
+        <div className="group pointer-events-auto flex w-14 flex-col items-end gap-3">
+          {showTeaser && !open && (
+            <div
+              role="tooltip"
+              className="pointer-events-none hidden w-[13.5rem] max-w-[calc(100vw-5rem)] translate-y-1 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left opacity-0 shadow-xl shadow-black/30 backdrop-blur transition-all duration-200 invisible [@media(hover:hover)]:block [@media(hover:hover)]:group-hover:pointer-events-auto [@media(hover:hover)]:group-hover:translate-y-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:visible"
+            >
+              <div className="text-sm font-semibold text-white">Есть вопрос?</div>
+              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]" />
+                AI-ассистент онлайн
               </div>
             </div>
-          }
-          className="consultation-modal"
-          styles={CONSULTATION_MODAL_STYLES}
-        >
-          {renderConsultationActions()}
-        </Modal>
-      )}
+          )}
 
-      <Modal
-        open={formOpen}
-        onCancel={handleCloseForm}
-        footer={null}
-        centered
-        width={460}
-        destroyOnClose
-        title={
-          <div>
-            <div className="text-base font-semibold text-white">Написать нам</div>
-            <div className="mt-1 text-sm font-normal text-slate-400">
-              Оставьте контакты — свяжемся в течение 2 часов.
-            </div>
-          </div>
-        }
-        className="consultation-modal"
-        styles={CONSULTATION_MODAL_STYLES}
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          requiredMark={false}
-          onFinish={handleSubmit}
-          initialValues={{ consent: false }}
-          className="mt-2"
-        >
-          <Form.Item name="name" label={<span className="text-slate-300">Имя</span>}>
-            <Input placeholder="Александр" size="large" className={FIELD_CLASS} />
-          </Form.Item>
-          <Form.Item
-            name="email"
-            label={<span className="text-slate-300">Email</span>}
-            rules={[{ type: 'email', message: 'Введите корректный email' }]}
+          {open && consultationPanel}
+
+          <button
+            type="button"
+            onClick={togglePanel}
+            aria-label="Открыть консультацию"
+            aria-expanded={open}
+            aria-haspopup="dialog"
+            className={FLOATING_BUTTON_CLASS}
           >
-            <Input placeholder="alex@company.ru" size="large" className={FIELD_CLASS} />
-          </Form.Item>
-          <Form.Item name="phone" label={<span className="text-slate-300">Телефон</span>}>
-            <Input placeholder="+7 (903) 601-42-22" size="large" className={FIELD_CLASS} />
-          </Form.Item>
-          <Form.Item
-            name="service"
-            label={<span className="text-slate-300">Интересующая услуга</span>}
-          >
-            <Select
-              size="large"
-              placeholder="Выберите услугу"
-              options={SERVICE_OPTIONS.map((s) => ({ label: s, value: s }))}
-              allowClear
-              classNames={{ popup: { root: 'consultation-select-dropdown' } }}
-            />
-          </Form.Item>
-          <Form.Item
-            name="message"
-            label={<span className="text-slate-300">Расскажите о задаче</span>}
-            rules={[{ required: true, message: 'Опишите вашу задачу' }]}
-          >
-            <Input.TextArea
-              placeholder="Опишите вашу задачу, текущие процессы и ожидаемый результат…"
-              autoSize={{ minRows: 3, maxRows: 6 }}
-              className={FIELD_CLASS}
-            />
-          </Form.Item>
-          <Form.Item
-            name="consent"
-            valuePropName="checked"
-            rules={[
-              {
-                validator: (_, value) =>
-                  value
-                    ? Promise.resolve()
-                    : Promise.reject(new Error('Необходимо согласие на обработку данных')),
-              },
-            ]}
-          >
-            <Checkbox className="text-xs text-slate-400">
-              Я соглашаюсь на обработку персональных данных в соответствии с{' '}
-              <a
-                href="/privacy"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-green-400 hover:text-green-300"
-                onClick={(e) => e.stopPropagation()}
-              >
-                политикой конфиденциальности
-              </a>
-              .
-            </Checkbox>
-          </Form.Item>
-          <Button
-            type="primary"
-            htmlType="submit"
-            size="large"
-            loading={submitting}
-            block
-            className="!h-12 rounded-xl border-none bg-green-500 text-base font-semibold text-white shadow-lg hover:bg-green-400"
-          >
-            Отправить заявку
-          </Button>
-        </Form>
-      </Modal>
+            {open ? (
+              <CloseOutlined style={{ fontSize: 22 }} />
+            ) : (
+              <MessageOutlined style={{ fontSize: 22 }} />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {formModal}
     </>
   );
 }
