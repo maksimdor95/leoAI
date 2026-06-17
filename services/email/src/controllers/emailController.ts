@@ -135,7 +135,11 @@ export async function sendResumePackage(req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const { resume, coverLetter } = req.body as { resume?: string; coverLetter?: string };
+    const { resume, coverLetter, recipientEmail } = req.body as {
+      resume?: string;
+      coverLetter?: string;
+      recipientEmail?: string;
+    };
     if (!resume || typeof resume !== 'string') {
       res.status(400).json({ error: 'resume is required' });
       return;
@@ -144,6 +148,10 @@ export async function sendResumePackage(req: AuthRequest, res: Response): Promis
       res.status(400).json({ error: 'coverLetter is required' });
       return;
     }
+
+    const targetEmail = (typeof recipientEmail === 'string' && recipientEmail.includes('@'))
+      ? recipientEmail.trim()
+      : user.email;
 
     const token = req.headers.authorization?.replace('Bearer ', '') || '';
     let userName: string | undefined;
@@ -155,7 +163,7 @@ export async function sendResumePackage(req: AuthRequest, res: Response): Promis
     }
 
     const success = await sendResumePackageEmail({
-      userEmail: user.email,
+      userEmail: targetEmail,
       userName,
       resume,
       coverLetter,
@@ -164,7 +172,7 @@ export async function sendResumePackage(req: AuthRequest, res: Response): Promis
     if (success) {
       res.json({
         success: true,
-        email: user.email,
+        email: targetEmail,
         message: 'Resume package email sent successfully',
       });
     } else {

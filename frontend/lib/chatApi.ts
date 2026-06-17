@@ -5,7 +5,7 @@
 
 import { getToken } from '@/lib/auth';
 import { buildAuthHeaders } from '@/lib/authHeaders';
-import { Message } from '@/types/chat';
+import { Message, type ProfileSummary } from '@/types/chat';
 import { getPublicConversationBaseUrl } from './publicApiBaseUrl';
 
 const getApiUrl = () => getPublicConversationBaseUrl();
@@ -48,6 +48,14 @@ interface MergeCollectedResponse extends ChatSession {
 interface GenerateResumeResponse extends ChatSession {
   resume: string;
   format: 'markdown' | 'text' | 'json';
+  assistantMessage: Message | null;
+  downloadCommand?: Message | null;
+  assistantAudio?: AssistantAudioPayload | null;
+}
+
+interface GenerateSummaryResponse extends ChatSession {
+  summary: ProfileSummary;
+  status: string;
   assistantMessage: Message | null;
   downloadCommand?: Message | null;
   assistantAudio?: AssistantAudioPayload | null;
@@ -371,14 +379,75 @@ class ChatApiClient {
     return { blob, fileName, mimeType };
   }
 
-  async sendResumeEmail(): Promise<{ success: boolean; email: string }> {
+  async generateSummary(): Promise<ProfileSummary> {
+    if (!this.sessionId) {
+      throw new Error('Сессия не инициализирована');
+    }
+
+    const response = await this.request<GenerateSummaryResponse>(
+      `/api/chat/session/${this.sessionId}/summary`,
+      { method: 'POST' }
+    );
+
+    if (!response.summary?.professionalSummary) {
+      throw new Error('Сервер вернул пустое саммари');
+    }
+
+    if (response.metadata) {
+      this.sessionMetadata = response.metadata;
+    }
+
+    if (response.assistantMessage) {
+      this.emitAssistantAudio(response.assistantAudio, response.assistantMessage);
+      this.onMessage?.(response.assistantMessage);
+    }
+    if (response.downloadCommand) {
+      this.onMessage?.(response.downloadCommand);
+    }
+
+    this.lastMessageCount = response.messages.length;
+    return response.summary;
+  }
+
+  async downloadSummaryFile(
+    format: 'pdf' | 'docx'
+  ): Promise<{ blob: Blob; fileName: string; mimeType: string }> {
+    if (!this.sessionId) {
+      throw new Error('Сессия не инициализирована');
+    }
+    const token = this.token || getToken();
+    const response = await fetch(
+      `${this.baseUrl}/api/chat/session/${this.sessionId}/summary-file?format=${encodeURIComponent(format)}`,
+      {
+        method: 'GET',
+        credentials: 'include',
+        headers: buildAuthHeaders(token || undefined, true),
+      }
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get('Content-Disposition') || '';
+    const fileNameMatch = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
+    const fileName = fileNameMatch?.[1] || `profile-summary.${format}`;
+    const mimeType = response.headers.get('Content-Type') || blob.type || 'application/octet-stream';
+    return { blob, fileName, mimeType };
+  }
+
+  async sendResumeEmail(customEmail?: string): Promise<{ success: boolean; email: string }> {
     if (!this.sessionId) {
       throw new Error('Сессия не инициализирована');
     }
 
     const response = await this.request<SendResumeEmailResponse>(
       `/api/chat/session/${this.sessionId}/resume-email`,
-      { method: 'POST' }
+      {
+        method: 'POST',
+        body: customEmail ? JSON.stringify({ email: customEmail }) : undefined,
+        headers: customEmail ? { 'Content-Type': 'application/json' } : undefined,
+      }
     );
 
     if (response.metadata) {
@@ -563,8 +632,10 @@ export function createChatApi(
     mergeCollectedData: (data: Record<string, unknown>) => client.mergeCollectedData(data),
     executeCommand: (commandId: string, action: string) => client.executeCommand(commandId, action),
     generateResume: () => client.generateResume(),
-    sendResumeEmail: () => client.sendResumeEmail(),
+    generateSummary: () => client.generateSummary(),
+    sendResumeEmail: (email?: string) => client.sendResumeEmail(email),
     downloadResumeFile: (format: 'pdf' | 'docx') => client.downloadResumeFile(format),
+    downloadSummaryFile: (format: 'pdf' | 'docx') => client.downloadSummaryFile(format),
     fetchReportPreview: () => client.fetchReportPreview(),
     requestReport: () => client.requestReport(),
     get sessionId() {

@@ -56,13 +56,16 @@ function resolvePdfUnicodeFontPath(): string | null {
   return null;
 }
 
-export async function generateResumePdfBuffer(markdownResume: string): Promise<Buffer> {
-  const text = markdownToPlainText(markdownResume);
+export async function generateMarkdownPdfBuffer(options: {
+  title: string;
+  markdown: string;
+}): Promise<Buffer> {
+  const text = markdownToPlainText(options.markdown);
   const doc = new PDFDocument({
     size: 'A4',
     margins: { top: 48, bottom: 48, left: 42, right: 42 },
     info: {
-      Title: 'Resume',
+      Title: options.title,
       Author: 'LEO AI',
     },
   });
@@ -81,10 +84,9 @@ export async function generateResumePdfBuffer(markdownResume: string): Promise<B
       'PDF Unicode font not found. Install dejavu-fonts-ttf or set PDF_UNICODE_FONT_PATH.'
     );
   }
-  // Без Unicode-шрифта PDFKit даёт «кракозябры» на кириллице.
   doc.font(unicodeFontPath);
 
-  doc.fontSize(18).text('Резюме', { align: 'left' });
+  doc.fontSize(18).text(options.title, { align: 'left' });
   doc.moveDown(0.8);
   doc.fontSize(11).text(text, {
     align: 'left',
@@ -93,6 +95,10 @@ export async function generateResumePdfBuffer(markdownResume: string): Promise<B
   doc.end();
 
   return done;
+}
+
+export async function generateResumePdfBuffer(markdownResume: string): Promise<Buffer> {
+  return generateMarkdownPdfBuffer({ title: 'Резюме', markdown: markdownResume });
 }
 
 export async function generateResumeDocxBuffer(markdownResume: string): Promise<Buffer> {

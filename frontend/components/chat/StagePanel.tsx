@@ -29,8 +29,10 @@ type StagePanelProps = {
   profileCompletion?: {
     resumeLoading: boolean;
     emailLoading: boolean;
+    summaryLoading?: boolean;
     onGenerateResume: () => void;
-    onSendResumeEmail: () => void;
+    onSendResumeEmail: (email?: string) => void;
+    onGenerateSummary?: () => void;
   };
   /** Зона загрузки резюме под текстом вопроса (не в строке ввода) */
   resumeUpload?: {
@@ -99,8 +101,10 @@ export function StagePanel({
           infoCard={infoCard}
           resumeLoading={profileCompletion.resumeLoading}
           emailLoading={profileCompletion.emailLoading}
+          summaryLoading={profileCompletion.summaryLoading}
           onGenerateResume={profileCompletion.onGenerateResume}
           onSendResumeEmail={profileCompletion.onSendResumeEmail}
+          onGenerateSummary={profileCompletion.onGenerateSummary}
         />
       ) : showInfoCard && infoCard ? (
         <InterviewPrepInfoOverview

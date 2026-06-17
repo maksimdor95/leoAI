@@ -34,6 +34,9 @@ export const MATCH_SCORE_THRESHOLD = 45;
 /** Нижняя граница яруса «Слабое совпадение». */
 export const WEAK_MATCH_SCORE_FLOOR = 25;
 
+/** Сколько вакансий отдаём в первом ярусе (рекомендуем). */
+export const RECOMMENDED_RETURN_LIMIT = 30;
+
 /** Сколько вакансий отдаём во втором ярусе. */
 export const WEAK_MATCH_RETURN_LIMIT = 15;
 
@@ -120,11 +123,118 @@ export function normalizeForMatch(raw: CollectedData | null): CollectedData | nu
   const skillTokens = collectSkillStrings(raw);
   if (skillTokens.length > 0) merged.skills = skillTokens;
 
+  // If skills are empty, try to extract from careerSummary text
+  if ((!merged.skills || merged.skills.length === 0) && typeof raw.careerSummary === 'string') {
+    const extracted = extractSkillsFromText(raw.careerSummary);
+    if (extracted.length > 0) merged.skills = extracted;
+  }
+
+  // If totalExperience is missing, try to infer from careerSummary
+  if (merged.totalExperience == null && typeof raw.careerSummary === 'string') {
+    const years = extractExperienceYearsFromText(raw.careerSummary);
+    if (years !== null) merged.totalExperience = years;
+  }
+
   const locs = resolveLocationsFromCollected(raw);
   if (locs.length > 0) merged.location = locs;
 
   return merged;
 }
+
+// ---------------------------------------------------------------------------
+// Text extraction helpers (Quick Path enrichment)
+// ---------------------------------------------------------------------------
+
+const EXPERIENCE_YEAR_PATTERNS = [
+  /(\d+(?:[.,]\d+)?)\s*(?:лет|года|год|г\.)/i,
+  /(?:опыт|стаж|работаю|работал)\s*(?:—|–|-|:)?\s*(\d+(?:[.,]\d+)?)/i,
+  /(\d+(?:[.,]\d+)?)\s*(?:years?|yrs?)/i,
+];
+
+function extractExperienceYearsFromText(text: string): number | null {
+  for (const pattern of EXPERIENCE_YEAR_PATTERNS) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const years = parseFloat(match[1].replace(',', '.'));
+      if (Number.isFinite(years) && years > 0 && years < 50) return years;
+    }
+  }
+  return null;
+}
+
+const KNOWN_SKILLS = new Set([
+  'sql', 'python', 'java', 'javascript', 'typescript', 'go', 'golang', 'rust',
+  'c#', 'c++', 'php', 'ruby', 'scala', 'kotlin', 'swift', 'react', 'vue',
+  'angular', 'node.js', 'nodejs', 'django', 'flask', 'fastapi', 'spring',
+  'docker', 'kubernetes', 'k8s', 'aws', 'gcp', 'azure', 'terraform',
+  'git', 'ci/cd', 'jenkins', 'gitlab', 'github', 'linux', 'nginx',
+  'postgresql', 'mysql', 'mongodb', 'redis', 'kafka', 'rabbitmq', 'elasticsearch',
+  'tableau', 'power bi', 'powerbi', 'excel', 'pandas', 'numpy', 'spark',
+  'airflow', 'dbt', 'looker', 'metabase', 'grafana',
+  'figma', 'sketch', 'photoshop', 'illustrator',
+  'jira', 'confluence', 'miro', 'notion', 'trello', 'asana',
+  'agile', 'scrum', 'kanban', 'lean', 'safe',
+  'bpmn', 'uml', 'rest', 'graphql', 'grpc', 'api',
+  'machine learning', 'ml', 'deep learning', 'nlp', 'computer vision',
+  'a/b', 'a/b-тестирование', 'ab-тестирование',
+  '1c', '1с', 'sap', 'crm', 'erp', 'bi',
+  'brd', 'frd', 'srs', 'tdd', 'bdd', 'ddd',
+  'product management', 'product owner', 'project management', 'pmp',
+  'data governance', 'data engineering', 'etl', 'dwh',
+  'camunda', 'openapi', 'swagger',
+  'amoCRM', 'amocrm', 'битрикс24', 'bitrix24', 'hubspot', 'salesforce',
+  'spin', 'bant', 'cold calling',
+  'кпт', 'act', 'коучинг', 'фасилитация', 'медиация',
+  'mbti', 'hogan', 'gallup',
+]);
+
+function extractSkillsFromText(text: string): string[] {
+  const lower = text.toLowerCase();
+  const found: string[] = [];
+
+  for (const skill of KNOWN_SKILLS) {
+    if (lower.includes(skill)) {
+      found.push(skill.toUpperCase() === skill ? skill : skill);
+    }
+  }
+
+  // Also extract comma/semicolon separated terms that look like skills (short capitalized tokens)
+  const segments = text.split(/[,;—–\-]/).map(s => s.trim()).filter(s => s.length >= 2 && s.length <= 30);
+  for (const seg of segments) {
+    const clean = seg.replace(/^\s*(и|а|или|в|на|с|по|из|от|до)\s+/i, '').trim();
+    if (clean.length >= 2 && clean.length <= 25 && /^[A-ZА-ЯЁ0-9]/.test(clean) && !clean.includes(' в ')) {
+      const lc = clean.toLowerCase();
+      if (!found.includes(lc) && !ROLE_STOPWORDS.has(lc)) {
+        found.push(clean);
+      }
+    }
+  }
+
+  return [...new Set(found)];
+}
+
+// ---------------------------------------------------------------------------
+// Seniority inference from totalExperience
+// ---------------------------------------------------------------------------
+
+type SeniorityLevel = 'intern' | 'junior' | 'middle' | 'senior' | 'lead';
+
+function inferUserSeniority(totalExperience: number | undefined): SeniorityLevel | null {
+  if (totalExperience == null || totalExperience <= 0) return null;
+  if (totalExperience < 1) return 'intern';
+  if (totalExperience < 3) return 'junior';
+  if (totalExperience < 6) return 'middle';
+  if (totalExperience < 10) return 'senior';
+  return 'lead';
+}
+
+const SENIORITY_RANK: Record<string, number> = {
+  intern: 0,
+  junior: 1,
+  middle: 2,
+  senior: 3,
+  lead: 4,
+};
 
 function collectSkillStrings(raw: CollectedData): string[] {
   const out: string[] = [];
@@ -339,6 +449,35 @@ function calculateRawScore(
   score += workModeScore.points;
   if (workModeScore.reason) reasons.push(workModeScore.reason);
 
+  // Multi-signal bonus: reward jobs that match on 3+ factors well
+  const strongFactors = [
+    locationScore.points >= 16,
+    experienceScore.points >= 12,
+    skillsScore.points >= 15,
+    roleScore.points >= 18,
+    workModeScore.points >= 7,
+  ].filter(Boolean).length;
+
+  if (strongFactors >= 4) {
+    score += 5;
+    reasons.push('Бонус: высокое совпадение по 4+ факторам');
+  } else if (strongFactors >= 3) {
+    score += 2;
+    reasons.push('Бонус: совпадение по 3 факторам');
+  }
+
+  // Freshness micro-bonus (0-3 points): newer jobs get slight preference
+  const recency = jobRecencyTimestamp(job);
+  const now = Date.now();
+  const daysSincePosted = (now - recency) / (1000 * 60 * 60 * 24);
+  if (daysSincePosted <= 3) {
+    score += 3;
+  } else if (daysSincePosted <= 7) {
+    score += 2;
+  } else if (daysSincePosted <= 14) {
+    score += 1;
+  }
+
   return { score: Math.min(100, Math.round(score)), reasons };
 }
 
@@ -392,14 +531,21 @@ function matchExperience(
         ? parseFloat(rawExp.replace(/,/g, '.')) || 0
         : 0;
 
-  if (!job.experience_level) {
+  // Determine job seniority from experience_level or title
+  const jobLevel = job.experience_level || inferLevelFromTitle(job.title);
+
+  if (!jobLevel) {
+    // No level info at all — neutral score
     return { points: 7, reason: 'Уровень опыта не указан в вакансии' };
   }
 
   let expectedExperience: number;
-  switch (job.experience_level) {
-    case 'junior':
+  switch (jobLevel) {
+    case 'intern':
       expectedExperience = 0;
+      break;
+    case 'junior':
+      expectedExperience = 1;
       break;
     case 'middle':
       expectedExperience = 3;
@@ -407,21 +553,58 @@ function matchExperience(
     case 'senior':
       expectedExperience = 6;
       break;
+    case 'lead':
+      expectedExperience = 9;
+      break;
     default:
       return { points: 7 };
   }
 
-  const diff = Math.abs(userExperience - expectedExperience);
-  if (diff === 0) {
-    return { points: 15, reason: `Идеальное совпадение опыта: ${job.experience_level}` };
-  } else if (diff <= 1) {
-    return { points: 12, reason: `Близкое совпадение опыта: ${job.experience_level}` };
-  } else if (diff <= 2) {
-    return { points: 8, reason: `Частичное совпадение опыта: ${job.experience_level}` };
-  } else if (diff <= 3) {
-    return { points: 4, reason: `Отклонение по опыту: ${job.experience_level}` };
+  // If user has no experience data, give neutral
+  if (userExperience === 0) {
+    return { points: 7, reason: 'Опыт пользователя не указан' };
   }
-  return { points: 0, reason: 'Несовпадение по опыту' };
+
+  const diff = Math.abs(userExperience - expectedExperience);
+
+  // Seniority mismatch penalty: senior user should NOT see intern/junior jobs
+  const userSeniority = inferUserSeniority(userExperience);
+  const jobRank = SENIORITY_RANK[jobLevel] ?? 2;
+  const userRank = userSeniority ? (SENIORITY_RANK[userSeniority] ?? 2) : 2;
+  const rankGap = userRank - jobRank;
+
+  // If user is significantly overqualified (e.g. senior looking at intern/junior)
+  if (rankGap >= 2) {
+    const penalty = rankGap >= 3 ? -10 : -4;
+    return {
+      points: penalty,
+      reason: `Overqualified: пользователь ${userSeniority}, вакансия ${jobLevel}`,
+    };
+  }
+
+  if (diff === 0) {
+    return { points: 15, reason: `Идеальное совпадение опыта: ${jobLevel}` };
+  } else if (diff <= 1) {
+    return { points: 12, reason: `Близкое совпадение опыта: ${jobLevel}` };
+  } else if (diff <= 2) {
+    return { points: 8, reason: `Частичное совпадение опыта: ${jobLevel}` };
+  } else if (diff <= 3) {
+    return { points: 4, reason: `Отклонение по опыту: ${jobLevel}` };
+  }
+  return { points: 0, reason: `Несовпадение по опыту: вакансия ${jobLevel}` };
+}
+
+/**
+ * Infer experience level from job title when experience_level field is missing.
+ */
+function inferLevelFromTitle(title: string): string | null {
+  const lower = title.toLowerCase();
+  if (/\b(стажер|стажёр|intern|практикант|trainee)\b/.test(lower)) return 'intern';
+  if (/\b(junior|джуниор|младший)\b/.test(lower)) return 'junior';
+  if (/\b(middle|миддл|мидл)\b/.test(lower)) return 'middle';
+  if (/\b(senior|сеньор|старший|ведущий)\b/.test(lower)) return 'senior';
+  if (/\b(lead|лид|руководитель|head|chief|главный|директор)\b/.test(lower)) return 'lead';
+  return null;
 }
 
 function cosineSimilarity(vecA: number[], vecB: number[]): number {

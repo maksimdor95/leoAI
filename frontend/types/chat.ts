@@ -105,3 +105,19 @@ export interface MessageReceivedPayload {
 export interface ErrorPayload {
   message: string;
 }
+
+export type ProfileSummaryScoreItem = {
+  criterion: string;
+  score: number;
+  maxScore: number;
+  comment: string;
+};
+
+export type ProfileSummary = {
+  professionalSummary: string;
+  score: number;
+  scoreBreakdown: ProfileSummaryScoreItem[];
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+};

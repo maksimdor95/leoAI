@@ -1,18 +1,18 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
-import { DownOutlined, UpOutlined } from '@ant-design/icons';
-import { Button } from 'antd';
+import { useState, useMemo, type ReactNode } from 'react';
+import { Button, Input } from 'antd';
 import type { InfoCardMessage } from '@/types/chat';
-
-type CompletionSectionId = 'summary' | 'resume' | 'email' | 'matching';
 
 type ProfileCompletionCardsProps = {
   infoCard: InfoCardMessage;
   onGenerateResume: () => void;
-  onSendResumeEmail: () => void;
+  onSendResumeEmail: (email?: string) => void;
+  onGenerateSummary?: () => void;
   resumeLoading?: boolean;
   emailLoading?: boolean;
+  summaryLoading?: boolean;
+  userEmail?: string;
 };
 
 function stripIconPrefix(title: string, icon?: string): string {
@@ -21,148 +21,116 @@ function stripIconPrefix(title: string, icon?: string): string {
   return t.startsWith(icon) ? t.slice(icon.length).trim() : title;
 }
 
+function normalizeCompletionCardTitle(title: string): string {
+  const normalized = title.trim();
+  if (normalized === 'Профессиональное саммари' || normalized === 'Саммари') {
+    return 'Профессиональная оценка';
+  }
+  return normalized;
+}
+
 export function ProfileCompletionCards({
   infoCard,
   onGenerateResume,
   onSendResumeEmail,
+  onGenerateSummary,
   resumeLoading = false,
   emailLoading = false,
+  summaryLoading = false,
+  userEmail = '',
 }: ProfileCompletionCardsProps) {
-  const [openId, setOpenId] = useState<CompletionSectionId | null>('resume');
+  const [customEmail, setCustomEmail] = useState(userEmail);
 
   const meta = useMemo(() => {
     const cards = infoCard.cards || [];
-    const pick = (i: number, fallbackIcon: string, fallbackTitle: string, fallbackContent: string) => {
+    const pick = (i: number, fallbackIcon: string, fallbackTitle: string) => {
       const c = cards[i];
       return {
         icon: c?.icon || fallbackIcon,
-        title: c ? stripIconPrefix(c.title, c.icon) : fallbackTitle,
-        teaser: c?.content || fallbackContent,
+        title: c
+          ? normalizeCompletionCardTitle(stripIconPrefix(c.title, c.icon))
+          : fallbackTitle,
       };
     };
     return {
-      summary: pick(
-        0,
-        '🧾',
-        'Профессиональное саммари',
-        'Собираем ключевой опыт и достижения для сильного позиционирования.'
-      ),
-      resume: pick(
-        1,
-        '📄',
-        'Резюме',
-        'Сформируйте резюме, чтобы быстро откликаться на релевантные вакансии.'
-      ),
-      email: pick(
-        2,
-        '✉️',
-        'Email + сопроводительное',
-        'Отправьте резюме и сопроводительное письмо на вашу почту.'
-      ),
-      matching: pick(
-        3,
-        '🎯',
-        'Подбор вакансий',
-        'LEO актуализирует рекомендации с учетом собранного профиля.'
-      ),
+      summary: pick(0, '🧾', 'Профессиональная оценка'),
+      resume: pick(1, '📄', 'Резюме'),
+      email: pick(2, '✉️', 'Email'),
+      matching: pick(3, '🎯', 'Вакансии'),
     };
   }, [infoCard.cards]);
 
-  const toggle = (id: CompletionSectionId) => {
-    setOpenId((prev) => (prev === id ? null : id));
-  };
-
   return (
-    <div className="interview-report-scope w-full max-w-4xl mx-auto space-y-6 sm:space-y-8">
-      <header className="relative">
-        <div
-          className="absolute -left-px top-0 h-8 w-px rounded-full bg-gradient-to-b from-green-400/80 via-emerald-400/40 to-transparent"
-          aria-hidden
-        />
-        <div className="pl-4 sm:pl-5">
-          <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-[0.2em] text-green-400/90 mb-2">
-            Информация
-          </p>
-          <h2 className="text-xl sm:text-2xl lg:text-[1.65rem] font-bold text-white tracking-tight leading-tight">
-            {infoCard.title}
-          </h2>
-          {infoCard.description ? (
-            <p className="mt-3 text-sm text-slate-400 leading-relaxed max-w-2xl">{infoCard.description}</p>
-          ) : null}
-        </div>
-      </header>
+    <div className="w-full max-w-3xl mx-auto space-y-3">
+      <div className="pl-3">
+        <h2 className="text-base sm:text-lg font-bold text-white leading-tight flex items-center gap-2">
+          <span className="text-base">✅</span> Профиль собран
+        </h2>
+        {infoCard.description ? (
+          <p className="mt-1 text-xs text-slate-400 leading-relaxed">{infoCard.description}</p>
+        ) : null}
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 auto-rows-min">
-        <CompletionCard
-          id="summary"
-          openId={openId}
-          onToggle={toggle}
-          icon={meta.summary.icon}
-          label={meta.summary.title}
-          teaser={meta.summary.teaser}
-        >
-          <p className="text-xs text-slate-200 leading-relaxed">
-            Сводка собирается на основе текущего профиля и помогает быстро адаптировать отклик под вакансию.
-          </p>
-        </CompletionCard>
-
-        <CompletionCard
-          id="resume"
-          openId={openId}
-          onToggle={toggle}
-          icon={meta.resume.icon}
-          label={meta.resume.title}
-          teaser={meta.resume.teaser}
-        >
-          <div className="space-y-3">
-            <p className="text-xs text-slate-200 leading-relaxed">
-              Сгенерируем черновик резюме в формате Markdown на основе вашего профиля.
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <CompletionCard icon={meta.summary.icon} label={meta.summary.title}>
+          <div className="space-y-2">
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Экспертная оценка по 10 критериям. После генерации — PDF или DOCX в чате.
             </p>
             <Button
               type="primary"
-              size="large"
-              onClick={onGenerateResume}
-              loading={resumeLoading}
-              className="!h-11 !px-6 !rounded-full !border-0 !font-semibold !shadow-lg !shadow-green-500/20 !bg-gradient-to-r !from-green-500 !to-emerald-600 hover:!from-green-400 hover:!to-emerald-500 !text-white"
+              size="small"
+              onClick={onGenerateSummary}
+              loading={summaryLoading}
+              className="!h-7 !px-3 !rounded-full !border-0 !font-medium !shadow-md !shadow-green-500/15 !bg-gradient-to-r !from-green-500 !to-emerald-600 hover:!from-green-400 hover:!to-emerald-500 !text-white !text-xs"
             >
-              Сформировать резюме
+              Сформировать
             </Button>
           </div>
         </CompletionCard>
 
-        <CompletionCard
-          id="email"
-          openId={openId}
-          onToggle={toggle}
-          icon={meta.email.icon}
-          label={meta.email.title}
-          teaser={meta.email.teaser}
-        >
-          <div className="space-y-3">
-            <p className="text-xs text-slate-200 leading-relaxed">
-              Отправим на вашу почту резюме и короткое сопроводительное письмо для первого отклика.
+        <CompletionCard icon={meta.resume.icon} label={meta.resume.title}>
+          <div className="space-y-2">
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Черновик в формате HH: опыт, навыки, образование.
             </p>
             <Button
-              size="large"
-              onClick={onSendResumeEmail}
-              loading={emailLoading}
-              className="!h-11 !px-6 !rounded-full !font-medium !border !border-white/20 !bg-white/[0.06] !text-slate-100 hover:!border-green-400/40 hover:!bg-white/[0.1] hover:!text-white hover:!shadow-[0_0_24px_-8px_rgba(34,197,94,0.25)]"
+              type="primary"
+              size="small"
+              onClick={onGenerateResume}
+              loading={resumeLoading}
+              className="!h-7 !px-3 !rounded-full !border-0 !font-medium !shadow-md !shadow-green-500/15 !bg-gradient-to-r !from-green-500 !to-emerald-600 hover:!from-green-400 hover:!to-emerald-500 !text-white !text-xs"
             >
-              Отправить на почту
+              Сформировать
             </Button>
           </div>
         </CompletionCard>
 
-        <CompletionCard
-          id="matching"
-          openId={openId}
-          onToggle={toggle}
-          icon={meta.matching.icon}
-          label={meta.matching.title}
-          teaser={meta.matching.teaser}
-        >
-          <p className="text-xs text-slate-200 leading-relaxed">
-            Перейдите во вкладку вакансий, чтобы увидеть обновлённые рекомендации и отобранные позиции.
+        <CompletionCard icon={meta.email.icon} label={meta.email.title}>
+          <div className="space-y-2">
+            <Input
+              size="small"
+              value={customEmail}
+              onChange={(e) => setCustomEmail(e.target.value)}
+              placeholder="your@email.com"
+              className="!bg-white/[0.06] !border-white/15 !text-slate-100 !rounded-full !h-7 !text-xs placeholder:!text-slate-500 focus:!border-green-400/50"
+            />
+            <Button
+              size="small"
+              onClick={() => onSendResumeEmail(customEmail || undefined)}
+              loading={emailLoading}
+              disabled={!customEmail || !customEmail.includes('@')}
+              className="!h-7 !px-3 !rounded-full !font-medium !border !border-white/15 !bg-white/[0.05] !text-slate-200 hover:!border-green-400/30 hover:!bg-white/[0.1] hover:!text-white !text-xs"
+            >
+              Отправить
+            </Button>
+          </div>
+        </CompletionCard>
+
+        <CompletionCard icon={meta.matching.icon} label={meta.matching.title}>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            LEO обновляет подбор. Перейдите во вкладку{' '}
+            <span className="text-green-400 font-medium">Вакансии</span>.
           </p>
         </CompletionCard>
       </div>
@@ -171,62 +139,23 @@ export function ProfileCompletionCards({
 }
 
 function CompletionCard(props: {
-  id: CompletionSectionId;
-  openId: CompletionSectionId | null;
-  onToggle: (id: CompletionSectionId) => void;
   icon: string;
   label: string;
-  teaser: string;
   children: ReactNode;
+  className?: string;
 }) {
-  const { id, openId, onToggle, icon, label, teaser, children } = props;
-  const open = openId === id;
+  const { icon, label, children, className } = props;
   return (
     <article
-      className={`interview-report-card group rounded-2xl border transition-all duration-200 ease-out ${
-        open ? 'interview-report-card--open' : ''
-      }`}
+      className={`rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-3 space-y-2 hover:border-white/[0.14] transition-colors ${className || ''}`}
     >
-      <button
-        type="button"
-        onClick={() => onToggle(id)}
-        aria-expanded={open}
-        className="interview-report-card-trigger w-full text-left rounded-2xl px-3.5 py-3 sm:px-4 sm:py-3.5 flex gap-3"
-      >
-        <span
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl leading-none transition-colors ${
-            open
-              ? 'border border-green-400/35 bg-gradient-to-br from-green-500/15 to-emerald-600/10 text-[1.15rem]'
-              : 'border border-white/12 bg-white/[0.06] text-[1.15rem] group-hover:border-green-400/30 group-hover:bg-white/[0.09]'
-          }`}
-          aria-hidden
-        >
+      <div className="flex items-center gap-2">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-green-400/20 bg-green-500/[0.07] text-sm leading-none">
           {icon}
         </span>
-        <span className="min-w-0 flex-1 pt-0.5">
-          <span className="flex items-start justify-between gap-2">
-            <span className="text-sm font-semibold text-white tracking-tight">{label}</span>
-            <span
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                open
-                  ? 'border-green-400/35 bg-green-500/15 text-green-300'
-                  : 'border-white/12 bg-white/[0.06] text-slate-400 group-hover:border-green-400/28 group-hover:text-green-200/90'
-              }`}
-            >
-              {open ? <UpOutlined className="text-[11px]" /> : <DownOutlined className="text-[11px]" />}
-            </span>
-          </span>
-          {!open ? (
-            <span className="mt-1.5 block text-xs text-slate-400 line-clamp-2 leading-snug">{teaser}</span>
-          ) : null}
-        </span>
-      </button>
-
-      {open ? (
-        <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4 pt-0">
-          <div className="border-t border-white/10 pt-4 text-left">{children}</div>
-        </div>
-      ) : null}
+        <h3 className="text-xs font-semibold text-white">{label}</h3>
+      </div>
+      <div>{children}</div>
     </article>
   );
 }

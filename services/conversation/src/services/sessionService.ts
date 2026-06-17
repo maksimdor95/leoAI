@@ -87,6 +87,11 @@ export async function getUserSession(userId: string): Promise<ConversationSessio
   }
 }
 
+/** Помечает сессию активной для job-matching и других сервисов. */
+export async function setUserActiveSession(userId: string, sessionId: string): Promise<void> {
+  await redisClient.setEx(`user:${userId}:session`, SESSION_TTL, sessionId);
+}
+
 /**
  * Update session
  */

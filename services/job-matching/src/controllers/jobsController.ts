@@ -12,6 +12,7 @@ import {
   MATCH_SCORE_THRESHOLD,
   WEAK_MATCH_SCORE_FLOOR,
   WEAK_MATCH_RETURN_LIMIT,
+  RECOMMENDED_RETURN_LIMIT,
   HEALTHY_FAMILY_SHARE,
 } from '../services/matcher';
 import { familyLabelRu } from '../services/roleFamily';
@@ -89,8 +90,12 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Get collected data from session (с фолбэком на career-profile, если сессия пуста)
-    const collectedData = await getCollectedDataWithFallback(userId, token);
+    // Get collected data from session (explicit sessionId from chat UI, else active session)
+    const sessionId =
+      typeof req.query.sessionId === 'string' && req.query.sessionId.trim()
+        ? req.query.sessionId.trim()
+        : undefined;
+    const collectedData = await getCollectedDataWithFallback(userId, token, sessionId);
 
     const [allJobs, jobsInDb] = await Promise.all([
       jobRepository.findAll({
@@ -149,14 +154,23 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       stats.primaryFamily !== 'unknown'
         ? (() => {
             const sameOrAdjacent = matchedJobs.filter(relevantFamily);
-            // Если есть профильные рекомендации, вытесняем unknown, чтобы
-            // каталог после profile-scrape выглядел чище и объяснимее.
             return sameOrAdjacent.length > 0 ? sameOrAdjacent : matchedJobs;
           })()
-        : matchedJobs;
+        : matchedJobs.filter((m) => m.jobFamily === 'unknown');
+
+    if (
+      !catalogWarning &&
+      stats.primaryFamily === 'unknown' &&
+      prioritizedRecommended.length === 0 &&
+      matchedJobs.length > 0
+    ) {
+      catalogWarning = 'no_matches';
+    }
 
     const prioritizedWeak =
-      stats.primaryFamily !== 'unknown' && catalogWarning === 'catalog_family_mismatch'
+      stats.primaryFamily === 'unknown'
+        ? weakMatches.filter((m) => m.jobFamily === 'unknown')
+        : stats.primaryFamily !== 'unknown' && catalogWarning === 'catalog_family_mismatch'
         ? (() => {
             const sameOrAdjacent = weakMatches.filter(relevantFamily);
             const unknownOnly = weakMatches.filter((m) => m.familyMatch === 'unknown');
@@ -166,7 +180,7 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
           })()
         : weakMatches;
 
-    const topJobs = prioritizedRecommended.slice(0, 20);
+    const topJobs = prioritizedRecommended.slice(0, RECOMMENDED_RETURN_LIMIT);
     const topWeak = prioritizedWeak.slice(0, WEAK_MATCH_RETURN_LIMIT);
 
     logger.info(

@@ -28,6 +28,7 @@ import {
   updateSessionMetadata,
   updateSession,
   deleteSession,
+  setUserActiveSession,
 } from './services/sessionService';
 import { ConversationSession } from './types/session';
 import { Message, MessageType, MessageRole, InfoCardMessage } from './types/message';
@@ -42,10 +43,17 @@ import {
 } from './services/dialogueEngine';
 import {
   generateFreeChatResponse,
+  generateProfileSummaryFromCollectedData,
   generateResumeFromCollectedData,
   synthesizeAssistantAudio,
 } from './services/aiClient';
 import { generateResumeDocxBuffer, generateResumePdfBuffer } from './services/resumeExport';
+import {
+  generateSummaryDocxBuffer,
+  generateSummaryPdfBuffer,
+  parseProfileSummaryDraft,
+  type ProfileSummaryExport,
+} from './services/summaryExport';
 import { handleConversationCompletion } from './services/integrationService';
 import { validateAndLogConfig } from './utils/configValidator';
 import { getHealthStatus } from './utils/healthCheck';
@@ -337,6 +345,7 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
         res.status(404).json({ error: 'Session not found or unauthorized' });
         return;
       }
+      await setUserActiveSession(user.userId, session.id);
     } else {
       // Get or create active session
       session = await getUserSession(user.userId);
@@ -574,6 +583,115 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
   }
 });
 
+app.post('/api/chat/session/:id/summary', authenticateRequest, async (req, res) => {
+  try {
+    const user = (req as express.Request & { user: { userId: string; email: string } }).user;
+    const sessionId = req.params.id;
+    const session = await getSession(sessionId);
+    if (!session || session.userId !== user.userId) {
+      res.status(404).json({ error: 'Session not found or unauthorized' });
+      return;
+    }
+
+    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const token = extractBearerToken(
+      Array.isArray(rawAuthHeader) ? rawAuthHeader[0] : (rawAuthHeader as string | undefined)
+    );
+
+    const summary = await generateProfileSummaryFromCollectedData({
+      collectedData: session.metadata.collectedData || {},
+      authToken: token || undefined,
+    });
+
+    const downloadCommand: Message = {
+      id: uuidv4(),
+      type: MessageType.COMMAND,
+      role: MessageRole.ASSISTANT,
+      timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      commands: [
+        { id: 'summary_pdf', label: 'Скачать PDF', action: 'download_summary_pdf' },
+        { id: 'summary_docx', label: 'Скачать DOCX', action: 'download_summary_docx' },
+      ],
+    };
+    await addMessageToSession(session.id, downloadCommand);
+    session.metadata.flags = {
+      ...(session.metadata.flags || {}),
+      profileSummaryDraft: JSON.stringify(summary),
+    };
+    await updateSession(session);
+
+    const updatedSession = await getSession(session.id);
+    res.json({
+      status: 'success',
+      sessionId: updatedSession?.id,
+      messages: updatedSession?.messages || [],
+      metadata: updatedSession?.metadata,
+      assistantMessage: null,
+      downloadCommand,
+      assistantAudio: null,
+      summary,
+    });
+  } catch (error: unknown) {
+    logger.error('Error generating profile summary:', error);
+    res.status(500).json({ error: 'Failed to generate summary' });
+  }
+});
+
+app.get('/api/chat/session/:id/summary-file', authenticateRequest, async (req, res) => {
+  try {
+    const user = (req as express.Request & { user: { userId: string; email: string } }).user;
+    const sessionId = req.params.id;
+    const format = String(req.query.format || 'pdf').toLowerCase();
+    if (format !== 'pdf' && format !== 'docx') {
+      res.status(400).json({ error: 'Unsupported format. Use pdf or docx.' });
+      return;
+    }
+
+    const session = await getSession(sessionId);
+    if (!session || session.userId !== user.userId) {
+      res.status(404).json({ error: 'Session not found or unauthorized' });
+      return;
+    }
+
+    const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const token = extractBearerToken(
+      Array.isArray(authHeader) ? authHeader[0] : (authHeader as string | undefined)
+    );
+
+    let summary: ProfileSummaryExport | null = parseProfileSummaryDraft(
+      session.metadata.flags?.profileSummaryDraft
+    );
+
+    if (!summary) {
+      summary = await generateProfileSummaryFromCollectedData({
+        collectedData: session.metadata.collectedData || {},
+        authToken: token || undefined,
+      });
+    }
+
+    const fileName = `profile-summary-${session.id}.${format}`;
+    if (format === 'pdf') {
+      const pdfBuffer = await generateSummaryPdfBuffer(summary);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.send(pdfBuffer);
+      return;
+    }
+
+    const docxBuffer = await generateSummaryDocxBuffer(summary);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(docxBuffer);
+  } catch (error: unknown) {
+    logger.error('Error generating summary file:', error);
+    res.status(500).json({ error: 'Failed to generate summary file' });
+  }
+});
+
 app.post('/api/chat/session/:id/resume', authenticateRequest, async (req, res) => {
   try {
     const user = (req as express.Request & { user: { userId: string; email: string } }).user;
@@ -700,6 +818,12 @@ app.post('/api/chat/session/:id/resume-email', authenticateRequest, async (req, 
       return;
     }
 
+    // Support custom email from request body
+    const body = req.body || {};
+    const targetEmail = (typeof body.email === 'string' && body.email.includes('@'))
+      ? body.email.trim()
+      : user.email;
+
     const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
     const token = extractBearerToken(
       Array.isArray(authHeader) ? authHeader[0] : (authHeader as string | undefined)
@@ -726,6 +850,7 @@ app.post('/api/chat/session/:id/resume-email', authenticateRequest, async (req, 
       {
         resume,
         coverLetter,
+        recipientEmail: targetEmail,
       },
       {
         headers: {
@@ -744,7 +869,7 @@ app.post('/api/chat/session/:id/resume-email', authenticateRequest, async (req, 
       timestamp: new Date().toISOString(),
       sessionId: session.id,
       content:
-        `Готово! Отправил резюме и сопроводительное письмо на вашу почту: ${user.email}. ` +
+        `Готово! Отправил резюме и сопроводительное письмо на почту: ${targetEmail}. ` +
         'Проверьте входящие и папку "Спам".',
     };
 
@@ -767,7 +892,7 @@ app.post('/api/chat/session/:id/resume-email', authenticateRequest, async (req, 
       assistantMessage,
       assistantAudio: withAssistantAudioMessageId(assistantMessage, assistantAudio),
       success: true,
-      email: user.email,
+      email: targetEmail,
     });
   } catch (error: unknown) {
     logger.error('Error sending resume package email:', error);

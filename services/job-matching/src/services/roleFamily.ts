@@ -26,6 +26,7 @@ export type RoleFamily =
   | 'marketing'
   | 'sales'
   | 'hr'
+  | 'wellbeing'
   | 'finance'
   | 'legal'
   | 'support'
@@ -48,8 +49,9 @@ const FAMILY_PRIORITY: RoleFamily[] = [
   'project',
   'design',
   'marketing',
-  'sales',
+  'wellbeing',
   'hr',
+  'sales',
   'finance',
   'legal',
   'qa',
@@ -70,10 +72,6 @@ interface FamilyRules {
   tokens: string[];
 }
 
-/**
- * Словари. Ключевые паттерны — в нижнем регистре.
- * Сознательно держим здесь и англ., и рус. варианты: каталог смешанный.
- */
 const FAMILY_RULES: Record<Exclude<RoleFamily, 'unknown'>, FamilyRules> = {
   product: {
     phrases: [
@@ -210,6 +208,8 @@ const FAMILY_RULES: Record<Exclude<RoleFamily, 'unknown'>, FamilyRules> = {
       'hr manager',
       'hr business partner',
       'hrbp',
+      'people partner',
+      'people & culture',
       'talent acquisition',
       'it recruiter',
       'recruiter',
@@ -219,6 +219,24 @@ const FAMILY_RULES: Record<Exclude<RoleFamily, 'unknown'>, FamilyRules> = {
       'hr директор',
     ],
     tokens: ['hrbp', 'рекрутер', 'рекрутёр'],
+  },
+  wellbeing: {
+    phrases: [
+      'corporate psychologist',
+      'корпоративный психолог',
+      'well-being lead',
+      'wellbeing lead',
+      'well-being manager',
+      'wellbeing manager',
+      'employee experience',
+      'mental health',
+      'психолог-консультант',
+      'школьный психолог',
+      'eap',
+      'психологическая поддержка',
+      'программа well-being',
+    ],
+    tokens: ['wellbeing', 'well-being'],
   },
   finance: {
     phrases: [
@@ -388,6 +406,18 @@ const FAMILY_RULES: Record<Exclude<RoleFamily, 'unknown'>, FamilyRules> = {
   },
 };
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Токен как отдельное слово — «аналитик» не срабатывает внутри «аналитика». */
+function textIncludesToken(text: string, token: string): boolean {
+  if (!token) return false;
+  const escaped = escapeRegExp(token.toLowerCase());
+  const re = new RegExp(`(?:^|[^a-zа-яё0-9])${escaped}(?:[^a-zа-яё0-9]|$)`, 'i');
+  return re.test(text);
+}
+
 /**
  * Классифицировать произвольный текст (заголовок вакансии, желаемая роль,
  * фрагмент саммари) в семейство. При множественных совпадениях выбирается
@@ -418,7 +448,7 @@ export function classifyRoleFamily(rawText: string | null | undefined): RoleFami
       FamilyRules,
     ][]) {
       for (const token of rules.tokens) {
-        if (text.includes(token)) {
+        if (textIncludesToken(text, token)) {
           tokenHits.add(family);
           break;
         }
@@ -474,7 +504,8 @@ const ADJACENT_FAMILIES: Record<RoleFamily, RoleFamily[]> = {
   design: ['product'],
   marketing: ['product', 'sales'],
   sales: ['marketing'],
-  hr: [],
+  hr: ['wellbeing'],
+  wellbeing: ['hr'],
   finance: ['analytics'],
   legal: [],
   support: [],
@@ -579,7 +610,14 @@ export function keywordsForFamily(family: RoleFamily): string[] {
       'Account Manager',
       'Business Development Manager',
     ],
-    hr: ['HR Manager', 'HR Business Partner', 'Рекрутер', 'IT Recruiter'],
+    hr: ['HR Manager', 'HR Business Partner', 'People Partner', 'Рекрутер', 'IT Recruiter'],
+    wellbeing: [
+      'Корпоративный психолог',
+      'Corporate Psychologist',
+      'Well-being Lead',
+      'Wellbeing Manager',
+      'Employee Experience',
+    ],
     finance: ['Финансовый аналитик', 'Financial Analyst', 'Финансовый менеджер'],
     legal: ['Юрист', 'Legal Counsel'],
     support: ['Customer Success Manager', 'Customer Support Manager'],
@@ -610,6 +648,7 @@ export function familyLabelRu(family: RoleFamily): string {
     marketing: 'Маркетинг',
     sales: 'Продажи',
     hr: 'HR',
+    wellbeing: 'Well-being / психология',
     finance: 'Финансы',
     legal: 'Юриспруденция',
     support: 'Поддержка',

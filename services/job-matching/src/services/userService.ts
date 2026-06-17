@@ -167,29 +167,35 @@ export async function getUserProfile(token: string): Promise<UserProfile> {
 }
 
 /**
- * Get collected data from user's active session in Redis
+ * Get collected data from user's active session in Redis, or a specific session if provided.
  */
-export async function getCollectedData(userId: string): Promise<CollectedData | null> {
+export async function getCollectedData(
+  userId: string,
+  sessionId?: string
+): Promise<CollectedData | null> {
   try {
-    // Try to find active session for user
-    const activeSessionKey = `user:${userId}:session`;
-    const sessionId = await redis.get(activeSessionKey);
+    const resolvedSessionId =
+      sessionId?.trim() || (await redis.get(`user:${userId}:session`)) || '';
 
-    if (!sessionId) {
+    if (!resolvedSessionId) {
       logger.warn(`No active session found for user ${userId}`);
       return null;
     }
 
-    // Get session data
-    const sessionKey = `session:${sessionId}`;
+    const sessionKey = `session:${resolvedSessionId}`;
     const sessionData = await redis.get(sessionKey);
 
     if (!sessionData) {
-      logger.warn(`Session ${sessionId} not found in Redis`);
+      logger.warn(`Session ${resolvedSessionId} not found in Redis`);
       return null;
     }
 
     const session = JSON.parse(sessionData);
+    if (session?.userId && session.userId !== userId) {
+      logger.warn(`Session ${resolvedSessionId} does not belong to user ${userId}`);
+      return null;
+    }
+
     return session.metadata?.collectedData || null;
   } catch (error: unknown) {
     logger.error('Failed to get collected data:', error);
@@ -294,9 +300,10 @@ export async function getCollectedDataFromCareerProfile(
  */
 export async function getCollectedDataWithFallback(
   userId: string,
-  token: string
+  token: string,
+  sessionId?: string
 ): Promise<CollectedData | null> {
-  const fromSession = await getCollectedData(userId);
+  const fromSession = await getCollectedData(userId, sessionId);
   const sessionNotEmpty = !!fromSession && Object.keys(fromSession).length > 0;
   const sessionHasRoleSignals = hasRoleSignals(fromSession);
   if (sessionNotEmpty && sessionHasRoleSignals) return fromSession;

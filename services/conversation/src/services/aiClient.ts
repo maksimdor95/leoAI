@@ -644,6 +644,43 @@ interface GenerateResumeResponse {
   format: 'markdown' | 'text' | 'json';
 }
 
+interface GenerateSummaryResponse {
+  status: 'success';
+  summary: {
+    professionalSummary: string;
+    score: number;
+    scoreBreakdown: Array<{
+      criterion: string;
+      score: number;
+      maxScore: number;
+      comment: string;
+    }>;
+    strengths: string[];
+    weaknesses: string[];
+    recommendations: string[];
+  };
+}
+
+export async function generateProfileSummaryFromCollectedData(params: {
+  collectedData: Record<string, unknown>;
+  authToken?: string;
+}): Promise<GenerateSummaryResponse['summary']> {
+  const response = await axios.post<GenerateSummaryResponse>(
+    `${AI_SERVICE_URL}/api/ai/generate-summary`,
+    { collectedData: params.collectedData },
+    {
+      timeout: 45000,
+      headers: buildAuthHeaders(params.authToken),
+    }
+  );
+
+  if (response.data.status !== 'success' || !response.data.summary?.professionalSummary) {
+    throw new Error('AI generate-summary returned non-success status');
+  }
+
+  return response.data.summary;
+}
+
 export async function generateResumeFromCollectedData(params: {
   collectedData: Record<string, unknown>;
   format?: 'markdown' | 'text' | 'json';

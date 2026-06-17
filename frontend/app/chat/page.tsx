@@ -295,6 +295,7 @@ function ChatPageContent() {
   const [resumeImportLoading, setResumeImportLoading] = useState(false);
   const [resumeDraftLoading, setResumeDraftLoading] = useState(false);
   const [resumeEmailLoading, setResumeEmailLoading] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [interviewReportPreview, setInterviewReportPreview] = useState<InterviewReportPreview | null>(
     null
   );
@@ -1171,12 +1172,38 @@ function ChatPageContent() {
     }
   }, [messageApi]);
 
-  const handleSendResumeByEmail = useCallback(async () => {
+  const handleGenerateSummary = useCallback(async () => {
+    if (!chatRef.current) return;
+    try {
+      setSummaryLoading(true);
+      messageApi.loading({ content: 'Анализируем профиль и формируем саммари...', key: 'summary', duration: 0 });
+      const result = await chatRef.current.generateSummary();
+      if (!result?.professionalSummary) {
+        throw new Error('Сервер вернул пустое саммари');
+      }
+      messageApi.success({
+        content:
+          result.score != null
+            ? `Саммари готово · оценка ${result.score}/10. Скачайте PDF или DOCX в чате.`
+            : 'Саммари готово. Скачайте PDF или DOCX в чате.',
+        key: 'summary',
+      });
+    } catch (error) {
+      messageApi.error({
+        content: error instanceof Error ? error.message : 'Не удалось сгенерировать саммари',
+        key: 'summary',
+      });
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [messageApi]);
+
+  const handleSendResumeByEmail = useCallback(async (email?: string) => {
     if (!chatRef.current) return;
     try {
       setResumeEmailLoading(true);
       messageApi.loading({ content: 'Отправляем резюме на почту...', key: 'resume-email', duration: 0 });
-      const result = await chatRef.current.sendResumeEmail();
+      const result = await chatRef.current.sendResumeEmail(email);
       messageApi.success({
         content: `Резюме и сопроводительное отправлены на ${result.email}`,
         key: 'resume-email',
@@ -1237,6 +1264,27 @@ function ChatPageContent() {
       } catch (error) {
         messageApi.error(
           error instanceof Error ? error.message : 'Не удалось скачать файл резюме'
+        );
+      }
+      return;
+    }
+
+    if (command.action === 'download_summary_pdf' || command.action === 'download_summary_docx') {
+      try {
+        const format = command.action === 'download_summary_pdf' ? 'pdf' : 'docx';
+        const { blob, fileName } = await chatRef.current.downloadSummaryFile(format);
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fileName;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.URL.revokeObjectURL(url);
+        messageApi.success(`Файл ${fileName} скачан`);
+      } catch (error) {
+        messageApi.error(
+          error instanceof Error ? error.message : 'Не удалось скачать файл саммари'
         );
       }
       return;
@@ -1546,6 +1594,11 @@ function ChatPageContent() {
       return;
     }
 
+    const activeSessionId = chatRef.current?.sessionId || sessionId;
+    const sessionQuery = activeSessionId
+      ? `?sessionId=${encodeURIComponent(activeSessionId)}`
+      : '';
+
     setIsJobsLoading(true);
     setJobsError(null);
     setJobsLoadState('updating');
@@ -1555,11 +1608,14 @@ function ChatPageContent() {
     lastJobsFetchAtRef.current = Date.now();
 
     try {
-      const response = await fetch(`${getJobMatchingBaseUrl()}/api/jobs/match/${userId}`, {
+      const response = await fetch(
+        `${getJobMatchingBaseUrl()}/api/jobs/match/${userId}${sessionQuery}`,
+        {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      }
+      );
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -1991,8 +2047,10 @@ function ChatPageContent() {
                               ? {
                                   resumeLoading: resumeDraftLoading,
                                   emailLoading: resumeEmailLoading,
+                                  summaryLoading,
                                   onGenerateResume: handleGenerateResumeDraft,
                                   onSendResumeEmail: handleSendResumeByEmail,
+                                  onGenerateSummary: handleGenerateSummary,
                                 }
                               : undefined
                           }

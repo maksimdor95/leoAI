@@ -71,9 +71,20 @@ describe('classifyProfileRoles', () => {
     expect(result.primary).toBe('analytics');
   });
 
-  it('unknown when no role provided', () => {
-    const result = classifyProfileRoles({});
-    expect(result.primary).toBe('unknown');
+  it('classifies psychologist profile as wellbeing', () => {
+    const result = classifyProfileRoles({
+      desiredRole:
+        'Корпоративный психолог, Well-being Lead или People Partner с фокусом на mental health',
+      positionRoles: ['Корпоративный психолог', 'Психолог-консультант', 'Школьный психолог'],
+      careerSummary: '9 лет в психологии и well-being в IT',
+    });
+    expect(result.primary).toBe('wellbeing');
+    expect(result.adjacent).toEqual(expect.arrayContaining(['hr']));
+  });
+
+  it('does not classify well-being analytics phrase as analytics family', () => {
+    expect(classifyRoleFamily('аналитика well-being')).toBe('wellbeing');
+    expect(classifyRoleFamily('аналитика well-being')).not.toBe('analytics');
   });
 });
 

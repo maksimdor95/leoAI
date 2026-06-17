@@ -3,6 +3,13 @@ import { z } from 'zod';
 import { buildSystemMessage, buildUserMessage } from '../services/promptService';
 import { callYandexModel } from '../services/yandexClient';
 import { logger } from '../utils/logger';
+import {
+  buildProfileSummarySystemPrompt,
+  buildProfileSummaryUserMessage,
+  buildProfileTextForAnalysis,
+  parseProfileSummaryResponse,
+  type ProfileSummaryResult,
+} from '../prompts/profileSummaryPrompt';
 
 const freeChatSchema = z.object({
   message: z.string().min(1),
@@ -219,104 +226,37 @@ const generateSummarySchema = z.object({
 });
 
 /**
- * Агрегирует позиции из плоской структуры
- */
-function aggregatePositionsForSummary(data: Record<string, unknown>): string {
-  const positions: string[] = [];
-
-  for (let i = 1; i <= 5; i++) {
-    const company = data[`position_${i}_company`];
-    const role = data[`position_${i}_role`];
-    const industry = data[`position_${i}_industry`];
-    const achievements = data[`position_${i}_achievements`];
-
-    if (company && role) {
-      let posStr = `${role} в ${company}`;
-      if (industry) posStr += ` (${industry})`;
-      if (achievements) posStr += `: ${achievements}`;
-      positions.push(posStr);
-    }
-  }
-
-  return positions.join('\n');
-}
-
-/**
- * Генерирует профессиональное саммари на основе собранного профиля
+ * Генерирует профессиональное саммари с экспертной оценкой профиля (RQG, 10 баллов)
  */
 export async function generateProfileSummary(req: Request, res: Response) {
   try {
     const parsed = generateSummarySchema.parse(req.body);
     const { collectedData } = parsed;
 
-    // Собираем данные для саммари
-    const careerOverview = collectedData.careerSummary || '';
-    const totalExperience = collectedData.totalExperience || '';
-    const positions = aggregatePositionsForSummary(collectedData);
-    const skills = collectedData.skills_hard || collectedData.skills || '';
-    const education = collectedData.education_main || collectedData.education || '';
+    const profileText = buildProfileTextForAnalysis(collectedData);
 
     const systemPrompt = buildSystemMessage({
-      extraSections: [
-        `# Роль: Генератор профессионального саммари
-
-Ты генерируешь краткое, но информативное профессиональное саммари для резюме кандидата.
-
-## Формат саммари:
-- 2-4 предложения
-- Структура: [X] лет опыта в [области]: [ключевые этапы карьеры]. [Специализация и сильные стороны]. [Ключевые достижения/результаты].
-
-## Примеры хороших саммари:
-
-**Пример 1:**
-"Более 7 лет опыта в продакт-менеджменте: прошёл путь от аналитика до руководителя продуктовой команды. Развивал как высоконагруженные B2C продукты (финтех, e-commerce), так и B2B решения в сфере логистики и HRtech. Более 3 лет опыта управления командами как в матричном, так и в прямом подчинении."
-
-**Пример 2:**
-"Senior Product Manager с 5+ годами опыта в финтехе и e-commerce. Специализация на запуске новых продуктов с нуля и масштабировании существующих. Ключевые достижения: рост конверсии на 40%, запуск 3 продуктов с MAU 500K+."
-
-**Пример 3:**
-"Руководитель разработки с 10+ летним опытом в IT. Управлял командами до 15 человек, внедрял Agile-практики и DevOps. Специализация: высоконагруженные системы, микросервисная архитектура."
-
-## Правила:
-- Используй конкретные цифры, если они есть
-- Упоминай отрасли и типы продуктов
-- Выделяй уникальные достижения
-- Пиши в третьем лице или безлично
-- НЕ преувеличивай и НЕ додумывай то, чего нет в данных`,
-      ],
+      extraSections: [buildProfileSummarySystemPrompt()],
     });
 
-    const userMessage = buildUserMessage(`
-Сгенерируй профессиональное саммари на основе следующих данных:
+    const userMessage = buildUserMessage(buildProfileSummaryUserMessage(profileText));
 
-Общий обзор карьеры: ${careerOverview || 'не указан'}
-Общий опыт: ${totalExperience || 'не указан'} лет
-
-Позиции (опыт работы):
-${positions || 'не указаны'}
-
-Навыки: ${skills || 'не указаны'}
-Образование: ${education || 'не указано'}
-
-Верни ТОЛЬКО текст саммари (2-4 предложения), без кавычек и пояснений.`);
-
-    const messages = [
-      systemPrompt,
-      userMessage,
-    ];
+    const messages = [systemPrompt, userMessage];
 
     const aiResponse = await callYandexModel({
       sessionId: `summary-generation-${Date.now()}`,
       userId: 'summary-generator',
       messages,
       completionOptions: {
-        temperature: 0.7, // Немного креативности для разнообразия
-        maxTokens: 400,
+        temperature: 0.3,
+        maxTokens: 1500,
       },
     });
 
-    const summary = aiResponse.message.text.trim();
-    logger.info(`Generated profile summary: ${summary.substring(0, 100)}...`);
+    const summary: ProfileSummaryResult = parseProfileSummaryResponse(aiResponse.message.text.trim());
+    logger.info(
+      `Generated profile summary (score ${summary.score}/10): ${summary.professionalSummary.substring(0, 100)}...`
+    );
 
     res.json({
       status: 'success',
