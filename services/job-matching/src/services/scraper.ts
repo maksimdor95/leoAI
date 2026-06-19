@@ -11,6 +11,7 @@ import { retry, isRetryableError } from '../utils/retry';
 import { getHHApplicationToken, getHHUserAgent, hasHHAuthConfig } from './hhAuthService';
 import { buildHhVacancyUrl } from '../utils/vacancyUrl';
 import { enrichJobWithLLM } from './enrichment';
+import { classifyRoleFamily } from './roleFamily';
 
 const HH_API_URL = process.env.HH_API_URL || 'https://api.hh.ru';
 const SUPERJOB_API_URL = process.env.SUPERJOB_API_URL || 'https://api.superjob.ru/2.0';
@@ -57,6 +58,30 @@ function getSuperJobLocationParams(): Record<string, string | number | number[]>
   }
   const single = parseInt(process.env.SUPERJOB_TOWN || String(SUPERJOB_DEFAULT_TOWN_ID), 10);
   return { town: Number.isFinite(single) && single > 0 ? single : SUPERJOB_DEFAULT_TOWN_ID };
+}
+
+function getHHScraperLimits(): {
+  keywordLimit: number;
+  maxPages: number;
+  perPage: number;
+  maxVacanciesPerKeyword: number;
+  detailDelayMs: number;
+} {
+  const keywordLimit = Math.min(
+    8,
+    Math.max(1, parseInt(process.env.HH_KEYWORD_LIMIT || '5', 10) || 5)
+  );
+  const maxPages = Math.min(
+    5,
+    Math.max(1, parseInt(process.env.HH_MAX_PAGES || '3', 10) || 3)
+  );
+  const perPage = 100;
+  const rawCap = parseInt(process.env.HH_MAX_VACANCIES_PER_KEYWORD || '40', 10);
+  const maxVacanciesPerKeyword =
+    Number.isFinite(rawCap) && rawCap > 0 ? Math.min(60, rawCap) : 40;
+  const detailDelayMs = Math.max(0, parseInt(process.env.HH_REQUEST_DELAY_MS || '200', 10) || 200);
+
+  return { keywordLimit, maxPages, perPage, maxVacanciesPerKeyword, detailDelayMs };
 }
 
 function getSuperJobScraperLimits(): {
@@ -280,7 +305,8 @@ export async function scrapeHHJobs(
  */
 async function scrapeHHViaAPI(keywords: string[], locationId: number): Promise<JobInput[]> {
   const jobs: JobInput[] = [];
-  const perPage = 100;
+  const { keywordLimit, maxPages, perPage, maxVacanciesPerKeyword, detailDelayMs } =
+    getHHScraperLimits();
 
   if (!getHHApplicationToken()) {
     logger.warn(
@@ -290,53 +316,74 @@ async function scrapeHHViaAPI(keywords: string[], locationId: number): Promise<J
   }
 
   const hhHeaders = buildHHApiHeaders();
+  logger.info(
+    `HH scrape: keywords≤${keywordLimit}, pages=${maxPages}, perPage=${perPage}, max/keyword=${maxVacanciesPerKeyword}`
+  );
 
-  for (const keyword of keywords.slice(0, 3)) {
-    // Limit to 3 keywords for MVP
+  for (const keyword of keywords.slice(0, keywordLimit)) {
+    let collectedForKeyword = 0;
     try {
-      const response = await retry(
-        () =>
-          axios.get(`${HH_API_URL}/vacancies`, {
-            params: {
-              text: keyword,
-              area: locationId,
-              per_page: perPage,
-              page: 0,
+      for (let page = 0; page < maxPages; page += 1) {
+        if (collectedForKeyword >= maxVacanciesPerKeyword) {
+          break;
+        }
+
+        const response = await retry(
+          () =>
+            axios.get(`${HH_API_URL}/vacancies`, {
+              params: {
+                text: keyword,
+                area: locationId,
+                per_page: perPage,
+                page,
+              },
+              headers: hhHeaders,
+              timeout: 10000,
+            }),
+          {
+            maxRetries: 3,
+            initialDelay: 1000,
+            maxDelay: 5000,
+            onRetry: (error, attempt) => {
+              if (isRetryableError(error)) {
+                logger.warn(
+                  `Retrying HH.ru API request for keyword "${keyword}" page ${page} (attempt ${attempt})`
+                );
+              }
             },
-            headers: hhHeaders,
-            timeout: 10000,
-          }),
-        {
-          maxRetries: 3,
-          initialDelay: 1000,
-          maxDelay: 5000,
-          onRetry: (error, attempt) => {
-            if (isRetryableError(error)) {
-              logger.warn(
-                `Retrying HH.ru API request for keyword "${keyword}" (attempt ${attempt})`
-              );
-            }
-          },
-        }
-      );
-
-      const vacancies = response.data.items || [];
-      logger.info(`Found ${vacancies.length} vacancies for keyword: ${keyword}`);
-
-      for (const vacancy of vacancies.slice(0, 20)) {
-        // Limit to 20 per keyword
-        try {
-          // Fetch full vacancy details
-          const vacancyDetail = await fetchVacancyDetails(vacancy.id);
-          if (vacancyDetail) {
-            jobs.push(vacancyDetail);
           }
-        } catch (error: unknown) {
-          logger.warn(`Failed to fetch details for vacancy ${vacancy.id}:`, error);
+        );
+
+        const vacancies = response.data.items || [];
+        logger.info(
+          `Found ${vacancies.length} vacancies for keyword "${keyword}" (page ${page})`
+        );
+
+        if (vacancies.length === 0) {
+          break;
         }
 
-        // Add delay to avoid rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        for (const vacancy of vacancies) {
+          if (collectedForKeyword >= maxVacanciesPerKeyword) {
+            break;
+          }
+
+          try {
+            const vacancyDetail = await fetchVacancyDetails(vacancy.id);
+            if (vacancyDetail) {
+              jobs.push(vacancyDetail);
+              collectedForKeyword += 1;
+            }
+          } catch (error: unknown) {
+            logger.warn(`Failed to fetch details for vacancy ${vacancy.id}:`, error);
+          }
+
+          await sleep(detailDelayMs);
+        }
+
+        if (vacancies.length < perPage) {
+          break;
+        }
       }
     } catch (error: unknown) {
       logger.warn(`Failed to scrape keyword ${keyword}:`, error);
@@ -522,6 +569,7 @@ function parseSuperJobVacancy(vacancy: Record<string, unknown>, keyword: string)
     work_mode,
     source: 'superjob.ru',
     source_url: link,
+    role_family: classifyRoleFamily(title),
     posted_at: datePub ? new Date(datePub * 1000) : null,
   };
 }
@@ -613,6 +661,7 @@ async function fetchVacancyDetails(vacancyId: string): Promise<JobInput | null> 
       work_mode,
       source: 'hh.ru',
       source_url: buildHhVacancyUrl(vacancyId),
+      role_family: classifyRoleFamily(vacancy.name || ''),
       posted_at: vacancy.published_at ? new Date(vacancy.published_at) : null,
     };
   } catch (error: unknown) {
@@ -632,8 +681,9 @@ function generateMockJobs(keywords: string[]): JobInput[] {
   const experienceLevels = ['junior', 'middle', 'senior'];
 
   keywords.slice(0, 10).forEach((keyword, index) => {
+    const title = `${keyword} разработчик`;
     mockJobs.push({
-      title: `${keyword} разработчик`,
+      title,
       company: companies[index % companies.length],
       location: locations[index % locations.length],
       salary_min: 100000 + index * 20000,
@@ -649,6 +699,7 @@ function generateMockJobs(keywords: string[]): JobInput[] {
       work_mode: workModes[index % workModes.length] as 'remote' | 'office' | 'hybrid',
       source: 'demo',
       source_url: `demo://leo-ai/mock/${index + 1}?q=${encodeURIComponent(keyword)}`,
+      role_family: classifyRoleFamily(title),
       posted_at: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000), // Within last 7 days
     });
   });

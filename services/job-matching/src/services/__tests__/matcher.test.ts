@@ -32,6 +32,7 @@ function mkJob(partial: Partial<Job>): Job {
     work_mode: partial.work_mode ?? null,
     source: partial.source ?? 'hh.ru',
     source_url: partial.source_url ?? 'https://example.com/job',
+    role_family: partial.role_family ?? null,
     posted_at: partial.posted_at ?? new Date(),
     created_at: partial.created_at ?? new Date(),
     updated_at: partial.updated_at ?? new Date(),
@@ -224,6 +225,39 @@ describe('matchJobs — Middle PM', () => {
   });
 });
 
+describe('matchJobs — aspirational Head of Product', () => {
+  const catalog = [
+    mkJob({
+      id: 'pm-head-only',
+      title: 'Head of Product',
+      description: 'Стратегия и развитие B2B SaaS продукта',
+      requirements: 'Product management, SQL, stakeholder management',
+      skills: ['Product Management', 'SQL', 'Amplitude'],
+      experience_level: 'lead',
+      work_mode: 'hybrid',
+    }),
+  ];
+
+  const middlePmProfile: CollectedData = {
+    desired_role: 'Head of Product / Group Product Manager',
+    desired_location: 'Москва, гибрид',
+    totalExperience: 5,
+    skills_hard: 'SQL, Amplitude, Jira, Figma',
+    workMode: 'hybrid',
+    position_1_role: 'Product Manager',
+  };
+
+  const res = matchJobs(catalog, middlePmProfile);
+
+  it('keeps same-family Head of Product in recommended (no grade-only demote)', () => {
+    const head = res.matches.find((m) => m.job.id === 'pm-head-only');
+    expect(head).toBeDefined();
+    expect(head?.score).toBeGreaterThanOrEqual(MATCH_SCORE_THRESHOLD);
+    expect(head?.familyMatch).toBe('same');
+    expect(head?.demoteReasons ?? []).toHaveLength(0);
+  });
+});
+
 describe('matchJobs — Junior PM', () => {
   const res = matchJobs(CATALOG_MIXED, JUNIOR_PM);
   it('classifies primary as product', () => {
@@ -338,5 +372,23 @@ describe('matchJobs — product vs production false positive', () => {
 
   it('infers remote work mode from desired_location', () => {
     expect(res.stats.primaryFamily).toBe('product');
+  });
+});
+
+describe('matchJobs — stored role_family', () => {
+  it('uses role_family from DB instead of re-classifying title', () => {
+    const job = mkJob({
+      title: 'Ведущий специалист',
+      role_family: 'product',
+    });
+    const profile: CollectedData = {
+      desired_role: 'Product Manager',
+      totalExperience: 5,
+      workMode: 'remote',
+    };
+    const res = matchJobs([job], profile);
+    const entry = [...res.matches, ...res.weakMatches][0];
+    expect(entry?.jobFamily).toBe('product');
+    expect(entry?.familyMatch).toBe('same');
   });
 });

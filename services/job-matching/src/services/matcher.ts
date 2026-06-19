@@ -34,7 +34,9 @@ import {
   matchSalaryExpectation,
   salesChannelMismatchReason,
   seniorityMismatchReason,
-  shouldDemoteFromRecommended,
+  getDemoteReasons,
+  demoteReasonLabels,
+  isThinProfile,
 } from './matchNoise';
 
 /** Порог «Рекомендуем». */
@@ -88,6 +90,8 @@ export interface MatchingScore {
   reasons: string[];
   jobFamily: RoleFamily;
   familyMatch: 'same' | 'adjacent' | 'unknown' | 'conflict';
+  /** Причины понижения из «Рекомендуем» в слабый ярус (если были). */
+  demoteReasons?: string[];
 }
 
 export interface MatchJobsStats {
@@ -242,7 +246,7 @@ export function matchJobs(
   let relevantCount = 0;
 
   for (const job of jobs) {
-    const jobFamily = classifyRoleFamily(`${job.title}`);
+    const jobFamily = job.role_family ?? classifyRoleFamily(`${job.title}`);
     familyDistribution[jobFamily] = (familyDistribution[jobFamily] ?? 0) + 1;
 
     const familyMatch = resolveFamilyMatch(primaryFamily, jobFamily, adjacentSet);
@@ -270,14 +274,6 @@ export function matchJobs(
 
     if (finalScore > maxScore) maxScore = finalScore;
 
-    const entry: MatchingScore = {
-      job,
-      score: finalScore,
-      reasons,
-      jobFamily,
-      familyMatch,
-    };
-
     const userLevel =
       effective && effective.totalExperience != null
         ? inferUserSeniority(
@@ -287,15 +283,31 @@ export function matchJobs(
           )
         : null;
     const jobLevel = job.experience_level || inferLevelFromTitle(job.title);
-    const demote =
-      effective &&
-      shouldDemoteFromRecommended(
-        job,
-        effective,
-        userLevel,
-        jobLevel,
-        raw.salaryHardMismatch
-      );
+    const thinProfile = effective ? isThinProfile(effective) : false;
+    const demoteCodes =
+      effective && finalScore >= MATCH_SCORE_THRESHOLD
+        ? getDemoteReasons(job, effective, userLevel, jobLevel, raw.salaryHardMismatch, {
+            familyMatch,
+            score: finalScore,
+            thinProfile,
+          })
+        : [];
+    const demote = demoteCodes.length > 0;
+
+    if (demote) {
+      for (const label of demoteReasonLabels(demoteCodes)) {
+        reasons.push(`Понижено: ${label}`);
+      }
+    }
+
+    const entry: MatchingScore = {
+      job,
+      score: finalScore,
+      reasons,
+      jobFamily,
+      familyMatch,
+      demoteReasons: demote ? demoteReasonLabels(demoteCodes) : undefined,
+    };
 
     if (finalScore >= MATCH_SCORE_THRESHOLD) {
       if (demote) {

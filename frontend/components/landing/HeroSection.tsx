@@ -63,8 +63,9 @@ const previewScenarios: PreviewScenario[] = [
     accentClass: 'text-green-300 border-green-400/30 bg-green-400/10',
     icon: <SearchOutlined />,
     href: '/chat?new=true&product=jack',
-    metrics: ['10,000+ вакансий', 'match score', 'email'],
-    spotlight: 'LEO собирает профиль из живого диалога, сравнивает вакансии с твоим опытом и объясняет, почему матч сильный.',
+    metrics: ['каталог hh.ru', 'match score', 'прозрачно'],
+    spotlight:
+      'LEO собирает профиль из диалога, сопоставляет его со свежим каталогом вакансий и объясняет, почему совпадение сильное или слабое.',
     messages: [
       {
         role: 'leo',

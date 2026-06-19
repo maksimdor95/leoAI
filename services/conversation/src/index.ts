@@ -42,6 +42,7 @@ import {
   applyImportedCollectedData,
   analyzeVacancyFromText,
   prepareVacancyAnalyzeSession,
+  tagUserMessageWithInterviewMode,
 } from './services/dialogueEngine';
 import {
   generateFreeChatResponse,
@@ -448,14 +449,14 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
     }
 
     // Create user message
-    const userMessage: Message = {
+    const userMessage = tagUserMessageWithInterviewMode(session, {
       id: uuidv4(),
       type: MessageType.TEXT,
       role: MessageRole.USER,
       timestamp: new Date().toISOString(),
       sessionId: session.id,
       content: content.trim(),
-    };
+    });
 
     // Save user message
     await addMessageToSession(session.id, userMessage);
@@ -563,14 +564,14 @@ app.post('/api/chat/session/:id/analyze-vacancy', authenticateRequest, async (re
     }
 
     const label = (displayLabel || 'Разбор вакансии').trim();
-    const userMessage: Message = {
+    const userMessage = tagUserMessageWithInterviewMode(session, {
       id: uuidv4(),
       type: MessageType.TEXT,
       role: MessageRole.USER,
       timestamp: new Date().toISOString(),
       sessionId: session.id,
       content: label,
-    };
+    });
     await addMessageToSession(session.id, userMessage);
 
     const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
@@ -1355,14 +1356,14 @@ io.on('connection', async (socket) => {
       }
 
       // Create user message
-      const userMessage: Message = {
+      const userMessage = tagUserMessageWithInterviewMode(sessionSnapshot, {
         id: uuidv4(),
         type: MessageType.TEXT,
         role: MessageRole.USER,
         timestamp: new Date().toISOString(),
         sessionId: sessionSnapshot.id,
         content: content.trim(),
-      };
+      });
 
       // Save user message
       await addMessageToSession(sessionSnapshot.id, userMessage);

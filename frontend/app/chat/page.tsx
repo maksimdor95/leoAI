@@ -31,6 +31,7 @@ import { clearClientAuthState, getToken, isAuthenticated } from '@/lib/auth';
 import { captureEvent } from '@/lib/analytics';
 import { userAPI } from '@/lib/api';
 import { jackCollectedDataReadyForJobMatch } from '@/lib/jackProfileGating';
+import { buildJobsMatchInfoTooltip, jobsRefreshStatusLabel } from '@/lib/jobsFunnelSummary';
 import { getJackDetailedProgress } from '@/lib/jackDetailedProgress';
 import { buildVacancyPrepText, vacancyPrepDisplayLabel } from '@/lib/buildVacancyPrepText';
 import { getPublicJobMatchingBaseUrl } from '@/lib/publicJobMatchingUrl';
@@ -39,8 +40,17 @@ import {
   getJackProfileSidebarRows,
 } from '@/lib/jackProfileFieldCatalog';
 import { MessageList } from '@/components/chat/MessageList';
+import {
+  filterMessagesByPrepHistory,
+  INTERVIEW_PREP_MODES,
+  INTERVIEW_PREP_MODE_LABELS,
+  INTERVIEW_PREP_MODE_TAB_LABELS,
+  interviewModeCommandItem,
+  parseInterviewModeFromAction,
+  type PrepHistoryFilter,
+} from '@/lib/interviewPrepModes';
 import { VoiceIndicator, type VoiceIndicatorMode } from '@/components/chat/VoiceIndicator';
-import { StagePanel } from '@/components/chat/StagePanel';
+import { StagePanel, type PrepModeStageContent } from '@/components/chat/StagePanel';
 import { InterviewPrepInfoOverview } from '@/components/chat/InterviewPrepInfoOverview';
 import type { InterviewReportPreview } from '@/components/chat/InterviewReportCards';
 import { TypingMessage } from '@/components/chat/TypingMessage';
@@ -100,7 +110,7 @@ type MatchedJobItem = {
   reasons?: string[];
 };
 
-type JobsLoadState = 'idle' | 'updating' | 'success' | 'error';
+type JobsLoadState = 'idle' | 'scraping' | 'matching' | 'success' | 'error';
 
 type SidePanelTab = 'chat' | 'vacancies' | 'profile';
 
@@ -164,12 +174,20 @@ function shouldAnimateMessage(message: Message, existingMessages: Message[]): bo
     return false;
   }
 
-  if (message.type !== MessageType.QUESTION) {
+  if (existingMessages.some((existing) => existing.id === message.id)) {
     return false;
   }
 
-  // Если сообщение уже есть в истории, повторно не анимируем
-  return !existingMessages.some((existing) => existing.id === message.id);
+  if (message.type === MessageType.QUESTION) {
+    return true;
+  }
+
+  // Теория / кейс / STAR и др. — TEXT с interviewMode, как у диагностики
+  if (message.type === MessageType.TEXT && message.interviewMode) {
+    return true;
+  }
+
+  return false;
 }
 
 /** Текст для TTS (Яндекс на сервере + воспроизведение на клиенте). Согласовано с лимитом ~1100 символов в conversation/aiClient. */
@@ -232,6 +250,7 @@ function ChatPageContent() {
     delay: 1200,
   });
   const [isTyping, setIsTyping] = useState(false);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -284,16 +303,23 @@ function ChatPageContent() {
   const [isJobsLoading, setIsJobsLoading] = useState(false);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('chat');
+  const [prepHistoryFilter, setPrepHistoryFilter] = useState<PrepHistoryFilter>('general');
+
+  useEffect(() => {
+    setPrepHistoryFilter('general');
+  }, [sessionId]);
   const [jobsLoadState, setJobsLoadState] = useState<JobsLoadState>('idle');
   const [jobsLastUpdatedAt, setJobsLastUpdatedAt] = useState<string | null>(null);
   const [jobsMatchMeta, setJobsMatchMeta] = useState<JobsMatchMeta | null>(null);
   const [sessionCurrentStepId, setSessionCurrentStepId] = useState<string | null>(null);
   const [sessionCompletedSteps, setSessionCompletedSteps] = useState<string[]>([]);
   const [vacancyPrepJobId, setVacancyPrepJobId] = useState<string | null>(null);
-  const [newJobsCount, setNewJobsCount] = useState(0);
   const previousJobIdsRef = useRef<Set<string>>(new Set());
+  /** Список вакансий уже показывали — фоновый silent-refresh не прячет его под спиннер. */
+  const jobsListHydratedRef = useRef(false);
   const autoRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backgroundJobsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const jobsScrapeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chatConnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestAutoTriggeredMessageIdRef = useRef<string | null>(null);
   const lastJobsFetchAtRef = useRef<number>(0);
@@ -848,11 +874,14 @@ function ChatPageContent() {
     setMatchedJobs([]);
     setWeakMatchedJobs([]);
     setJobsMatchMeta(null);
-    setNewJobsCount(0);
     setJobsLoadState('idle');
     setJobsLastUpdatedAt(null);
     setSidePanelTab('chat');
+    newBadgeClearTimeoutsRef.current.forEach(clearTimeout);
+    newBadgeClearTimeoutsRef.current = [];
+    setNewJobBadgeIds(new Set());
     previousJobIdsRef.current = new Set();
+    jobsListHydratedRef.current = false;
 
     try {
       if (chatConnectTimeoutRef.current) {
@@ -976,6 +1005,11 @@ function ChatPageContent() {
 
               if (payload.message.type === MessageType.QUESTION) {
                 void speakQuestionWithPriority(payload.message as QuestionMessage);
+              } else if (
+                payload.message.type === MessageType.TEXT &&
+                payload.message.interviewMode
+              ) {
+                void speakAssistantMessageWithPriority(payload.message);
               }
 
               return prev;
@@ -1021,6 +1055,9 @@ function ChatPageContent() {
           setVacancyPrepJobId(null);
           setVacancyAnalyzeFlowActive(false);
           pendingVacancyAnalyzeRef.current = null;
+        },
+        onSendStateChange: (state) => {
+          setIsSendingMessage(state === 'sending');
         },
         onAssistantAudio: (payload) => {
           assistantAudioByMessageIdRef.current.set(payload.messageId, payload);
@@ -1436,6 +1473,12 @@ function ChatPageContent() {
       return;
     }
 
+    const modeFromAction = parseInterviewModeFromAction(command.action);
+    if (modeFromAction) {
+      setPrepHistoryFilter(modeFromAction);
+      setSidePanelTab('chat');
+    }
+
     chatRef.current.executeCommand(command.id, command.action);
   };
 
@@ -1453,14 +1496,84 @@ function ChatPageContent() {
     if (currentProduct !== 'interview-prep') {
       return latestQuestion;
     }
-    if (latestInfoCard?.title === 'Профиль вакансии и план подготовки') {
+    if (vacancyAnalyzeFlowActive || !latestQuestion) {
       return undefined;
     }
-    if (vacancyAnalyzeFlowActive) {
+
+    // Показываем вопрос на сцене только если он ещё актуален: после него не пришёл
+    // ответ LEO текстом (теория/кейс). Иначе StagePanel оставит карточку вакансии.
+    const latestAssistantPrompt = [...messages]
+      .reverse()
+      .find(
+        (m) =>
+          m.role === MessageRole.ASSISTANT &&
+          (m.type === MessageType.QUESTION || m.type === MessageType.TEXT)
+      );
+
+    if (
+      latestAssistantPrompt?.type === MessageType.QUESTION &&
+      latestAssistantPrompt.id === latestQuestion.id
+    ) {
+      return latestQuestion;
+    }
+
+    return undefined;
+  }, [currentProduct, vacancyAnalyzeFlowActive, latestQuestion, messages]);
+
+  const VACANCY_PROFILE_CARD_TITLE = 'Профиль вакансии и план подготовки';
+
+  const centerStagePrepContent = useMemo((): PrepModeStageContent | undefined => {
+    if (currentProduct !== 'interview-prep' || vacancyAnalyzeFlowActive || centerStageQuestion) {
       return undefined;
     }
-    return latestQuestion;
-  }, [currentProduct, latestInfoCard, latestQuestion, vacancyAnalyzeFlowActive]);
+
+    const latestAssistantText = [...messages]
+      .reverse()
+      .find(
+        (m) =>
+          m.role === MessageRole.ASSISTANT &&
+          m.type === MessageType.TEXT &&
+          Boolean(m.interviewMode)
+      ) as TextMessage | undefined;
+
+    if (!latestAssistantText?.interviewMode) {
+      return undefined;
+    }
+
+    if (latestInfoCard?.title === VACANCY_PROFILE_CARD_TITLE) {
+      const textTime = new Date(latestAssistantText.timestamp).getTime();
+      const cardTime = new Date(latestInfoCard.timestamp).getTime();
+      if (textTime <= cardTime) {
+        return undefined;
+      }
+    }
+
+    return {
+      modeLabel: INTERVIEW_PREP_MODE_LABELS[latestAssistantText.interviewMode],
+      content: latestAssistantText.content,
+    };
+  }, [
+    currentProduct,
+    vacancyAnalyzeFlowActive,
+    centerStageQuestion,
+    messages,
+    latestInfoCard,
+  ]);
+
+  const interviewPrepThreadsEnabled = useMemo(
+    () =>
+      currentProduct === 'interview-prep' &&
+      (latestInfoCard?.title === 'Профиль вакансии и план подготовки' ||
+        messages.some((m) => Boolean(m.interviewMode))),
+    [currentProduct, latestInfoCard?.title, messages]
+  );
+
+  const chatHistoryMessages = useMemo(() => {
+    if (!interviewPrepThreadsEnabled) {
+      return messages;
+    }
+    return filterMessagesByPrepHistory(messages, prepHistoryFilter);
+  }, [messages, interviewPrepThreadsEnabled, prepHistoryFilter]);
 
   const latestCommand = useMemo(
     () => extractLatest<CommandMessage>(messages, MessageType.COMMAND),
@@ -1607,6 +1720,11 @@ function ChatPageContent() {
     return {};
   }, [messages.length, sessionId, connected, sidePanelTab]);
 
+  const jackProfileReadyForMatch = useMemo(
+    () => jackCollectedDataReadyForJobMatch(jackCollectedSnapshot),
+    [jackCollectedSnapshot]
+  );
+
   const jackProfileRows = useMemo(
     () =>
       currentProduct === 'jack' ? getJackProfileSidebarRows(jackCollectedSnapshot) : [],
@@ -1711,6 +1829,34 @@ function ChatPageContent() {
     [jobsMatchMeta, matchedJobs.length, weakMatchedJobs.length]
   );
 
+  const jobsMatchInfoTooltip = useMemo(() => {
+    if (!jobsMatchMeta || jobsLoadState !== 'success') return null;
+    return buildJobsMatchInfoTooltip(
+      jobsMatchMeta,
+      matchedJobs.length,
+      weakMatchedJobs.length
+    );
+  }, [jobsLoadState, jobsMatchMeta, matchedJobs.length, weakMatchedJobs.length]);
+
+  const matchInfoTip = jobsMatchInfoTooltip ? (
+    <Tooltip
+      title={
+        <span className="block max-w-xs whitespace-pre-line text-xs leading-relaxed">
+          {jobsMatchInfoTooltip}
+        </span>
+      }
+      placement="topLeft"
+    >
+      <Button
+        type="text"
+        size="small"
+        icon={<QuestionCircleOutlined />}
+        className="!h-5 !w-5 !min-w-0 !p-0 !text-slate-500 hover:!text-slate-300"
+        aria-label="Как считался подбор"
+      />
+    </Tooltip>
+  ) : null;
+
   const handleCloseProfileEdit = useCallback(() => {
     setProfileEditOpen(false);
     profileEditForm.resetFields();
@@ -1775,9 +1921,12 @@ function ChatPageContent() {
       ? `?sessionId=${encodeURIComponent(activeSessionId)}`
       : '';
 
-    setIsJobsLoading(true);
-    setJobsError(null);
-    setJobsLoadState('updating');
+    const backgroundRefresh = Boolean(options?.silent && jobsListHydratedRef.current);
+    if (!backgroundRefresh) {
+      setIsJobsLoading(true);
+      setJobsError(null);
+      setJobsLoadState('matching');
+    }
     if (options?.revealPanel) {
       setSidePanelTab('vacancies');
     }
@@ -1844,14 +1993,13 @@ function ChatPageContent() {
         familyCatalogCount,
         catalogWarning,
       });
+      jobsListHydratedRef.current = true;
 
       const previousIds = previousJobIdsRef.current;
       const incomingIds = new Set<string>();
       for (const item of jobs) incomingIds.add(item.job.id);
       for (const item of weakJobs) incomingIds.add(item.job.id);
       const newIds = Array.from(incomingIds).filter((id) => !previousIds.has(id));
-      setNewJobsCount(newIds.length);
-      previousJobIdsRef.current = incomingIds;
 
       if (previousIds.size > 0 && newIds.length > 0) {
         setNewJobBadgeIds((prev) => {
@@ -1872,6 +2020,8 @@ function ChatPageContent() {
           newBadgeClearTimeoutsRef.current.push(timeoutId);
         }
       }
+
+      previousJobIdsRef.current = incomingIds;
 
       if (!options?.silent) {
         if (jobs.length > 0 || weakJobs.length > 0) {
@@ -1897,13 +2047,17 @@ function ChatPageContent() {
     } catch (error) {
       const messageText =
         error instanceof Error ? error.message : 'Не удалось получить вакансии';
-      setJobsError(messageText);
-      setJobsLoadState('error');
+      if (!backgroundRefresh) {
+        setJobsError(messageText);
+        setJobsLoadState('error');
+      }
       if (!options?.silent) {
         messageApi.error(messageText);
       }
     } finally {
-      setIsJobsLoading(false);
+      if (!backgroundRefresh) {
+        setIsJobsLoading(false);
+      }
     }
   }, [getJobMatchingBaseUrl, getUserIdFromToken, messageApi]);
 
@@ -1923,8 +2077,25 @@ function ChatPageContent() {
       messageApi.error('Не удалось определить пользователя. Перезайдите в аккаунт.');
       return;
     }
+
+    const collected = chatRef.current?.metadata?.collectedData as
+      | Record<string, unknown>
+      | undefined;
+    if (!jackCollectedDataReadyForJobMatch(collected)) {
+      messageApi.info(
+        'Сначала укажите в чате желаемую роль и опыт — тогда подбор и сбор вакансий будут точными.'
+      );
+      return;
+    }
+
+    if (jobsScrapeTimeoutRef.current) {
+      clearTimeout(jobsScrapeTimeoutRef.current);
+      jobsScrapeTimeoutRef.current = null;
+    }
+
     try {
       setIsJobsLoading(true);
+      setJobsLoadState('scraping');
       const response = await fetch(
         `${getJobMatchingBaseUrl()}/api/jobs/scrape/for-user/${userId}`,
         {
@@ -1942,15 +2113,16 @@ function ChatPageContent() {
 
       messageApi.success(
         data?.usedProfileKeywords
-          ? `Собираем вакансии под ваш профиль (${data.familyPrimary || 'профиль'}). Обновлю через ~20 сек.`
-          : 'Профиль пока слишком лаконичный — запустил общий сбор. Заполните желаемую должность в чате для точного подбора.'
+          ? `Сбор вакансий под профиль (${data.familyPrimary || 'профиль'}) запущен. Через ~20 с пересчитаем матч.`
+          : 'Запущен общий сбор. Уточните желаемую должность в чате для точного подбора.'
       );
 
-      // Ждём 20 секунд и фоном перезапрашиваем подбор.
-      setTimeout(() => {
+      jobsScrapeTimeoutRef.current = setTimeout(() => {
+        jobsScrapeTimeoutRef.current = null;
         void fetchMatchedJobs({ revealPanel: false, silent: true });
       }, 20_000);
     } catch (error) {
+      setJobsLoadState('error');
       messageApi.error(
         error instanceof Error
           ? error.message
@@ -1996,9 +2168,12 @@ function ChatPageContent() {
     };
   }, [connected, currentProduct, fetchMatchedJobs, latestUserMessageId, productSelected]);
 
-  /** Первая загрузка метаданных каталога при открытии вкладки — без гейтинга по анкете (бэкенд всё равно отдаёт jobsInDb). */
+  /** Первая загрузка матча при открытии вкладки — только когда профиль готов для подбора. */
   useEffect(() => {
     if (sidePanelTab !== 'vacancies' || isJobsLoading || currentProduct !== 'jack') {
+      return;
+    }
+    if (!jackProfileReadyForMatch) {
       return;
     }
     if (jobsLoadState !== 'idle' || jobsMatchMeta !== null) {
@@ -2009,10 +2184,20 @@ function ChatPageContent() {
     currentProduct,
     fetchMatchedJobs,
     isJobsLoading,
+    jackProfileReadyForMatch,
     jobsLoadState,
     jobsMatchMeta,
     sidePanelTab,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (jobsScrapeTimeoutRef.current) {
+        clearTimeout(jobsScrapeTimeoutRef.current);
+        jobsScrapeTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   /**
    * Фоновый пересчёт каталога в открытой вкладке «Вакансии».
@@ -2029,6 +2214,7 @@ function ChatPageContent() {
 
     backgroundJobsPollingRef.current = setInterval(() => {
       if (isJobsLoading) return;
+      if (!jackProfileReadyForMatch) return;
       const now = Date.now();
       if (now - lastJobsFetchAtRef.current < 15_000) return;
       const collected = chatRef.current?.metadata?.collectedData as
@@ -2044,7 +2230,7 @@ function ChatPageContent() {
         backgroundJobsPollingRef.current = null;
       }
     };
-  }, [currentProduct, fetchMatchedJobs, isJobsLoading, sidePanelTab]);
+  }, [currentProduct, fetchMatchedJobs, isJobsLoading, jackProfileReadyForMatch, sidePanelTab]);
 
   useEffect(() => {
     if (currentProduct !== 'jack' && sidePanelTab === 'vacancies') {
@@ -2196,6 +2382,7 @@ function ChatPageContent() {
                       <div className="w-full flex items-start justify-center overflow-auto">
                         <StagePanel
                           question={centerStageQuestion}
+                          prepModeContent={centerStagePrepContent}
                           infoCard={latestInfoCard}
                           commands={stagePanelCommands}
                           onCommandSelect={handleCommandSelect}
@@ -2209,7 +2396,6 @@ function ChatPageContent() {
                           }}
                           interviewPrepOnOpenOverview={
                             currentProduct === 'interview-prep' &&
-                            centerStageQuestion &&
                             latestInfoCard?.title === 'Профиль вакансии и план подготовки'
                               ? () => setSidePanelTab('profile')
                               : undefined
@@ -2313,7 +2499,7 @@ function ChatPageContent() {
                         </div>
                         {matchedJobs.length > 0 ||
                         weakMatchedJobs.length > 0 ||
-                        newJobsCount > 0 ? (
+                        newJobBadgeIds.size > 0 ? (
                           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
                             {matchedJobs.length > 0 || weakMatchedJobs.length > 0 ? (
                               <span>
@@ -2329,16 +2515,18 @@ function ChatPageContent() {
                                   .join(' · ')}
                               </span>
                             ) : null}
-                            {newJobsCount > 0 ? (
+                            {newJobBadgeIds.size > 0 ? (
                               <>
                                 {matchedJobs.length > 0 || weakMatchedJobs.length > 0 ? (
                                   <span className="text-slate-600" aria-hidden>
                                     ·
                                   </span>
                                 ) : null}
-                                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-300">
-                                  +{newJobsCount} {ruNewJobsLabel(newJobsCount)}
-                                </span>
+                                <Tooltip title="Появились при последнем пересчёте — на карточках метка «Новая» (~18 с)">
+                                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-300 cursor-default">
+                                    +{newJobBadgeIds.size} {ruNewJobsLabel(newJobBadgeIds.size)}
+                                  </span>
+                                </Tooltip>
                               </>
                             ) : null}
                           </div>
@@ -2362,11 +2550,61 @@ function ChatPageContent() {
                         ) : null}
                       </div>
                     ) : (
-                      <div className="text-sm font-semibold text-slate-100 leading-snug">История диалога</div>
+                      <div className="space-y-2">
+                        <div className="text-sm font-semibold text-slate-100 leading-snug">
+                          История диалога
+                        </div>
+                        {interviewPrepThreadsEnabled ? (
+                          <div
+                            role="tablist"
+                            aria-label="Треды подготовки"
+                            className="flex gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                          >
+                            <Button
+                              role="tab"
+                              aria-selected={prepHistoryFilter === 'general'}
+                              type={prepHistoryFilter === 'general' ? 'primary' : 'text'}
+                              size="small"
+                              onClick={() => setPrepHistoryFilter('general')}
+                              className={
+                                prepHistoryFilter === 'general'
+                                  ? '!h-7 !shrink-0 !rounded-full !border-none !bg-white/15 !px-2.5 !text-[11px] !font-medium !text-white'
+                                  : '!h-7 !shrink-0 !rounded-full !px-2.5 !text-[11px] !font-medium !text-slate-400 hover:!bg-white/[0.06] hover:!text-slate-100'
+                              }
+                            >
+                              Общее
+                            </Button>
+                            {INTERVIEW_PREP_MODES.map((mode) => {
+                              const selected = prepHistoryFilter === mode;
+                              const count = messages.filter((m) => m.interviewMode === mode).length;
+                              return (
+                                <Button
+                                  key={mode}
+                                  role="tab"
+                                  aria-selected={selected}
+                                  type={selected ? 'primary' : 'text'}
+                                  size="small"
+                                  onClick={() => setPrepHistoryFilter(mode)}
+                                  className={
+                                    selected
+                                      ? '!h-7 !shrink-0 !rounded-full !border-none !bg-green-500/90 !px-2.5 !text-[11px] !font-medium !text-white'
+                                      : '!h-7 !shrink-0 !rounded-full !px-2.5 !text-[11px] !font-medium !text-slate-400 hover:!bg-white/[0.06] hover:!text-slate-100'
+                                  }
+                                >
+                                  {INTERVIEW_PREP_MODE_TAB_LABELS[mode]}
+                                  {count > 0 ? (
+                                    <span className="ml-1 opacity-75">({count})</span>
+                                  ) : null}
+                                </Button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
                     )}
                   </div>
                 </div>
-                <div className="custom-scrollbar overflow-y-auto flex-1 pr-2">
+                <div className="chat-history-scroll overflow-y-auto flex-1 pr-1">
                   {sidePanelTab === 'vacancies' ? (
                     currentProduct !== 'jack' ? (
                       <div className="text-sm text-slate-400">
@@ -2377,46 +2615,29 @@ function ChatPageContent() {
                         <div className="mb-3 flex flex-col gap-1.5">
                           <div className="flex items-center justify-between gap-3 text-xs text-slate-400">
                             <span className="min-w-0 leading-relaxed">
-                              {jobsLoadState === 'updating'
-                                ? 'Обновляем подбор...'
-                                : jobsLoadState === 'error'
-                                  ? 'Ошибка обновления, попробуйте ещё раз.'
-                                  : jobsLastUpdatedAt
-                                    ? `Подбор пересчитан в ${jobsLastUpdatedAt}`
-                                    : 'Подбор пока не запускался'}
+                              {jobsRefreshStatusLabel(jobsLoadState, jobsLastUpdatedAt)}
                             </span>
                             {currentProduct === 'jack' ? (
                               <div className="flex shrink-0 items-center gap-1">
-                                <Button
-                                  type="text"
-                                  size="small"
-                                  icon={<ReloadOutlined />}
-                                  loading={isJobsLoading}
-                                  onClick={() => {
-                                    void requestFreshJobsForProfile();
-                                  }}
-                                  className="!shrink-0 !text-slate-400 hover:!text-slate-200"
-                                  aria-label="Обновить подбор под профиль"
-                                />
+                                <Tooltip
+                                  title="Сначала скачиваем свежие вакансии под ваш профиль, затем пересчитываем матч по каталогу. Полный цикл ~20–60 с."
+                                >
+                                  <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<ReloadOutlined />}
+                                    loading={isJobsLoading || jobsLoadState === 'scraping'}
+                                    disabled={!jackProfileReadyForMatch}
+                                    onClick={() => {
+                                      void requestFreshJobsForProfile();
+                                    }}
+                                    className="!shrink-0 !text-slate-400 hover:!text-slate-200 disabled:!text-slate-600"
+                                    aria-label="Обновить каталог и пересчитать матч"
+                                  />
+                                </Tooltip>
                               </div>
                             ) : null}
                           </div>
-                          {jobsMatchMeta && jobsLoadState === 'success' ? (
-                            <div className="text-[11px] leading-snug text-slate-500">
-                              В каталоге: {jobsMatchMeta.jobsInDb} вакансий
-                              {jobsMatchMeta.jobsScanned < jobsMatchMeta.jobsInDb
-                                ? ` (для матча смотрим последние ${jobsMatchMeta.jobsScanned})`
-                                : ''}
-                              {jobsMatchMeta.profileFamilyLabel &&
-                              typeof jobsMatchMeta.familyCatalogCount === 'number' &&
-                              jobsMatchMeta.familyCatalogCount > 0
-                                ? ` · в вашем направлении «${jobsMatchMeta.profileFamilyLabel}»: ~${jobsMatchMeta.familyCatalogCount}`
-                                : jobsMatchMeta.profileFamilyLabel
-                                  ? ` · профиль: ${jobsMatchMeta.profileFamilyLabel}`
-                                  : ''}
-                              .
-                            </div>
-                          ) : null}
                           {jobsMatchMeta?.catalogWarning === 'catalog_family_mismatch' ? (
                             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] leading-snug text-amber-100">
                               В текущем каталоге мало вакансий
@@ -2437,7 +2658,26 @@ function ChatPageContent() {
                             </div>
                           ) : null}
                         </div>
-                        {isJobsLoading ? (
+                        {!jackProfileReadyForMatch ? (
+                          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+                            <p className="text-sm font-medium text-slate-200">
+                              Подбор откроется после базового профиля
+                            </p>
+                            <p className="text-xs text-slate-400 leading-relaxed">
+                              Укажите в чате желаемую роль и опыт (или пройдите ещё несколько
+                              вопросов детального пути). Тогда LEO сопоставит профиль с каталогом
+                              вакансий и покажет рекомендации.
+                            </p>
+                            <Button
+                              type="primary"
+                              size="small"
+                              onClick={() => setSidePanelTab('chat')}
+                              className="!rounded-full !border-0 !bg-green-500 !text-white hover:!bg-green-400"
+                            >
+                              Продолжить в чате
+                            </Button>
+                          </div>
+                        ) : isJobsLoading || jobsLoadState === 'matching' ? (
                       <div className="flex items-center justify-center py-8">
                         <Spin size="small" />
                       </div>
@@ -2452,8 +2692,11 @@ function ChatPageContent() {
                         />
                         {weakMatchedJobs.length > 0 ? (
                           <div className="space-y-3">
-                            <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-400/90">
-                              Возможные варианты (слабое совпадение)
+                            <div className="flex items-center gap-1.5">
+                              <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-400/90">
+                                Возможные варианты (слабое совпадение)
+                              </div>
+                              {matchedJobs.length === 0 ? matchInfoTip : null}
                             </div>
                             {weakMatchedJobs.map((item) => (
                               <MatchedJobCard
@@ -2477,8 +2720,11 @@ function ChatPageContent() {
                       <div className="space-y-6">
                         {matchedJobs.length > 0 ? (
                           <div className="space-y-3">
-                            <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-400/90">
-                              Рекомендуем
+                            <div className="flex items-center gap-1.5">
+                              <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-400/90">
+                                Рекомендуем
+                              </div>
+                              {matchInfoTip}
                             </div>
                             {matchedJobs.map((item) => (
                               <MatchedJobCard
@@ -2499,8 +2745,11 @@ function ChatPageContent() {
                         ) : null}
                         {weakMatchedJobs.length > 0 ? (
                           <div className="space-y-3">
-                            <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-400/90">
-                              Слабое совпадение
+                            <div className="flex items-center gap-1.5">
+                              <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-400/90">
+                                Слабое совпадение
+                              </div>
+                              {matchedJobs.length === 0 ? matchInfoTip : null}
                             </div>
                             {weakMatchedJobs.map((item) => (
                               <MatchedJobCard
@@ -2535,6 +2784,9 @@ function ChatPageContent() {
                           infoCard={latestInfoCard}
                           commands={latestInfoCard.commands}
                           onCommandSelect={handleCommandSelect}
+                          onPrepModeSelect={(mode) => {
+                            void handleCommandSelect(interviewModeCommandItem(mode));
+                          }}
                         />
                       ) : (
                         <div className="text-sm text-slate-400 leading-relaxed">
@@ -2596,11 +2848,27 @@ function ChatPageContent() {
                       </div>
                     )
                   ) : messages.length > 0 ? (
-                    <MessageList
-                      messages={messages}
-                      onShowProfile={handleShowProfile}
-                      onCommandSelect={handleCommandSelect}
-                    />
+                    chatHistoryMessages.length > 0 ? (
+                      <MessageList
+                        messages={chatHistoryMessages}
+                        onShowProfile={handleShowProfile}
+                        onCommandSelect={handleCommandSelect}
+                      />
+                    ) : (
+                      <div className="text-sm text-slate-400 leading-relaxed py-6 text-center px-2">
+                        {prepHistoryFilter === 'general' ? (
+                          'Сообщения появятся здесь по мере диалога'
+                        ) : (
+                          <>
+                            В «{INTERVIEW_PREP_MODE_LABELS[prepHistoryFilter]}» пока пусто.
+                            <br />
+                            <span className="text-slate-500 text-xs">
+                              Нажмите кнопку режима на главном экране.
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )
                   ) : connecting ? (
                     <div className="flex items-center justify-center py-8">
                       <Spin size="small" />
@@ -2657,12 +2925,14 @@ function ChatPageContent() {
                           form.setFieldsValue({ message: newValue });
                         }}
                         placeholder={
-                          isListening
-                            ? 'Слушаю...'
-                            : 'Введите ответ…'
+                          isSendingMessage
+                            ? 'LEO анализирует ответ…'
+                            : isListening
+                              ? 'Слушаю...'
+                              : 'Введите ответ…'
                         }
                         autoSize={{ minRows: 1, maxRows: 4 }}
-                        disabled={!connected}
+                        disabled={!connected || isSendingMessage}
                         variant="borderless"
                         className="!bg-transparent"
                         onPressEnter={(e) => {
@@ -2678,7 +2948,8 @@ function ChatPageContent() {
                       size="small"
                       htmlType="submit"
                       icon={<SendOutlined />}
-                      disabled={!connected}
+                      loading={isSendingMessage}
+                      disabled={!connected || isSendingMessage}
                       className="flex items-center justify-center rounded-full border-none bg-green-500 px-2 sm:px-3 lg:px-4 py-1 sm:py-2 text-white shadow-lg hover:bg-green-400"
                     />
                   </div>

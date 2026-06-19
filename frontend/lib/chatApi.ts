@@ -82,6 +82,7 @@ class ChatApiClient {
   public onHistory?: (messages: Message[]) => void;
   public onMessage?: (message: Message) => void;
   public onError?: (error: { message: string }) => void;
+  public onSendStateChange?: (state: 'sending' | 'idle') => void;
   public onConnected?: () => void;
   public onDisconnected?: () => void;
   public onAssistantAudio?: (payload: {
@@ -227,13 +228,20 @@ class ChatApiClient {
       return;
     }
 
+    this.onSendStateChange?.('sending');
     try {
+      const isInterviewPrep = this.sessionMetadata?.product === 'interview-prep';
+      const timeoutMs = isInterviewPrep
+        ? Number(process.env.NEXT_PUBLIC_CHAT_INTERVIEW_TIMEOUT_MS || 90000)
+        : undefined;
+
       const response = await this.request<SendMessageResponse>(
         `/api/chat/session/${this.sessionId}/message`,
         {
           method: 'POST',
           body: JSON.stringify({ content: trimmed }),
-        }
+        },
+        timeoutMs
       );
 
       if (response.metadata) {
@@ -253,9 +261,17 @@ class ChatApiClient {
 
       this.lastMessageCount = response.messages.length;
     } catch (error) {
+      const isAbort = error instanceof Error && error.name === 'AbortError';
       this.onError?.({
-        message: error instanceof Error ? error.message : 'Failed to send message',
+        message: isAbort
+          ? 'LEO долго обрабатывает ответ. Подождите или попробуйте ещё раз.'
+          : error instanceof Error
+            ? error.message
+            : 'Failed to send message',
       });
+      throw error;
+    } finally {
+      this.onSendStateChange?.('idle');
     }
   }
 
@@ -661,6 +677,7 @@ export function createChatApi(
       format?: 'mp3' | 'oggopus';
     }) => void;
     onError?: (payload: { message: string }) => void;
+    onSendStateChange?: (state: 'sending' | 'idle') => void;
   } = {}
 ) {
   const client = new ChatApiClient(config.url);
@@ -681,6 +698,7 @@ export function createChatApi(
     client.onAssistantAudio = config.onAssistantAudio;
   }
   if (config.onError) client.onError = config.onError;
+  if (config.onSendStateChange) client.onSendStateChange = config.onSendStateChange;
 
   return {
     connect: () =>

@@ -5,7 +5,7 @@
 
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import jobRepository from '../models/jobRepository';
+import jobRepository, { MATCH_SCAN_LIMIT } from '../models/jobRepository';
 import { getUserProfile, getCollectedDataWithFallback } from '../services/userService';
 import {
   matchJobs,
@@ -16,8 +16,9 @@ import {
   HEALTHY_FAMILY_SHARE,
   filterWeakMatchesForPresentation,
   filterRecommendedMatchesForPresentation,
+  normalizeForMatch,
 } from '../services/matcher';
-import { familyLabelRu } from '../services/roleFamily';
+import { classifyProfileRoles, familyLabelRu } from '../services/roleFamily';
 import { scrapeHHJobs } from '../services/scraper';
 import { triggerScraping } from '../services/scrapingQueue';
 import { deriveScrapeParams } from '../services/scrapeProfileParams';
@@ -99,9 +100,28 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         : undefined;
     const collectedData = await getCollectedDataWithFallback(userId, token, sessionId);
 
+    const effectiveProfile = normalizeForMatch(collectedData);
+    const profileRoles = effectiveProfile
+      ? classifyProfileRoles({
+          desiredRole:
+            effectiveProfile.desiredRole ||
+            (effectiveProfile.desired_role as string | undefined),
+          positionRoles: Array.from({ length: 5 }, (_, i) => {
+            const v = effectiveProfile[`position_${i + 1}_role` as keyof typeof effectiveProfile];
+            return typeof v === 'string' ? v : null;
+          }),
+          careerSummary:
+            typeof effectiveProfile.careerSummary === 'string'
+              ? effectiveProfile.careerSummary
+              : null,
+        })
+      : { primary: 'unknown' as const, adjacent: [], detected: [] };
+
     const [allJobs, jobsInDb] = await Promise.all([
-      jobRepository.findAll({
-        limit: 500, // Limit for performance
+      jobRepository.findForMatch({
+        primaryFamily: profileRoles.primary,
+        adjacentFamilies: profileRoles.adjacent,
+        limit: MATCH_SCAN_LIMIT,
       }),
       jobRepository.count(),
     ]);
@@ -204,6 +224,7 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         reasons: match.reasons,
         jobFamily: match.jobFamily,
         familyMatch: match.familyMatch,
+        demoteReasons: match.demoteReasons ?? null,
       })),
       count: topJobs.length,
       totalMatched: matchedJobs.length,
@@ -213,6 +234,7 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         reasons: match.reasons,
         jobFamily: match.jobFamily,
         familyMatch: match.familyMatch,
+        demoteReasons: match.demoteReasons ?? null,
       })),
       weakCount: topWeak.length,
       weakTierTotal: stats.weakTierTotal,

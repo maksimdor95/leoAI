@@ -689,6 +689,30 @@ export function keywordsForFamily(family: RoleFamily): string[] {
   return base[family] ?? [];
 }
 
+/** ILIKE-паттерны для SQL-выборки вакансий по семействам (матч / smart scan). */
+export function titleSearchPatternsForFamilies(families: RoleFamily[]): string[] {
+  const patterns = new Set<string>();
+  const seenFamilies = new Set<RoleFamily>();
+
+  for (const family of families) {
+    if (family === 'unknown' || seenFamilies.has(family)) continue;
+    seenFamilies.add(family);
+
+    for (const kw of keywordsForFamily(family).slice(0, 6)) {
+      patterns.add(`%${kw}%`);
+    }
+
+    const rules = FAMILY_RULES[family as Exclude<RoleFamily, 'unknown'>];
+    if (rules) {
+      for (const phrase of rules.phrases.slice(0, 5)) {
+        patterns.add(`%${phrase}%`);
+      }
+    }
+  }
+
+  return Array.from(patterns).slice(0, 48);
+}
+
 /**
  * Короткое человекочитаемое имя семейства — для логов, тултипов и API.
  */

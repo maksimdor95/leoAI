@@ -10,8 +10,17 @@ import {
 import { ProfileCompletionCards } from '@/components/chat/ProfileCompletionCards';
 import { InterviewPrepInfoOverview } from '@/components/chat/InterviewPrepInfoOverview';
 
+const VACANCY_PROFILE_CARD_TITLE = 'Профиль вакансии и план подготовки';
+
+export type PrepModeStageContent = {
+  modeLabel: string;
+  content: string;
+};
+
 type StagePanelProps = {
   question?: QuestionMessage;
+  /** Текст режима (теория, кейс, STAR…) на главной сцене */
+  prepModeContent?: PrepModeStageContent;
   infoCard?: InfoCardMessage;
   commands?: CommandItem[];
   onCommandSelect: (command: CommandItem) => void;
@@ -49,6 +58,7 @@ type StagePanelProps = {
 
 export function StagePanel({
   question,
+  prepModeContent,
   infoCard,
   commands,
   onCommandSelect,
@@ -62,22 +72,18 @@ export function StagePanel({
   detailedProgressLabel,
 }: StagePanelProps) {
   const hasQuestion = Boolean(question);
+  const hasPrepModeContent = Boolean(prepModeContent?.content);
   const hasInfoCard = Boolean(infoCard);
   const hasCommands = Boolean(commands && commands.length > 0);
 
-  if (!hasQuestion && !hasInfoCard && !hasCommands) {
+  if (!hasQuestion && !hasPrepModeContent && !hasInfoCard && !hasCommands) {
     return null;
   }
 
-  // Determine which message to show based on timestamp (newer message has priority)
-  // Profile snapshot can be shown in main block if it's the current active step (no newer question)
-  // Otherwise, it's available in history via modal
-  const questionTime = question ? new Date(question.timestamp).getTime() : 0;
-  const infoCardTime = infoCard ? new Date(infoCard.timestamp).getTime() : 0;
-  const isProfileSnapshot = infoCard?.title === 'Ваш профиль';
-  // Show profile snapshot in main block only if it's the current step (no newer question)
-  // Otherwise, it's shown in history and can be opened via modal
-  const showInfoCard = hasInfoCard && (!hasQuestion || infoCardTime > questionTime);
+  const showQuestion = hasQuestion;
+  const showPrepModeContent = hasPrepModeContent && !showQuestion;
+  const showInfoCard = hasInfoCard && !showQuestion && !showPrepModeContent;
+  const isVacancyProfileCard = infoCard?.title === VACANCY_PROFILE_CARD_TITLE;
 
   const showInterviewReport =
     Boolean(showInfoCard && infoCard && interviewReport) &&
@@ -112,11 +118,13 @@ export function StagePanel({
       ) : showInfoCard && infoCard ? (
         <InterviewPrepInfoOverview
           infoCard={infoCard}
+          hidePrepPlan={isVacancyProfileCard}
+          onOpenPrepPlan={isVacancyProfileCard ? interviewPrepOnOpenOverview : undefined}
           commands={hasCommands ? commands : undefined}
           onCommandSelect={onCommandSelect}
           onContinue={onContinue}
         />
-      ) : hasQuestion && question ? (
+      ) : showQuestion && question ? (
         <Fragment>
           <div className="space-y-2 text-left w-full">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -157,6 +165,29 @@ export function StagePanel({
                 disabled={resumeUpload.disabled}
               />
             ) : null}
+            {interviewPrepOnOpenOverview ? (
+              <div className="pt-2">
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={interviewPrepOnOpenOverview}
+                  className="!h-auto !p-0 !text-amber-300/95 hover:!text-amber-200 !text-xs sm:!text-sm"
+                >
+                  Профиль вакансии и план подготовки →
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </Fragment>
+      ) : showPrepModeContent && prepModeContent ? (
+        <Fragment>
+          <div className="space-y-2 text-left w-full max-h-[min(52vh,28rem)] overflow-y-auto chat-history-scroll pr-1">
+            <div className="text-xs uppercase tracking-[0.4em] text-green-300/70">
+              {prepModeContent.modeLabel}
+            </div>
+            <div className="text-sm sm:text-base text-slate-100 leading-relaxed whitespace-pre-line break-words">
+              {prepModeContent.content}
+            </div>
             {interviewPrepOnOpenOverview ? (
               <div className="pt-2">
                 <Button

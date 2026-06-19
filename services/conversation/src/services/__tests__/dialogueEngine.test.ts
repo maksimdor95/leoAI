@@ -1,9 +1,13 @@
 import {
+  detectInterviewModeCommandFromUserText,
   evaluateCondition,
   getScenarioIdByProduct,
   resolveNextStep,
+  tagUserMessageWithInterviewMode,
   wantsDetailedProfileAnalysis,
 } from '../dialogueEngine';
+import { MessageRole, MessageType } from '../../types/message';
+import { ConversationSession } from '../../types/session';
 import { ScenarioNextValue } from '../../types/scenario';
 
 // Mock the logger
@@ -171,6 +175,43 @@ describe('dialogueEngine', () => {
 
     it('does not treat meta clarify prompts as detailed analysis', () => {
       expect(wantsDetailedProfileAnalysis('Можно уточнить детали')).toBe(false);
+    });
+  });
+
+  describe('interview prep mode detection', () => {
+    it('does not treat long answers with «задачи» as case mode', () => {
+      const answer =
+        'В первую очередь в работу попадали задачи с максимальным влиянием на целевые метрики.';
+      expect(detectInterviewModeCommandFromUserText(answer)).toBeNull();
+    });
+
+    it('detects short explicit mode commands', () => {
+      expect(detectInterviewModeCommandFromUserText('теория')).toBe('theory');
+      expect(detectInterviewModeCommandFromUserText('кейс')).toBe('case');
+      expect(detectInterviewModeCommandFromUserText('Начать режим: Диагностика')).toBe('diagnostics');
+    });
+
+    it('tags user messages only with activeMode from session', () => {
+      const session = {
+        id: 's1',
+        userId: 'u1',
+        metadata: {
+          product: 'interview-prep',
+          collectedData: { activeMode: 'diagnostics' },
+        },
+        messages: [],
+      } as unknown as ConversationSession;
+
+      const tagged = tagUserMessageWithInterviewMode(session, {
+        id: 'm1',
+        type: MessageType.TEXT,
+        role: MessageRole.USER,
+        timestamp: new Date().toISOString(),
+        sessionId: 's1',
+        content: 'В работу попадали задачи с высоким эффектом.',
+      });
+
+      expect(tagged.interviewMode).toBe('diagnostics');
     });
   });
 });

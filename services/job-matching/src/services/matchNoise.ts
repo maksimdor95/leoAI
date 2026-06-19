@@ -194,15 +194,92 @@ export function matchSalaryExpectation(
   };
 }
 
+export type DemoteReasonCode =
+  | 'salary_below_expectation'
+  | 'seniority_mismatch'
+  | 'sales_channel_mismatch';
+
+export interface DemoteContext {
+  familyMatch?: 'same' | 'adjacent' | 'unknown' | 'conflict';
+  score?: number;
+  /** Нет totalExperience — грейд ненадёжен. */
+  thinProfile?: boolean;
+}
+
+export const DEMOTE_REASON_LABELS: Record<DemoteReasonCode, string> = {
+  salary_below_expectation: 'Зарплата заметно ниже ожиданий',
+  seniority_mismatch: 'Несовпадение по грейду',
+  sales_channel_mismatch: 'Другой тип продаж',
+};
+
+export function demoteReasonLabels(codes: DemoteReasonCode[]): string[] {
+  return codes.map((code) => DEMOTE_REASON_LABELS[code] ?? code);
+}
+
+export function isAspirationalRoleGap(
+  userLevel: string | null,
+  jobLevel: string | null
+): boolean {
+  if (!userLevel || !jobLevel) return false;
+  const userRank = SENIORITY_RANK[userLevel] ?? 2;
+  const jobRank = SENIORITY_RANK[jobLevel] ?? 2;
+  return jobRank > userRank;
+}
+
+export function isThinProfile(data: CollectedData): boolean {
+  const exp = data.totalExperience;
+  if (exp == null) return true;
+  return !Number.isFinite(exp) || exp <= 0;
+}
+
+export function getDemoteReasons(
+  job: Job,
+  collectedData: CollectedData,
+  userLevel: string | null,
+  jobLevel: string | null,
+  salaryHardMismatch: boolean,
+  context?: DemoteContext
+): DemoteReasonCode[] {
+  const reasons: DemoteReasonCode[] = [];
+
+  if (salaryHardMismatch) {
+    reasons.push('salary_below_expectation');
+  }
+
+  if (isSalesChannelMismatch(collectedData, job)) {
+    reasons.push('sales_channel_mismatch');
+  }
+
+  if (isSeniorityTierNoise(userLevel, jobLevel)) {
+    const skipSeniorityDemote =
+      context?.familyMatch === 'same' &&
+      (context?.score ?? 0) >= 50 &&
+      (context?.thinProfile || isAspirationalRoleGap(userLevel, jobLevel));
+
+    if (!skipSeniorityDemote) {
+      reasons.push('seniority_mismatch');
+    }
+  }
+
+  return reasons;
+}
+
 export function shouldDemoteFromRecommended(
   job: Job,
   collectedData: CollectedData,
   userLevel: string | null,
   jobLevel: string | null,
-  salaryHardMismatch: boolean
+  salaryHardMismatch: boolean,
+  context?: DemoteContext
 ): boolean {
-  if (salaryHardMismatch) return true;
-  if (isSeniorityTierNoise(userLevel, jobLevel)) return true;
-  if (isSalesChannelMismatch(collectedData, job)) return true;
-  return false;
+  return (
+    getDemoteReasons(
+      job,
+      collectedData,
+      userLevel,
+      jobLevel,
+      salaryHardMismatch,
+      context
+    ).length > 0
+  );
 }

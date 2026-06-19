@@ -1063,16 +1063,53 @@ function detectVacancySource(input: string): 'url' | 'text' | 'summary' {
   return input.trim().length > 500 ? 'text' : 'summary';
 }
 
-function normalizeInterviewMode(raw: string): InterviewPrepMode | null {
-  const value = raw.toLowerCase().trim();
-  if (value.includes('diagnostics') || value.includes('диагност')) return 'diagnostics';
-  if (value.includes('theory') || value.includes('теор')) return 'theory';
-  if (value.includes('case') || value.includes('кейс') || value.includes('задач')) return 'case';
-  if (value.includes('mock') || value.includes('мок') || value.includes('интервью')) return 'mock';
-  if (value.includes('star') || value.includes('поведен')) return 'star';
-  if (value.includes('employer') || value.includes('работодател') || value.includes('вопрос')) {
+function parseInterviewModeToken(token: string): InterviewPrepMode | null {
+  const normalized = token.trim().toLowerCase();
+  const modes: InterviewPrepMode[] = [
+    'diagnostics',
+    'theory',
+    'case',
+    'mock',
+    'star',
+    'employer_questions',
+  ];
+  return modes.includes(normalized as InterviewPrepMode) ? (normalized as InterviewPrepMode) : null;
+}
+
+const INTERVIEW_MODE_COMMAND_MAX_LEN = 100;
+
+function resolveInterviewModeLabel(label: string): InterviewPrepMode | null {
+  const v = label.toLowerCase().trim();
+  if (v.includes('диагност')) return 'diagnostics';
+  if (v.includes('теор')) return 'theory';
+  if (v.includes('кейс')) return 'case';
+  if (v.includes('мок')) return 'mock';
+  if (v.includes('star') || v.includes('поведен')) return 'star';
+  if (v.includes('работодател')) return 'employer_questions';
+  return null;
+}
+
+/** Распознать явную команду смены режима в коротком сообщении (не в развёрнутом ответе). */
+export function detectInterviewModeCommandFromUserText(raw: string): InterviewPrepMode | null {
+  const value = raw.trim();
+  if (!value || value.length > INTERVIEW_MODE_COMMAND_MAX_LEN) {
+    return null;
+  }
+
+  const startModeMatch = value.match(/^начать режим:\s*(.+)$/i);
+  if (startModeMatch) {
+    return resolveInterviewModeLabel(startModeMatch[1]);
+  }
+
+  if (/^(диагностика|diagnostics)$/i.test(value)) return 'diagnostics';
+  if (/^(теория|theory)$/i.test(value)) return 'theory';
+  if (/^(кейс|case)$/i.test(value)) return 'case';
+  if (/^(мок-интервью|мок|mock)$/i.test(value)) return 'mock';
+  if (/^(star|стар)$/i.test(value)) return 'star';
+  if (/^(вопросы работодателю|employer_questions?)$/i.test(value)) {
     return 'employer_questions';
   }
+
   return null;
 }
 
@@ -1145,6 +1182,11 @@ function buildVacancyProfileCard(
       {
         title: 'План подготовки',
         content: formatPrepPlan(prepPlan),
+        planDays: prepPlan.slice(0, 7).map((day) => ({
+          day: day.day,
+          focus: day.focus,
+          tasks: day.tasks.slice(0, 5),
+        })),
       },
     ],
     commands: [
@@ -1162,13 +1204,17 @@ function buildVacancyProfileCard(
   };
 }
 
-function getInterviewConversationHistory(session: ConversationSession) {
+function getInterviewConversationHistory(session: ConversationSession, mode?: InterviewPrepMode) {
+  const activeMode =
+    mode ?? (session.metadata.collectedData.activeMode as InterviewPrepMode | undefined);
+
   return (session.messages || [])
     .filter(
       (msg) =>
         (msg.role === MessageRole.USER || msg.role === MessageRole.ASSISTANT) &&
         (msg.type === MessageType.TEXT || msg.type === MessageType.QUESTION)
     )
+    .filter((msg) => !activeMode || msg.interviewMode === activeMode)
     .slice(-10)
     .map((msg) => ({
       role: msg.role === MessageRole.USER ? ('user' as const) : ('assistant' as const),
@@ -1176,7 +1222,11 @@ function getInterviewConversationHistory(session: ConversationSession) {
     }));
 }
 
-function buildInterviewTextMessage(session: ConversationSession, content: string): Message {
+function buildInterviewTextMessage(
+  session: ConversationSession,
+  content: string,
+  interviewMode?: InterviewPrepMode
+): Message {
   return {
     id: uuidv4(),
     type: MessageType.TEXT,
@@ -1184,13 +1234,15 @@ function buildInterviewTextMessage(session: ConversationSession, content: string
     timestamp: new Date().toISOString(),
     sessionId: session.id,
     content,
+    ...(interviewMode ? { interviewMode } : {}),
   };
 }
 
 function buildInterviewQuestionMessage(
   session: ConversationSession,
   question: string,
-  placeholder?: string
+  placeholder?: string,
+  interviewMode?: InterviewPrepMode
 ): QuestionMessage {
   return {
     id: uuidv4(),
@@ -1202,7 +1254,30 @@ function buildInterviewQuestionMessage(
     placeholder:
       placeholder ??
       'Ответь развёрнуто: опирайся на опыт, назови шаги и метрики; отметь допущения, если данных не хватает.',
+    ...(interviewMode ? { interviewMode } : {}),
   };
+}
+
+/** Помечает сообщение пользователя режимом подготовки (activeMode или явный выбор в тексте). */
+export function tagUserMessageWithInterviewMode(
+  session: ConversationSession,
+  message: Message
+): Message {
+  if (!isInterviewPrepSession(session) || message.type !== MessageType.TEXT) {
+    return message;
+  }
+  const activeMode = session.metadata.collectedData.activeMode as InterviewPrepMode | undefined;
+  if (!activeMode) {
+    return message;
+  }
+  return { ...message, interviewMode: activeMode };
+}
+
+export function parseInterviewModeFromAction(action: string): InterviewPrepMode | null {
+  if (!action.startsWith('interview_mode:')) {
+    return null;
+  }
+  return parseInterviewModeToken(action.replace('interview_mode:', ''));
 }
 
 async function buildInterviewModeMessage(
@@ -1237,7 +1312,7 @@ async function buildInterviewModeMessage(
     vacancyProfile: collectedData.vacancyProfile as VacancyProfile | undefined,
     prepPlan: (collectedData.prepPlan as InterviewPrepPlanDay[] | undefined) ?? [],
     collectedData,
-    conversationHistory: getInterviewConversationHistory(session),
+    conversationHistory: getInterviewConversationHistory(session, mode),
     grading: grading ?? undefined,
     authToken,
   });
@@ -1294,7 +1369,8 @@ async function buildInterviewModeMessage(
       return {
         message: buildInterviewTextMessage(
           session,
-          `${response}\n\n## Итог мок-интервью\n\n${summary}\n\nМожем перейти к кейсам, теории или STAR-историям.`
+          `${response}\n\n## Итог мок-интервью\n\n${summary}\n\nМожем перейти к кейсам, теории или STAR-историям.`,
+          mode
         ),
         metadataUpdates,
       };
@@ -1303,13 +1379,13 @@ async function buildInterviewModeMessage(
 
   if (mode === 'diagnostics') {
     return {
-      message: buildInterviewQuestionMessage(session, response.trim()),
+      message: buildInterviewQuestionMessage(session, response.trim(), undefined, mode),
       metadataUpdates,
     };
   }
 
   return {
-    message: buildInterviewTextMessage(session, response),
+    message: buildInterviewTextMessage(session, response, mode),
     metadataUpdates,
   };
 }
@@ -1372,7 +1448,7 @@ async function handleInterviewPrepReply(
     };
   }
 
-  const explicitMode = normalizeInterviewMode(userMessageContent);
+  const explicitMode = detectInterviewModeCommandFromUserText(userMessageContent);
   const collectedMode = session.metadata.collectedData.activeMode as InterviewPrepMode | undefined;
   const mode = explicitMode ?? collectedMode;
 
@@ -2676,7 +2752,7 @@ export async function handleCommand(
   logger.info(`Handling command: ${commandId} (action: ${action}) for step: ${currentStepId}`);
 
   if (isInterviewPrepSession(session) && action.startsWith('interview_mode:')) {
-    const mode = normalizeInterviewMode(action.replace('interview_mode:', ''));
+    const mode = parseInterviewModeToken(action.replace('interview_mode:', ''));
     if (mode) {
       const result = await buildInterviewModeMessage(
         session,

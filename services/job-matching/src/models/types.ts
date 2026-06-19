@@ -17,7 +17,9 @@ export interface JobRow {
   work_mode: string | null;
   source: string;
   source_url: string;
+  role_family?: string | null;
   posted_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  embedding?: number[] | string | null;
 }

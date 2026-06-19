@@ -19,7 +19,7 @@ const features = [
     icon: <RocketOutlined className="text-4xl" />,
     title: 'Быстрый подбор',
     description:
-      'Мы анализируем 10,000+ новых вакансий каждый час и отправляем персональные подборки прямо на email.',
+      'Сопоставляем ваш профиль со свежим каталогом вакансий hh.ru и показываем лучшие совпадения с понятным score.',
   },
   {
     icon: <UserOutlined className="text-4xl" />,

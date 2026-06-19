@@ -72,14 +72,14 @@ function resolveKeywords(
     set.add(kw);
   }
 
-  // Берём первое смежное семейство для разнообразия каталога,
-  // но не более 3 ключевых слов из него.
-  if (adjacent.length > 0) {
-    const adjKeywords = keywordsForFamily(adjacent[0]).slice(0, 3);
-    for (const kw of adjKeywords) set.add(kw);
+  // Смежные семейства — до 3, по 4 ключевых слова (раньше только первое, slice(0,3)).
+  for (const adj of adjacent.slice(0, 3)) {
+    for (const kw of keywordsForFamily(adj).slice(0, 4)) {
+      set.add(kw);
+    }
   }
 
-  return Array.from(set);
+  return Array.from(set).slice(0, 14);
 }
 
 function resolveLocationId(loc: string | null | undefined): number {

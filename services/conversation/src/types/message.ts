@@ -20,6 +20,15 @@ export const MessageRole = {
 
 export type MessageRoleValue = (typeof MessageRole)[keyof typeof MessageRole];
 
+/** Режим тренажёра interview-prep (тред в истории диалога). */
+export type InterviewPrepMode =
+  | 'diagnostics'
+  | 'theory'
+  | 'case'
+  | 'mock'
+  | 'star'
+  | 'employer_questions';
+
 /**
  * Base message interface
  */
@@ -29,6 +38,8 @@ export interface BaseMessage {
   role: MessageRoleValue;
   timestamp: string;
   sessionId: string;
+  /** Тред режима подготовки (диагностика, теория, …). */
+  interviewMode?: InterviewPrepMode;
 }
 
 /**
@@ -59,6 +70,11 @@ export interface InfoCardMessage extends BaseMessage {
     title: string;
     content: string;
     icon?: string;
+    planDays?: Array<{
+      day: number;
+      focus: string;
+      tasks: string[];
+    }>;
   }>;
   /** Кнопки сценария (например «Скачать PDF» на шаге report_ready) */
   commands?: Array<{

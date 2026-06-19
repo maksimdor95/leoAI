@@ -16,12 +16,22 @@ export const MessageRole = {
 
 export type MessageRoleValue = (typeof MessageRole)[keyof typeof MessageRole];
 
+/** Режим тренажёра interview-prep (тред в истории диалога). */
+export type InterviewPrepMode =
+  | 'diagnostics'
+  | 'theory'
+  | 'case'
+  | 'mock'
+  | 'star'
+  | 'employer_questions';
+
 export interface BaseMessage {
   id: string;
   type: MessageTypeValue;
   role: MessageRoleValue;
   timestamp: string;
   sessionId: string;
+  interviewMode?: InterviewPrepMode;
 }
 
 export interface TextMessage extends BaseMessage {
@@ -39,6 +49,14 @@ export interface InfoCardItem {
   title: string;
   content: string;
   icon?: string;
+  /** Структурированный план подготовки по дням (рендерится списком). */
+  planDays?: PrepPlanDayItem[];
+}
+
+export interface PrepPlanDayItem {
+  day: number;
+  focus: string;
+  tasks: string[];
 }
 
 export interface CommandItem {
