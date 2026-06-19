@@ -49,8 +49,8 @@ export function AuthModal({ open, onClose, initialMode = 'login' }: AuthModalPro
   const [form] = Form.useForm();
   const [forgotEmail, setForgotEmail] = useState('');
 
-  const startOAuth = (provider: 'google' | 'yandex') => {
-    const url = userAPI.getOAuthStartUrl(provider);
+  const startYandexOAuth = () => {
+    const url = userAPI.getOAuthStartUrl('yandex');
     window.location.href = url;
   };
 
@@ -258,14 +258,8 @@ export function AuthModal({ open, onClose, initialMode = 'login' }: AuthModalPro
           <p className="text-slate-400 text-xs text-center mb-3">или продолжить через</p>
           <div className="flex flex-col gap-3">
             <SocialAuthButton
-              provider="google"
-              text="Войти через Google"
-              onClick={() => startOAuth('google')}
-            />
-            <SocialAuthButton
-              provider="yandex"
               text="Войти через Яндекс ID"
-              onClick={() => startOAuth('yandex')}
+              onClick={startYandexOAuth}
             />
           </div>
         </div>

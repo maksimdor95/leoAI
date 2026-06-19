@@ -14,6 +14,8 @@ import {
   WEAK_MATCH_RETURN_LIMIT,
   RECOMMENDED_RETURN_LIMIT,
   HEALTHY_FAMILY_SHARE,
+  filterWeakMatchesForPresentation,
+  filterRecommendedMatchesForPresentation,
 } from '../services/matcher';
 import { familyLabelRu } from '../services/roleFamily';
 import { scrapeHHJobs } from '../services/scraper';
@@ -147,16 +149,10 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       catalogWarning = 'no_matches';
     }
 
-    const relevantFamily = (m: { familyMatch: 'same' | 'adjacent' | 'unknown' | 'conflict' }) =>
-      m.familyMatch === 'same' || m.familyMatch === 'adjacent';
-
-    const prioritizedRecommended =
-      stats.primaryFamily !== 'unknown'
-        ? (() => {
-            const sameOrAdjacent = matchedJobs.filter(relevantFamily);
-            return sameOrAdjacent.length > 0 ? sameOrAdjacent : matchedJobs;
-          })()
-        : matchedJobs.filter((m) => m.jobFamily === 'unknown');
+    const prioritizedRecommended = filterRecommendedMatchesForPresentation(
+      matchedJobs,
+      stats.primaryFamily
+    );
 
     if (
       !catalogWarning &&
@@ -167,18 +163,11 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       catalogWarning = 'no_matches';
     }
 
-    const prioritizedWeak =
-      stats.primaryFamily === 'unknown'
-        ? weakMatches.filter((m) => m.jobFamily === 'unknown')
-        : stats.primaryFamily !== 'unknown' && catalogWarning === 'catalog_family_mismatch'
-        ? (() => {
-            const sameOrAdjacent = weakMatches.filter(relevantFamily);
-            const unknownOnly = weakMatches.filter((m) => m.familyMatch === 'unknown');
-            // При «перекошенном» каталоге показываем сначала профильные роли,
-            // unknown — только добивкой до лимита.
-            return [...sameOrAdjacent, ...unknownOnly];
-          })()
-        : weakMatches;
+    const prioritizedWeak = filterWeakMatchesForPresentation(
+      weakMatches,
+      stats.primaryFamily,
+      catalogWarning
+    );
 
     const topJobs = prioritizedRecommended.slice(0, RECOMMENDED_RETURN_LIMIT);
     const topWeak = prioritizedWeak.slice(0, WEAK_MATCH_RETURN_LIMIT);
@@ -237,6 +226,7 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         stats.primaryFamily !== 'unknown' ? familyLabelRu(stats.primaryFamily) : null,
       adjacentFamilies: stats.adjacentFamilies,
       familyRelevanceShare: Number(stats.familyRelevanceShare.toFixed(3)),
+      familyCatalogCount: stats.familyCatalogCount,
       familyDistribution: stats.familyDistribution,
       catalogWarning,
     });

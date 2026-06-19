@@ -207,9 +207,11 @@ const FAMILY_RULES: Record<Exclude<RoleFamily, 'unknown'>, FamilyRules> = {
     phrases: [
       'hr manager',
       'hr business partner',
+      'hr bp',
       'hrbp',
       'people partner',
       'people & culture',
+      'people and culture',
       'talent acquisition',
       'it recruiter',
       'recruiter',
@@ -217,8 +219,13 @@ const FAMILY_RULES: Record<Exclude<RoleFamily, 'unknown'>, FamilyRules> = {
       'рекрутер',
       'рекрутёр',
       'hr директор',
+      'директор по персоналу',
+      'руководитель hr',
+      'специалист по подбору персонала',
+      'employee relations',
+      'hr generalist',
     ],
-    tokens: ['hrbp', 'рекрутер', 'рекрутёр'],
+    tokens: ['hrbp', 'рекрутер', 'рекрутёр', 'peoplepartner'],
   },
   wellbeing: {
     phrases: [
@@ -229,14 +236,25 @@ const FAMILY_RULES: Record<Exclude<RoleFamily, 'unknown'>, FamilyRules> = {
       'well-being manager',
       'wellbeing manager',
       'employee experience',
+      'employee wellbeing',
       'mental health',
+      'mental health specialist',
       'психолог-консультант',
       'школьный психолог',
+      'психолог в компании',
       'eap',
+      'eap specialist',
       'психологическая поддержка',
       'программа well-being',
+      'well-being specialist',
+      'специалист по well-being',
+      'специалист по благополучию',
+      'organizational psychologist',
+      'организационный психолог',
+      'психолог hr',
+      'people partner wellbeing',
     ],
-    tokens: ['wellbeing', 'well-being'],
+    tokens: ['wellbeing', 'well-being', 'wellbeinglead', 'mentalhealth'],
   },
   finance: {
     phrases: [
@@ -394,6 +412,11 @@ const FAMILY_RULES: Record<Exclude<RoleFamily, 'unknown'>, FamilyRules> = {
       'chief technology officer',
       'head of engineering',
       'head of operations',
+      'head of production',
+      'production manager',
+      'начальник производства',
+      'директор по производству',
+      'начальник цеха',
       'engineering manager',
       'tech lead',
       'team lead',
@@ -419,6 +442,27 @@ function textIncludesToken(text: string, token: string): boolean {
 }
 
 /**
+ * Фраза с границами слов — «head of product» не срабатывает внутри «head of production».
+ */
+export function textIncludesPhrase(text: string, phrase: string): boolean {
+  if (!phrase) return false;
+  const lower = text.toLowerCase();
+  const needle = phrase.toLowerCase();
+  let from = 0;
+  while (from < lower.length) {
+    const found = lower.indexOf(needle, from);
+    if (found === -1) return false;
+    const before = found === 0 ? '' : lower[found - 1];
+    const after = found + needle.length >= lower.length ? '' : lower[found + needle.length];
+    const beforeOk = !before || !/[a-zа-яё0-9]/i.test(before);
+    const afterOk = !after || !/[a-zа-яё0-9]/i.test(after);
+    if (beforeOk && afterOk) return true;
+    from = found + 1;
+  }
+  return false;
+}
+
+/**
  * Классифицировать произвольный текст (заголовок вакансии, желаемая роль,
  * фрагмент саммари) в семейство. При множественных совпадениях выбирается
  * семейство с более сильным сигналом (phrase > token) и по FAMILY_PRIORITY.
@@ -435,7 +479,7 @@ export function classifyRoleFamily(rawText: string | null | undefined): RoleFami
     FamilyRules,
   ][]) {
     for (const phrase of rules.phrases) {
-      if (text.includes(phrase)) {
+      if (textIncludesPhrase(text, phrase)) {
         phraseHits.add(family);
         break;
       }
@@ -610,13 +654,24 @@ export function keywordsForFamily(family: RoleFamily): string[] {
       'Account Manager',
       'Business Development Manager',
     ],
-    hr: ['HR Manager', 'HR Business Partner', 'People Partner', 'Рекрутер', 'IT Recruiter'],
+    hr: [
+      'HR Manager',
+      'HR Business Partner',
+      'People Partner',
+      'HR BP',
+      'Рекрутер',
+      'IT Recruiter',
+      'Менеджер по персоналу',
+    ],
     wellbeing: [
       'Корпоративный психолог',
       'Corporate Psychologist',
       'Well-being Lead',
       'Wellbeing Manager',
       'Employee Experience',
+      'Mental Health',
+      'EAP',
+      'Психологическая поддержка',
     ],
     finance: ['Финансовый аналитик', 'Financial Analyst', 'Финансовый менеджер'],
     legal: ['Юрист', 'Legal Counsel'],

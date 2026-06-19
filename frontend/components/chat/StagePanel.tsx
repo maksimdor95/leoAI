@@ -43,6 +43,8 @@ type StagePanelProps = {
   /** Быстрые ответы-чипы под вопросом (например, выбор сценария подбора). */
   quickReplies?: Array<{ label: string; value: string; hint?: string }>;
   onQuickReply?: (value: string) => void;
+  /** Прогресс детального пути Jack: «Вопрос 12 из 36». */
+  detailedProgressLabel?: string | null;
 };
 
 export function StagePanel({
@@ -57,6 +59,7 @@ export function StagePanel({
   resumeUpload,
   quickReplies,
   onQuickReply,
+  detailedProgressLabel,
 }: StagePanelProps) {
   const hasQuestion = Boolean(question);
   const hasInfoCard = Boolean(infoCard);
@@ -116,7 +119,12 @@ export function StagePanel({
       ) : hasQuestion && question ? (
         <Fragment>
           <div className="space-y-2 text-left w-full">
-            <div className="text-xs uppercase tracking-[0.4em] text-green-300/70">Вопрос</div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <div className="text-xs uppercase tracking-[0.4em] text-green-300/70">Вопрос</div>
+              {detailedProgressLabel ? (
+                <span className="text-[11px] font-medium text-slate-400">{detailedProgressLabel}</span>
+              ) : null}
+            </div>
             <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-white leading-tight break-words w-full text-left">
               {question.question}
             </h2>

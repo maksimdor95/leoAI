@@ -1,7 +1,6 @@
 import {
   evaluateCondition,
   getScenarioIdByProduct,
-  isQuickReadyMetaClarifyRequest,
   resolveNextStep,
   wantsDetailedProfileAnalysis,
 } from '../dialogueEngine';
@@ -170,17 +169,8 @@ describe('dialogueEngine', () => {
       expect(wantsDetailedProfileAnalysis('хочу развернутый разбор')).toBe(true);
     });
 
-    it('detects meta clarify requests without treating them as detailed analysis', () => {
-      expect(isQuickReadyMetaClarifyRequest('Можно уточнить детали')).toBe(true);
+    it('does not treat meta clarify prompts as detailed analysis', () => {
       expect(wantsDetailedProfileAnalysis('Можно уточнить детали')).toBe(false);
-    });
-
-    it('treats substantive clarifications as free chat, not meta prompts', () => {
-      expect(
-        isQuickReadyMetaClarifyRequest(
-          'Хочу уточнить зарплатные ожидания — готов рассматривать от 120 000 в Подольске'
-        )
-      ).toBe(false);
     });
   });
 });

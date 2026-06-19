@@ -26,7 +26,16 @@ import {
   classifyRoleFamily,
   classifyProfileRoles,
   RoleFamily,
+  familyLabelRu,
+  textIncludesPhrase,
 } from './roleFamily';
+import { enrichQuickPathCollectedData } from './quickPathEnrichment';
+import {
+  matchSalaryExpectation,
+  salesChannelMismatchReason,
+  seniorityMismatchReason,
+  shouldDemoteFromRecommended,
+} from './matchNoise';
 
 /** Порог «Рекомендуем». */
 export const MATCH_SCORE_THRESHOLD = 45;
@@ -90,6 +99,8 @@ export interface MatchJobsStats {
   familyDistribution: Partial<Record<RoleFamily, number>>;
   /** Доля вакансий, попавших в primary или adjacent семейства пользователя. */
   familyRelevanceShare: number;
+  /** Сколько вакансий в выборке относится к направлению пользователя (primary + adjacent). */
+  familyCatalogCount: number;
   primaryFamily: RoleFamily;
   adjacentFamilies: RoleFamily[];
 }
@@ -113,104 +124,13 @@ function jobRecencyTimestamp(job: Job): number {
 export function normalizeForMatch(raw: CollectedData | null): CollectedData | null {
   if (!raw) return null;
 
-  const merged: CollectedData = { ...raw };
-
-  const desiredRole =
-    raw.desiredRole ||
-    (typeof raw.desired_role === 'string' ? raw.desired_role : undefined);
-  if (desiredRole) merged.desiredRole = desiredRole.trim();
-
-  const skillTokens = collectSkillStrings(raw);
-  if (skillTokens.length > 0) merged.skills = skillTokens;
-
-  // If skills are empty, try to extract from careerSummary text
-  if ((!merged.skills || merged.skills.length === 0) && typeof raw.careerSummary === 'string') {
-    const extracted = extractSkillsFromText(raw.careerSummary);
-    if (extracted.length > 0) merged.skills = extracted;
+  const enriched = enrichQuickPathCollectedData(raw);
+  const skillTokens = collectSkillStrings(enriched);
+  if (skillTokens.length > 0) {
+    const fromText = Array.isArray(enriched.skills) ? enriched.skills.map(String) : [];
+    enriched.skills = [...new Set([...fromText, ...skillTokens])];
   }
-
-  // If totalExperience is missing, try to infer from careerSummary
-  if (merged.totalExperience == null && typeof raw.careerSummary === 'string') {
-    const years = extractExperienceYearsFromText(raw.careerSummary);
-    if (years !== null) merged.totalExperience = years;
-  }
-
-  const locs = resolveLocationsFromCollected(raw);
-  if (locs.length > 0) merged.location = locs;
-
-  return merged;
-}
-
-// ---------------------------------------------------------------------------
-// Text extraction helpers (Quick Path enrichment)
-// ---------------------------------------------------------------------------
-
-const EXPERIENCE_YEAR_PATTERNS = [
-  /(\d+(?:[.,]\d+)?)\s*(?:лет|года|год|г\.)/i,
-  /(?:опыт|стаж|работаю|работал)\s*(?:—|–|-|:)?\s*(\d+(?:[.,]\d+)?)/i,
-  /(\d+(?:[.,]\d+)?)\s*(?:years?|yrs?)/i,
-];
-
-function extractExperienceYearsFromText(text: string): number | null {
-  for (const pattern of EXPERIENCE_YEAR_PATTERNS) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      const years = parseFloat(match[1].replace(',', '.'));
-      if (Number.isFinite(years) && years > 0 && years < 50) return years;
-    }
-  }
-  return null;
-}
-
-const KNOWN_SKILLS = new Set([
-  'sql', 'python', 'java', 'javascript', 'typescript', 'go', 'golang', 'rust',
-  'c#', 'c++', 'php', 'ruby', 'scala', 'kotlin', 'swift', 'react', 'vue',
-  'angular', 'node.js', 'nodejs', 'django', 'flask', 'fastapi', 'spring',
-  'docker', 'kubernetes', 'k8s', 'aws', 'gcp', 'azure', 'terraform',
-  'git', 'ci/cd', 'jenkins', 'gitlab', 'github', 'linux', 'nginx',
-  'postgresql', 'mysql', 'mongodb', 'redis', 'kafka', 'rabbitmq', 'elasticsearch',
-  'tableau', 'power bi', 'powerbi', 'excel', 'pandas', 'numpy', 'spark',
-  'airflow', 'dbt', 'looker', 'metabase', 'grafana',
-  'figma', 'sketch', 'photoshop', 'illustrator',
-  'jira', 'confluence', 'miro', 'notion', 'trello', 'asana',
-  'agile', 'scrum', 'kanban', 'lean', 'safe',
-  'bpmn', 'uml', 'rest', 'graphql', 'grpc', 'api',
-  'machine learning', 'ml', 'deep learning', 'nlp', 'computer vision',
-  'a/b', 'a/b-тестирование', 'ab-тестирование',
-  '1c', '1с', 'sap', 'crm', 'erp', 'bi',
-  'brd', 'frd', 'srs', 'tdd', 'bdd', 'ddd',
-  'product management', 'product owner', 'project management', 'pmp',
-  'data governance', 'data engineering', 'etl', 'dwh',
-  'camunda', 'openapi', 'swagger',
-  'amoCRM', 'amocrm', 'битрикс24', 'bitrix24', 'hubspot', 'salesforce',
-  'spin', 'bant', 'cold calling',
-  'кпт', 'act', 'коучинг', 'фасилитация', 'медиация',
-  'mbti', 'hogan', 'gallup',
-]);
-
-function extractSkillsFromText(text: string): string[] {
-  const lower = text.toLowerCase();
-  const found: string[] = [];
-
-  for (const skill of KNOWN_SKILLS) {
-    if (lower.includes(skill)) {
-      found.push(skill.toUpperCase() === skill ? skill : skill);
-    }
-  }
-
-  // Also extract comma/semicolon separated terms that look like skills (short capitalized tokens)
-  const segments = text.split(/[,;—–\-]/).map(s => s.trim()).filter(s => s.length >= 2 && s.length <= 30);
-  for (const seg of segments) {
-    const clean = seg.replace(/^\s*(и|а|или|в|на|с|по|из|от|до)\s+/i, '').trim();
-    if (clean.length >= 2 && clean.length <= 25 && /^[A-ZА-ЯЁ0-9]/.test(clean) && !clean.includes(' в ')) {
-      const lc = clean.toLowerCase();
-      if (!found.includes(lc) && !ROLE_STOPWORDS.has(lc)) {
-        found.push(clean);
-      }
-    }
-  }
-
-  return [...new Set(found)];
+  return enriched;
 }
 
 // ---------------------------------------------------------------------------
@@ -263,21 +183,21 @@ function collectSkillStrings(raw: CollectedData): string[] {
   });
 }
 
-function resolveLocationsFromCollected(raw: CollectedData): string[] {
-  if (Array.isArray(raw.location) && raw.location.length > 0) {
-    return raw.location.map((x) => String(x));
-  }
-  const dl = raw.desired_location;
-  if (typeof dl === 'string' && dl.trim()) {
-    return dl
-      .split(/[,;]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-  if (Array.isArray(dl) && dl.length > 0) {
-    return (dl as unknown[]).map((x) => String(x)).filter(Boolean);
-  }
-  return [];
+function userPrefersRemote(
+  collectedData: CollectedData,
+  userPreferences?: { location?: string[]; workMode?: string }
+): boolean {
+  const mode = (userPreferences?.workMode || collectedData.workMode || '').toString().toLowerCase();
+  return mode === 'remote' || mode === 'удаленно' || mode.includes('remote');
+}
+
+function jobIsRemoteFriendly(job: Job): boolean {
+  const jobMode = (job.work_mode || '').toLowerCase();
+  if (jobMode === 'remote' || jobMode === 'hybrid') return true;
+  const jobLocations = job.location.map((loc) => loc.toLowerCase());
+  return jobLocations.some(
+    (loc) => loc.includes('удален') || loc.includes('remote') || loc.includes('дистанц')
+  );
 }
 
 function profilePositionRoles(data: CollectedData): string[] {
@@ -335,12 +255,17 @@ export function matchJobs(
     const reasons = [...raw.reasons];
     if (primaryFamily !== 'unknown' && jobFamily !== 'unknown') {
       if (familyMatch === 'same') {
-        reasons.unshift(`Семейство роли совпадает: ${jobFamily}`);
+        reasons.unshift(`Направление совпадает: ${familyLabelRu(jobFamily)}`);
       } else if (familyMatch === 'adjacent') {
-        reasons.unshift(`Смежное семейство: ${jobFamily}`);
+        reasons.unshift(`Смежное направление: ${familyLabelRu(jobFamily)}`);
       } else if (familyMatch === 'conflict') {
-        reasons.unshift(`Другое семейство (${jobFamily}), понижено`);
+        reasons.unshift(`Другое направление (${familyLabelRu(jobFamily)}), скор снижен`);
       }
+    }
+
+    if (effective) {
+      const channelReason = salesChannelMismatchReason(effective, job);
+      if (channelReason) reasons.push(channelReason);
     }
 
     if (finalScore > maxScore) maxScore = finalScore;
@@ -353,8 +278,31 @@ export function matchJobs(
       familyMatch,
     };
 
+    const userLevel =
+      effective && effective.totalExperience != null
+        ? inferUserSeniority(
+            typeof effective.totalExperience === 'number'
+              ? effective.totalExperience
+              : parseFloat(String(effective.totalExperience).replace(/,/g, '.')) || 0
+          )
+        : null;
+    const jobLevel = job.experience_level || inferLevelFromTitle(job.title);
+    const demote =
+      effective &&
+      shouldDemoteFromRecommended(
+        job,
+        effective,
+        userLevel,
+        jobLevel,
+        raw.salaryHardMismatch
+      );
+
     if (finalScore >= MATCH_SCORE_THRESHOLD) {
-      recommended.push(entry);
+      if (demote) {
+        weakPool.push(entry);
+      } else {
+        recommended.push(entry);
+      }
     } else if (finalScore >= WEAK_MATCH_SCORE_FLOOR) {
       weakPool.push(entry);
     }
@@ -371,6 +319,14 @@ export function matchJobs(
   const familyRelevanceShare =
     jobs.length > 0 ? relevantCount / jobs.length : 0;
 
+  let familyCatalogCount = 0;
+  if (primaryFamily !== 'unknown') {
+    familyCatalogCount += familyDistribution[primaryFamily] ?? 0;
+    for (const adj of adjacentSet) {
+      familyCatalogCount += familyDistribution[adj] ?? 0;
+    }
+  }
+
   return {
     matches: recommended,
     weakMatches: weakPool,
@@ -381,10 +337,42 @@ export function matchJobs(
       weakTierTotal: weakPool.length,
       familyDistribution,
       familyRelevanceShare,
+      familyCatalogCount,
       primaryFamily,
       adjacentFamilies: Array.from(adjacentSet),
     },
   };
+}
+
+export function filterWeakMatchesForPresentation(
+  weakMatches: MatchingScore[],
+  primaryFamily: RoleFamily,
+  catalogWarning: string | null
+): MatchingScore[] {
+  if (primaryFamily === 'unknown') {
+    return weakMatches.filter((m) => m.jobFamily === 'unknown');
+  }
+  if (catalogWarning === 'catalog_family_mismatch') {
+    const sameOrAdjacent = weakMatches.filter(
+      (m) => m.familyMatch === 'same' || m.familyMatch === 'adjacent'
+    );
+    const unknownOnly = weakMatches.filter((m) => m.familyMatch === 'unknown');
+    return [...sameOrAdjacent, ...unknownOnly];
+  }
+  return weakMatches.filter((m) => m.familyMatch !== 'conflict');
+}
+
+export function filterRecommendedMatchesForPresentation(
+  matchedJobs: MatchingScore[],
+  primaryFamily: RoleFamily
+): MatchingScore[] {
+  if (primaryFamily === 'unknown') {
+    return matchedJobs.filter((m) => m.jobFamily === 'unknown');
+  }
+  const sameOrAdjacent = matchedJobs.filter(
+    (m) => m.familyMatch === 'same' || m.familyMatch === 'adjacent'
+  );
+  return sameOrAdjacent.length > 0 ? sameOrAdjacent : matchedJobs;
 }
 
 function resolveFamilyMatch(
@@ -421,12 +409,13 @@ function calculateRawScore(
     location?: string[];
     workMode?: string;
   }
-): { score: number; reasons: string[] } {
+): { score: number; reasons: string[]; salaryHardMismatch: boolean } {
   let score = 0;
   const reasons: string[] = [];
+  let salaryHardMismatch = false;
 
   if (!collectedData) {
-    return { score: 20, reasons: ['Недостаточно данных о пользователе'] };
+    return { score: 20, reasons: ['Недостаточно данных о пользователе'], salaryHardMismatch: false };
   }
 
   const locationScore = matchLocation(job, collectedData, userPreferences);
@@ -448,6 +437,11 @@ function calculateRawScore(
   const workModeScore = matchWorkMode(job, collectedData, userPreferences);
   score += workModeScore.points;
   if (workModeScore.reason) reasons.push(workModeScore.reason);
+
+  const salaryScore = matchSalaryExpectation(job, collectedData);
+  score += salaryScore.points;
+  if (salaryScore.reason) reasons.push(salaryScore.reason);
+  salaryHardMismatch = salaryScore.hardMismatch;
 
   // Multi-signal bonus: reward jobs that match on 3+ factors well
   const strongFactors = [
@@ -478,7 +472,7 @@ function calculateRawScore(
     score += 1;
   }
 
-  return { score: Math.min(100, Math.round(score)), reasons };
+  return { score: Math.min(100, Math.round(score)), reasons, salaryHardMismatch };
 }
 
 // ---------- частные факторы ----------
@@ -514,6 +508,10 @@ function matchLocation(
 
   if (jobLocations.some((loc) => loc.includes('удаленно') || loc.includes('remote'))) {
     return { points: 16, reason: 'Удалённая работа' };
+  }
+
+  if (userPrefersRemote(collectedData, userPreferences) && !jobIsRemoteFriendly(job)) {
+    return { points: -8, reason: 'Офис в другом городе при предпочтении удалёнки' };
   }
 
   return { points: 0, reason: 'Несовпадение по локации' };
@@ -573,13 +571,13 @@ function matchExperience(
   const userRank = userSeniority ? (SENIORITY_RANK[userSeniority] ?? 2) : 2;
   const rankGap = userRank - jobRank;
 
-  // If user is significantly overqualified (e.g. senior looking at intern/junior)
-  if (rankGap >= 2) {
-    const penalty = rankGap >= 3 ? -10 : -4;
-    return {
-      points: penalty,
-      reason: `Overqualified: пользователь ${userSeniority}, вакансия ${jobLevel}`,
-    };
+  const seniorityReason = seniorityMismatchReason(userSeniority, jobLevel);
+  if (seniorityReason && rankGap >= 2) {
+    const penalty = rankGap >= 3 ? -10 : -6;
+    return { points: penalty, reason: seniorityReason };
+  }
+  if (seniorityReason && userRank >= 3 && jobRank <= 1) {
+    return { points: -8, reason: seniorityReason };
   }
 
   if (diff === 0) {
@@ -723,7 +721,7 @@ function matchRole(
   const matchedPhrases: string[] = [];
   for (const phrase of phraseCandidates) {
     if (phrase.length < 4) continue;
-    if (jobTitleLower.includes(phrase)) {
+    if (textIncludesPhrase(jobTitleLower, phrase)) {
       phraseHits += 1;
       matchedPhrases.push(phrase);
     }

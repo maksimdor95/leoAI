@@ -37,8 +37,8 @@ export default function RegisterPage() {
   const { openAuthModal } = useAuth();
   const [loading, setLoading] = useState(false);
 
-  const startOAuth = (provider: 'google' | 'yandex') => {
-    const url = userAPI.getOAuthStartUrl(provider);
+  const startYandexOAuth = () => {
+    const url = userAPI.getOAuthStartUrl('yandex');
     window.location.href = url;
   };
 
@@ -116,14 +116,8 @@ export default function RegisterPage() {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <SocialAuthButton
-            provider="google"
-            text="Войти через Google"
-            onClick={() => startOAuth('google')}
-          />
-          <SocialAuthButton
-            provider="yandex"
             text="Войти через Яндекс ID"
-            onClick={() => startOAuth('yandex')}
+            onClick={startYandexOAuth}
           />
         </div>
 

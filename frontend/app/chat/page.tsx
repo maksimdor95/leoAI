@@ -31,6 +31,8 @@ import { clearClientAuthState, getToken, isAuthenticated } from '@/lib/auth';
 import { captureEvent } from '@/lib/analytics';
 import { userAPI } from '@/lib/api';
 import { jackCollectedDataReadyForJobMatch } from '@/lib/jackProfileGating';
+import { getJackDetailedProgress } from '@/lib/jackDetailedProgress';
+import { buildVacancyPrepText, vacancyPrepDisplayLabel } from '@/lib/buildVacancyPrepText';
 import { getPublicJobMatchingBaseUrl } from '@/lib/publicJobMatchingUrl';
 import {
   formatCollectedValue,
@@ -43,6 +45,11 @@ import { InterviewPrepInfoOverview } from '@/components/chat/InterviewPrepInfoOv
 import type { InterviewReportPreview } from '@/components/chat/InterviewReportCards';
 import { TypingMessage } from '@/components/chat/TypingMessage';
 import { ProfileModal } from '@/components/chat/ProfileModal';
+import { MatchedJobCard } from '@/components/chat/MatchedJobCard';
+import {
+  VacanciesInsightPanel,
+  shouldShowVacanciesInsight,
+} from '@/components/chat/VacanciesInsightPanel';
 import { ProductSelectionScreen, ProductType } from '@/components/chat/ProductSelectionScreen';
 import { SupportWidget } from '@/components/support/SupportWidget';
 import {
@@ -82,6 +89,12 @@ type MatchedJobItem = {
     source?: string;
     source_url?: string;
     location?: string[];
+    description?: string;
+    requirements?: string;
+    skills?: string[];
+    work_mode?: string | null;
+    salary_min?: number | null;
+    salary_max?: number | null;
   };
   score: number;
   reasons?: string[];
@@ -106,6 +119,8 @@ type JobsMatchMeta = {
   profileFamilyLabel?: string | null;
   /** Доля вакансий в каталоге, попадающих в primary или смежные семейства */
   familyRelevanceShare?: number;
+  /** Сколько вакансий в выборке относится к направлению пользователя */
+  familyCatalogCount?: number;
   /** Предупреждение от API: 'catalog_family_mismatch' | 'no_matches' | 'empty_catalog' | null */
   catalogWarning?: 'catalog_family_mismatch' | 'no_matches' | 'empty_catalog' | null;
 };
@@ -129,23 +144,6 @@ function ruNewJobsLabel(count: number): string {
   if (n1 === 1) return 'новая';
   if (n1 >= 2 && n1 <= 4) return 'новые';
   return 'новых';
-}
-
-function vacanciesEmptyExplanation(meta: JobsMatchMeta | null): string {
-  if (!meta) {
-    return 'Отвечайте в диалоге — подбор вакансий обновится автоматически.';
-  }
-  if (meta.jobsInDb === 0) {
-    return 'В каталоге пока нет вакансий. После загрузки с hh.ru или SuperJob они появятся здесь.';
-  }
-  if (
-    meta.totalMatched === 0 &&
-    meta.weakTierTotal === 0 &&
-    meta.maxMatchScore < meta.matchThreshold
-  ) {
-    return `В каталоге есть вакансии, но ни одна не доходит до порога «Рекомендуем» (${meta.matchThreshold}) и до блока «Слабое совпадение» (от ${meta.weakMatchFloor}). Уточните профиль в чате. Текущий лучший балл: ${meta.maxMatchScore}.`;
-  }
-  return 'Отвечайте в диалоге — подбор вакансий обновится автоматически.';
 }
 
 function extractLatest<T extends Message>(
@@ -272,6 +270,12 @@ function ChatPageContent() {
 
   const [currentProduct, setCurrentProduct] = useState<ProductType>('jack');
   const [pendingStarterMessage, setPendingStarterMessage] = useState<string | null>(null);
+  const [pendingVacancyAnalyze, setPendingVacancyAnalyze] = useState<{
+    text: string;
+    label: string;
+  } | null>(null);
+  const pendingVacancyAnalyzeRef = useRef<{ text: string; label: string } | null>(null);
+  const [vacancyAnalyzeFlowActive, setVacancyAnalyzeFlowActive] = useState(false);
   const autoStarterSentRef = useRef(false);
   const [productSelected, setProductSelected] = useState(false);
   const [isNewChatMode, setIsNewChatMode] = useState(false);
@@ -283,6 +287,9 @@ function ChatPageContent() {
   const [jobsLoadState, setJobsLoadState] = useState<JobsLoadState>('idle');
   const [jobsLastUpdatedAt, setJobsLastUpdatedAt] = useState<string | null>(null);
   const [jobsMatchMeta, setJobsMatchMeta] = useState<JobsMatchMeta | null>(null);
+  const [sessionCurrentStepId, setSessionCurrentStepId] = useState<string | null>(null);
+  const [sessionCompletedSteps, setSessionCompletedSteps] = useState<string[]>([]);
+  const [vacancyPrepJobId, setVacancyPrepJobId] = useState<string | null>(null);
   const [newJobsCount, setNewJobsCount] = useState(0);
   const previousJobIdsRef = useRef<Set<string>>(new Set());
   const autoRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -316,6 +323,22 @@ function ChatPageContent() {
   }, []);
 
   const getJobMatchingBaseUrl = useCallback(() => getPublicJobMatchingBaseUrl(), []);
+
+  const syncSessionMetadata = useCallback(() => {
+    const meta = chatRef.current?.metadata;
+    if (!meta) return;
+    setSessionCurrentStepId(
+      typeof meta.currentStepId === 'string' ? meta.currentStepId : null
+    );
+    setSessionCompletedSteps(
+      Array.isArray(meta.completedSteps) ? (meta.completedSteps as string[]) : []
+    );
+  }, []);
+
+  const jackDetailedProgressLabel = useMemo(() => {
+    if (currentProduct !== 'jack') return null;
+    return getJackDetailedProgress(sessionCurrentStepId, sessionCompletedSteps)?.label ?? null;
+  }, [currentProduct, sessionCurrentStepId, sessionCompletedSteps]);
 
   useEffect(() => {
     return () => {
@@ -795,7 +818,12 @@ function ChatPageContent() {
   }, []);
 
   // Function to initialize chat with a specific product
-  const initializeChat = useCallback((product: ProductType, sessionIdParam?: string, isNew?: boolean) => {
+  const initializeChat = useCallback((
+    product: ProductType,
+    sessionIdParam?: string,
+    isNew?: boolean,
+    options?: { vacancyAnalyze?: { text: string; label: string } }
+  ) => {
     // Disconnect previous chat if exists
     if (chatRef.current) {
       chatRef.current.disconnect();
@@ -811,6 +839,11 @@ function ChatPageContent() {
     setSessionId(null);
     setCurrentProduct(product);
     autoStarterSentRef.current = false;
+    setPendingStarterMessage(null);
+    const vacancyAnalyze = options?.vacancyAnalyze ?? null;
+    pendingVacancyAnalyzeRef.current = vacancyAnalyze;
+    setPendingVacancyAnalyze(vacancyAnalyze);
+    setVacancyAnalyzeFlowActive(Boolean(vacancyAnalyze));
     setProductSelected(true);
     setMatchedJobs([]);
     setWeakMatchedJobs([]);
@@ -837,6 +870,7 @@ function ChatPageContent() {
         sessionId: sessionIdParam ?? undefined,
         createNew: isNew ?? true,
         product: isNew ? product : undefined,
+        intent: vacancyAnalyze ? 'vacancy_analyze' : undefined,
         onConnected: () => {
           if (chatConnectTimeoutRef.current) {
             clearTimeout(chatConnectTimeoutRef.current);
@@ -854,6 +888,18 @@ function ChatPageContent() {
           setSessionId(payload.sessionId);
           if (payload.metadata?.product) {
             setCurrentProduct(payload.metadata.product);
+          }
+          if (payload.metadata) {
+            setSessionCurrentStepId(
+              typeof payload.metadata.currentStepId === 'string'
+                ? payload.metadata.currentStepId
+                : null
+            );
+            setSessionCompletedSteps(
+              Array.isArray(payload.metadata.completedSteps)
+                ? (payload.metadata.completedSteps as string[])
+                : []
+            );
           }
           // Keep sessionId in URL to avoid re-triggering "new chat" mode.
           // Не дёргаем replace повторно, если в URL уже наш sessionId — иначе init-эффект
@@ -878,6 +924,12 @@ function ChatPageContent() {
             );
 
             if (firstAssistantQuestion) {
+              if (pendingVacancyAnalyzeRef.current) {
+                setMessages(dedupeAndSortMessages(sortedMessages));
+                syncSessionMetadata();
+                return;
+              }
+
               setTypingMessage(firstAssistantQuestion);
               setTypingOptions({ speed: 50, delay: 1200 });
               setIsTyping(true);
@@ -892,8 +944,22 @@ function ChatPageContent() {
           }
 
           setMessages(dedupeAndSortMessages(sortedMessages));
+          syncSessionMetadata();
         },
         onMessage: (payload) => {
+          if (
+            payload.message.type === MessageType.INFO_CARD &&
+            (payload.message as InfoCardMessage).title === 'Профиль вакансии и план подготовки'
+          ) {
+            messageApi.destroy('vacancy-prep');
+            setVacancyPrepJobId(null);
+            setVacancyAnalyzeFlowActive(false);
+            pendingVacancyAnalyzeRef.current = null;
+            setIsTyping(false);
+            setTypingMessage(null);
+            setSidePanelTab('profile');
+          }
+
           if (
             profileModalOpenRef.current &&
             payload.message.type === MessageType.INFO_CARD &&
@@ -926,6 +992,7 @@ function ChatPageContent() {
 
             return appendMessage(prev, payload.message);
           });
+          syncSessionMetadata();
         },
         onError: (payload) => {
           if (chatConnectTimeoutRef.current) {
@@ -950,6 +1017,10 @@ function ChatPageContent() {
             router.push('/');
           }
           messageApi.error(payload.message);
+          messageApi.destroy('vacancy-prep');
+          setVacancyPrepJobId(null);
+          setVacancyAnalyzeFlowActive(false);
+          pendingVacancyAnalyzeRef.current = null;
         },
         onAssistantAudio: (payload) => {
           assistantAudioByMessageIdRef.current.set(payload.messageId, payload);
@@ -1080,6 +1151,28 @@ function ChatPageContent() {
     setPendingStarterMessage(null);
   }, [connected, messages, pendingStarterMessage, sessionId]);
 
+  useEffect(() => {
+    const pending = pendingVacancyAnalyzeRef.current ?? pendingVacancyAnalyze;
+    if (!pending || autoStarterSentRef.current) {
+      return;
+    }
+    if (!connected || !chatRef.current || !sessionId) {
+      return;
+    }
+    const hasUserMessages = messages.some((msg) => msg.role === MessageRole.USER);
+    if (hasUserMessages) {
+      autoStarterSentRef.current = true;
+      pendingVacancyAnalyzeRef.current = null;
+      setPendingVacancyAnalyze(null);
+      return;
+    }
+
+    autoStarterSentRef.current = true;
+    pendingVacancyAnalyzeRef.current = null;
+    setPendingVacancyAnalyze(null);
+    void chatRef.current.analyzeVacancy(pending.text, pending.label);
+  }, [connected, messages, pendingVacancyAnalyze, sessionId]);
+
   const handleTypingComplete = useCallback(() => {
     setTypingMessage((current) => {
       if (current) {
@@ -1154,6 +1247,49 @@ function ChatPageContent() {
   const handleInterviewRestart = useCallback(() => {
     router.push('/chat?new=true&product=interview-prep');
   }, [router]);
+
+  const handleVacancyPrepFromJob = useCallback(
+    async (item: MatchedJobItem) => {
+      const token = getToken();
+      if (!token) {
+        messageApi.warning('Нужна авторизация для разбора вакансии');
+        return;
+      }
+
+      setVacancyPrepJobId(item.job.id);
+      messageApi.loading({
+        content: 'Собираем план подготовки по вакансии…',
+        key: 'vacancy-prep',
+        duration: 0,
+      });
+
+      let job = item.job;
+      if (!job.description?.trim() && !job.requirements?.trim()) {
+        try {
+          const response = await fetch(`${getJobMatchingBaseUrl()}/api/jobs/${job.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data?.job && typeof data.job === 'object') {
+              job = { ...job, ...data.job };
+            }
+          }
+        } catch {
+          // используем то, что уже есть в карточке
+        }
+      }
+
+      const vacancyText = buildVacancyPrepText(job);
+      initializeChat('interview-prep', undefined, true, {
+        vacancyAnalyze: {
+          text: vacancyText,
+          label: vacancyPrepDisplayLabel(job.title, job.company),
+        },
+      });
+    },
+    [getJobMatchingBaseUrl, initializeChat, messageApi]
+  );
 
   const handleGenerateResumeDraft = useCallback(async () => {
     if (!chatRef.current) return;
@@ -1295,6 +1431,11 @@ function ChatPageContent() {
       return;
     }
 
+    if (command.action === 'open_vacancies') {
+      await fetchMatchedJobs({ revealPanel: true });
+      return;
+    }
+
     chatRef.current.executeCommand(command.id, command.action);
   };
 
@@ -1307,6 +1448,19 @@ function ChatPageContent() {
     () => extractLatest<InfoCardMessage>(messages, MessageType.INFO_CARD),
     [messages]
   );
+
+  const centerStageQuestion = useMemo(() => {
+    if (currentProduct !== 'interview-prep') {
+      return latestQuestion;
+    }
+    if (latestInfoCard?.title === 'Профиль вакансии и план подготовки') {
+      return undefined;
+    }
+    if (vacancyAnalyzeFlowActive) {
+      return undefined;
+    }
+    return latestQuestion;
+  }, [currentProduct, latestInfoCard, latestQuestion, vacancyAnalyzeFlowActive]);
 
   const latestCommand = useMemo(
     () => extractLatest<CommandMessage>(messages, MessageType.COMMAND),
@@ -1535,6 +1689,28 @@ function ChatPageContent() {
     setProfileEditOpen(true);
   }, [jackCollectedSnapshot, profileEditForm, profileEditableRows]);
 
+  const handleStartDetailedAnalysis = useCallback(() => {
+    unlockAudio();
+    if (!chatRef.current) return;
+    setSidePanelTab('chat');
+    void chatRef.current
+      .executeCommand('quick_start_detailed', 'start_detailed_analysis')
+      .catch(() => {
+        chatRef.current?.sendMessage('детальный анализ');
+      });
+  }, [unlockAudio]);
+
+  const handleEditProfileFromVacancies = useCallback(() => {
+    setSidePanelTab('profile');
+    handleOpenProfileEdit();
+  }, [handleOpenProfileEdit]);
+
+  const showVacanciesInsight = useMemo(
+    () =>
+      shouldShowVacanciesInsight(jobsMatchMeta, matchedJobs.length, weakMatchedJobs.length),
+    [jobsMatchMeta, matchedJobs.length, weakMatchedJobs.length]
+  );
+
   const handleCloseProfileEdit = useCallback(() => {
     setProfileEditOpen(false);
     profileEditForm.resetFields();
@@ -1646,6 +1822,8 @@ function ChatPageContent() {
         typeof data?.profileFamilyLabel === 'string' ? data.profileFamilyLabel : null;
       const familyRelevanceShare =
         typeof data?.familyRelevanceShare === 'number' ? data.familyRelevanceShare : undefined;
+      const familyCatalogCount =
+        typeof data?.familyCatalogCount === 'number' ? data.familyCatalogCount : undefined;
       const catalogWarning =
         data?.catalogWarning === 'catalog_family_mismatch' ||
         data?.catalogWarning === 'no_matches' ||
@@ -1663,6 +1841,7 @@ function ChatPageContent() {
         profileFamily,
         profileFamilyLabel,
         familyRelevanceShare,
+        familyCatalogCount,
         catalogWarning,
       });
 
@@ -1995,6 +2174,15 @@ function ChatPageContent() {
                           {currentProduct === 'wannanew' ? 'Подключаемся к Leo...' : 'Подключаемся к LEO...'}
                         </Text>
                       </div>
+                    ) : vacancyAnalyzeFlowActive &&
+                      !latestInfoCard &&
+                      currentProduct === 'interview-prep' ? (
+                      <div className="flex flex-col items-center justify-center gap-4 px-4 text-center">
+                        <Spin size="large" />
+                        <Text style={{ color: 'rgba(226, 232, 240, 0.85)' }}>
+                          Собираем план подготовки по вакансии…
+                        </Text>
+                      </div>
                     ) : isTyping && typingMessage ? (
                       <div className="flex flex-col items-start justify-center w-full">
                         <TypingMessage
@@ -2007,18 +2195,21 @@ function ChatPageContent() {
                     ) : (
                       <div className="w-full flex items-start justify-center overflow-auto">
                         <StagePanel
-                          question={latestQuestion}
+                          question={centerStageQuestion}
                           infoCard={latestInfoCard}
                           commands={stagePanelCommands}
                           onCommandSelect={handleCommandSelect}
-                          quickReplies={scenarioQuickReplies}
+                          detailedProgressLabel={jackDetailedProgressLabel}
+                          quickReplies={
+                            vacancyAnalyzeFlowActive ? undefined : scenarioQuickReplies
+                          }
                           onQuickReply={(value) => {
                             unlockAudio();
                             chatRef.current?.sendMessage(value);
                           }}
                           interviewPrepOnOpenOverview={
                             currentProduct === 'interview-prep' &&
-                            latestQuestion &&
+                            centerStageQuestion &&
                             latestInfoCard?.title === 'Профиль вакансии и план подготовки'
                               ? () => setSidePanelTab('profile')
                               : undefined
@@ -2216,9 +2407,13 @@ function ChatPageContent() {
                               {jobsMatchMeta.jobsScanned < jobsMatchMeta.jobsInDb
                                 ? ` (для матча смотрим последние ${jobsMatchMeta.jobsScanned})`
                                 : ''}
-                              {jobsMatchMeta.profileFamilyLabel
-                                ? ` · профиль: ${jobsMatchMeta.profileFamilyLabel}`
-                                : ''}
+                              {jobsMatchMeta.profileFamilyLabel &&
+                              typeof jobsMatchMeta.familyCatalogCount === 'number' &&
+                              jobsMatchMeta.familyCatalogCount > 0
+                                ? ` · в вашем направлении «${jobsMatchMeta.profileFamilyLabel}»: ~${jobsMatchMeta.familyCatalogCount}`
+                                : jobsMatchMeta.profileFamilyLabel
+                                  ? ` · профиль: ${jobsMatchMeta.profileFamilyLabel}`
+                                  : ''}
                               .
                             </div>
                           ) : null}
@@ -2248,6 +2443,36 @@ function ChatPageContent() {
                       </div>
                     ) : jobsError ? (
                       <div className="text-sm text-red-300">{jobsError}</div>
+                    ) : showVacanciesInsight && jobsMatchMeta ? (
+                      <div className="space-y-4">
+                        <VacanciesInsightPanel
+                          meta={jobsMatchMeta}
+                          onDetailedAnalysis={handleStartDetailedAnalysis}
+                          onEditProfile={handleEditProfileFromVacancies}
+                        />
+                        {weakMatchedJobs.length > 0 ? (
+                          <div className="space-y-3">
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-400/90">
+                              Возможные варианты (слабое совпадение)
+                            </div>
+                            {weakMatchedJobs.map((item) => (
+                              <MatchedJobCard
+                                key={item.job.id}
+                                variant="weak"
+                                title={item.job.title}
+                                company={item.job.company}
+                                score={item.score}
+                                source={item.job.source}
+                                sourceUrl={item.job.source_url}
+                                reasons={item.reasons}
+                                isNew={newJobBadgeIds.has(item.job.id)}
+                                onVacancyPrep={() => void handleVacancyPrepFromJob(item)}
+                                vacancyPrepLoading={vacancyPrepJobId === item.job.id}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
                     ) : matchedJobs.length > 0 || weakMatchedJobs.length > 0 ? (
                       <div className="space-y-6">
                         {matchedJobs.length > 0 ? (
@@ -2256,37 +2481,19 @@ function ChatPageContent() {
                               Рекомендуем
                             </div>
                             {matchedJobs.map((item) => (
-                              <div
+                              <MatchedJobCard
                                 key={item.job.id}
-                                className={`rounded-xl border bg-white/[0.03] p-3 ${
-                                  newJobBadgeIds.has(item.job.id)
-                                    ? 'border-emerald-400/55 ring-1 ring-emerald-400/25 shadow-[0_0_20px_rgba(52,211,153,0.12)]'
-                                    : 'border-white/10'
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="text-sm font-semibold text-white">{item.job.title}</div>
-                                  {newJobBadgeIds.has(item.job.id) ? (
-                                    <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
-                                      Новая
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <div className="mt-1 text-xs text-slate-300">{item.job.company}</div>
-                                <div className="mt-2 text-xs text-slate-400">
-                                  Источник: {item.job.source || 'unknown'} | Match: {item.score}
-                                </div>
-                                {item.job.source_url ? (
-                                  <a
-                                    href={item.job.source_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="mt-2 inline-block text-xs text-green-400 hover:text-green-300"
-                                  >
-                                    Открыть вакансию
-                                  </a>
-                                ) : null}
-                              </div>
+                                variant="recommended"
+                                title={item.job.title}
+                                company={item.job.company}
+                                score={item.score}
+                                source={item.job.source}
+                                sourceUrl={item.job.source_url}
+                                reasons={item.reasons}
+                                isNew={newJobBadgeIds.has(item.job.id)}
+                                onVacancyPrep={() => void handleVacancyPrepFromJob(item)}
+                                vacancyPrepLoading={vacancyPrepJobId === item.job.id}
+                              />
                             ))}
                           </div>
                         ) : null}
@@ -2296,51 +2503,28 @@ function ChatPageContent() {
                               Слабое совпадение
                             </div>
                             {weakMatchedJobs.map((item) => (
-                              <div
+                              <MatchedJobCard
                                 key={item.job.id}
-                                className={`rounded-xl border bg-white/[0.02] p-3 ${
-                                  newJobBadgeIds.has(item.job.id)
-                                    ? 'border-amber-400/45 ring-1 ring-amber-400/20'
-                                    : 'border-amber-900/40'
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="text-sm font-semibold text-white">{item.job.title}</div>
-                                  <div className="flex shrink-0 flex-col items-end gap-0.5">
-                                    {newJobBadgeIds.has(item.job.id) ? (
-                                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
-                                        Новая
-                                      </span>
-                                    ) : null}
-                                    <span className="text-[10px] font-medium text-amber-500/80">
-                                      слабее
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="mt-1 text-xs text-slate-300">{item.job.company}</div>
-                                <div className="mt-2 text-xs text-slate-400">
-                                  Источник: {item.job.source || 'unknown'} | Match: {item.score}
-                                </div>
-                                {item.job.source_url ? (
-                                  <a
-                                    href={item.job.source_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="mt-2 inline-block text-xs text-amber-400/90 hover:text-amber-300"
-                                  >
-                                    Открыть вакансию
-                                  </a>
-                                ) : null}
-                              </div>
+                                variant="weak"
+                                title={item.job.title}
+                                company={item.job.company}
+                                score={item.score}
+                                source={item.job.source}
+                                sourceUrl={item.job.source_url}
+                                reasons={item.reasons}
+                                isNew={newJobBadgeIds.has(item.job.id)}
+                                onVacancyPrep={() => void handleVacancyPrepFromJob(item)}
+                                vacancyPrepLoading={vacancyPrepJobId === item.job.id}
+                              />
                             ))}
                           </div>
                         ) : null}
                       </div>
-                    ) : (
+                    ) : jobsLoadState === 'success' ? (
                       <div className="text-sm text-slate-400 leading-relaxed">
-                        {vacanciesEmptyExplanation(jobsMatchMeta)}
+                        Отвечайте в диалоге — подбор вакансий обновится автоматически.
                       </div>
-                    )}
+                    ) : null}
                       </>
                     )
                   ) : sidePanelTab === 'profile' ? (

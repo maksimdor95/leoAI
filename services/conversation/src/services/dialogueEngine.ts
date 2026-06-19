@@ -43,6 +43,11 @@ import {
   parseTotalExperienceYearsFromText,
   resolveCollectValueForStep,
 } from '../utils/numericStepAnswers';
+import {
+  normalizeVacancyPrepInput,
+  stripHtmlFromText,
+} from '../utils/vacancyPrepText';
+import { enrichQuickPathCollectedData } from '../utils/quickPathEnrichment';
 import { logger } from '../utils/logger';
 import { triggerProfileDrivenScrape } from './integrationService';
 
@@ -735,6 +740,50 @@ function buildInfoCardMessage(
     };
   }
 
+  if (step.id === 'quick_ready') {
+    const collectedData = session.metadata.collectedData;
+    const cards: Array<{ title: string; content: string; icon?: string }> = [];
+    if (collectedData.desired_role) {
+      cards.push({
+        icon: '💼',
+        title: 'Роль',
+        content: String(collectedData.desired_role),
+      });
+    }
+    if (collectedData.careerSummary) {
+      cards.push({
+        icon: '📋',
+        title: 'Опыт',
+        content: String(collectedData.careerSummary),
+      });
+    }
+    if (collectedData.desired_location) {
+      cards.push({
+        icon: '📍',
+        title: 'Локация и условия',
+        content: String(collectedData.desired_location),
+      });
+    }
+
+    const msg: InfoCardMessage = {
+      id: uuidv4(),
+      type: MessageType.INFO_CARD,
+      role: MessageRole.ASSISTANT,
+      timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      title: step.title,
+      description: step.description,
+      cards:
+        cards.length > 0
+          ? cards
+          : [{ title: 'Профиль', content: 'Данные быстрого подбора пока не сохранены' }],
+    };
+    if (step.commands && step.commands.length > 0) {
+      msg.commands = step.commands;
+    }
+    return msg;
+  }
+
   const msg: InfoCardMessage = {
     id: uuidv4(),
     type: MessageType.INFO_CARD,
@@ -766,22 +815,6 @@ export function wantsDetailedProfileAnalysis(message: string): boolean {
     return true;
   }
   return false;
-}
-
-export function isQuickReadyMetaClarifyRequest(message: string): boolean {
-  const normalized = message.toLowerCase().trim();
-  if (normalized.length > 80 || wantsDetailedProfileAnalysis(message)) {
-    return false;
-  }
-
-  const metaClarifyPatterns = [
-    /^можно\s+уточнить(\s+детали)?[.!?\s]*$/,
-    /^уточнить(\s+детали)?[.!?\s]*$/,
-    /^хочу\s+уточнить(\s+детали)?[.!?\s]*$/,
-    /^уточни(\s+детали)?[.!?\s]*$/,
-  ];
-
-  return metaClarifyPatterns.some((pattern) => pattern.test(normalized));
 }
 
 async function buildFreeChatAssistantReply(
@@ -857,52 +890,50 @@ async function buildFreeChatAssistantReply(
   };
 }
 
+function buildQuickReadyDetailedAnalysisTransition(
+  session: ConversationSession,
+  scenarioUpdates: PreparedStepResult['metadataUpdates']
+): PreparedStepResult['metadataUpdates'] {
+  const metadataUpdates: PreparedStepResult['metadataUpdates'] = {
+    ...scenarioUpdates,
+    collectedData: {
+      scenarioMode: 'детализированный анализ',
+    },
+    completedSteps: ['quick_ready'],
+  };
+  session.metadata.collectedData = {
+    ...session.metadata.collectedData,
+    scenarioMode: 'детализированный анализ',
+  };
+  return metadataUpdates;
+}
+
 async function handleQuickReadyReply(
   session: ConversationSession,
   scenarioId: string,
   userMessageContent: string,
   scenarioUpdates: PreparedStepResult['metadataUpdates'],
-  authToken?: string
+  _authToken?: string
 ): Promise<PreparedStepResult> {
   if (wantsDetailedProfileAnalysis(userMessageContent)) {
     logger.info('User chose detailed analysis from quick_ready, advancing to career_overview');
-    const metadataUpdates: PreparedStepResult['metadataUpdates'] = {
-      ...scenarioUpdates,
-      collectedData: {
-        scenarioMode: 'детализированный анализ',
-      },
-      completedSteps: ['quick_ready'],
-    };
-    session.metadata.collectedData = {
-      ...session.metadata.collectedData,
-      scenarioMode: 'детализированный анализ',
-    };
+    const metadataUpdates = buildQuickReadyDetailedAnalysisTransition(session, scenarioUpdates);
     return prepareAssistantMessageForStepId(session, scenarioId, 'career_overview', metadataUpdates);
   }
 
-  if (isQuickReadyMetaClarifyRequest(userMessageContent)) {
-    return {
-      message: {
-        id: uuidv4(),
-        type: MessageType.TEXT,
-        role: MessageRole.ASSISTANT,
-        timestamp: new Date().toISOString(),
-        sessionId: session.id,
-        content:
-          'Конечно! Что именно хотите уточнить — роль, опыт, локацию, формат или зарплатные ожидания? Напишите свободным текстом.',
-      },
-      metadataUpdates: scenarioUpdates,
-      nextStepId: null,
-    };
-  }
-
-  return buildFreeChatAssistantReply(
-    session,
-    scenarioId,
-    userMessageContent,
-    scenarioUpdates,
-    authToken
-  );
+  return {
+    message: {
+      id: uuidv4(),
+      type: MessageType.TEXT,
+      role: MessageRole.ASSISTANT,
+      timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      content:
+        'Используйте кнопки «Вакансии» или «Детальный анализ». Чтобы поправить данные — вкладка «Профиль».',
+    },
+    metadataUpdates: scenarioUpdates,
+    nextStepId: null,
+  };
 }
 
 /**
@@ -1290,7 +1321,10 @@ async function handleInterviewPrepReply(
   authToken?: string
 ): Promise<PreparedStepResult> {
   if (currentStep.id === 'vacancy_input') {
-    if (isUrlOnlyVacancyInput(userMessageContent)) {
+    const vacancyText =
+      normalizeVacancyPrepInput(userMessageContent) ?? stripHtmlFromText(userMessageContent.trim());
+
+    if (isUrlOnlyVacancyInput(vacancyText)) {
       logger.info(`event=interview_prep_started sessionId=${session.id} source=url_only`);
       return {
         message: buildInterviewTextMessage(
@@ -1300,7 +1334,7 @@ async function handleInterviewPrepReply(
         metadataUpdates: {
           collectedData: {
             vacancySource: 'url',
-            vacancyUrl: userMessageContent.trim(),
+            vacancyUrl: vacancyText.trim(),
           },
           currentStepId: 'vacancy_input',
         },
@@ -1308,10 +1342,10 @@ async function handleInterviewPrepReply(
       };
     }
 
-    logger.info(`event=interview_prep_started sessionId=${session.id} source=${detectVacancySource(userMessageContent)}`);
+    logger.info(`event=interview_prep_started sessionId=${session.id} source=${detectVacancySource(vacancyText)}`);
     const profile = await extractVacancyProfile({
-      vacancyText: userMessageContent,
-      source: detectVacancySource(userMessageContent),
+      vacancyText: vacancyText,
+      source: detectVacancySource(vacancyText),
       authToken,
     });
     logger.info(`event=vacancy_profile_extracted sessionId=${session.id} role=${profile.role ?? 'unknown'}`);
@@ -1326,8 +1360,8 @@ async function handleInterviewPrepReply(
       message: buildVacancyProfileCard(session, profile, prepPlan),
       metadataUpdates: {
         collectedData: {
-          vacancySource: detectVacancySource(userMessageContent),
-          vacancyRawText: userMessageContent,
+          vacancySource: detectVacancySource(vacancyText),
+          vacancyRawText: vacancyText,
           vacancyProfile: profile,
           prepPlan,
         },
@@ -1415,6 +1449,89 @@ export function ensureScenarioMetadata(
   }
 
   return updates;
+}
+
+export async function analyzeVacancyFromText(
+  session: ConversationSession,
+  vacancyText: string,
+  _displayLabel: string,
+  authToken?: string
+): Promise<PreparedStepResult> {
+  const scenarioUpdates = ensureScenarioMetadata(session);
+  const scenarioId = session.metadata.scenarioId;
+  if (!scenarioId || !isInterviewPrepSession(session)) {
+    return { message: null, metadataUpdates: scenarioUpdates };
+  }
+
+  const normalized =
+    normalizeVacancyPrepInput(vacancyText) ?? stripHtmlFromText(vacancyText.trim());
+  if (normalized.length < 40) {
+    return {
+      message: buildInterviewTextMessage(
+        session,
+        'Не удалось распознать текст вакансии. Вставь описание роли или ключевые требования.'
+      ),
+      metadataUpdates: { ...scenarioUpdates, currentStepId: 'vacancy_input' },
+      nextStepId: 'vacancy_input',
+    };
+  }
+
+  const vacancyStep = getStep(scenarioId, 'vacancy_input');
+  if (!vacancyStep) {
+    return { message: null, metadataUpdates: scenarioUpdates };
+  }
+
+  session.metadata.collectedData = {
+    ...session.metadata.collectedData,
+    interviewMode: 'разбор вакансии',
+  };
+  session.metadata.currentStepId = 'vacancy_input';
+
+  const result = await handleInterviewPrepReply(session, vacancyStep, normalized, authToken);
+  const completedSteps = Array.from(
+    new Set([
+      ...(session.metadata.completedSteps || []),
+      'greeting',
+      ...(result.metadataUpdates?.completedSteps || []),
+    ])
+  );
+
+  return {
+    ...result,
+    metadataUpdates: {
+      ...scenarioUpdates,
+      ...result.metadataUpdates,
+      completedSteps,
+      flags: {
+        ...(session.metadata.flags || {}),
+        ...(result.metadataUpdates?.flags || {}),
+        [getStepSentFlagKey('greeting')]: true,
+        [getStepSentFlagKey('vacancy_input')]: true,
+      },
+    },
+  };
+}
+
+/** Сессия interview-prep из Jack: без приветствия, сразу к разбору вакансии. */
+export function prepareVacancyAnalyzeSession(
+  session: ConversationSession
+): Partial<ConversationSessionMetadata> {
+  const scenarioUpdates = ensureScenarioMetadata(session);
+  return {
+    ...scenarioUpdates,
+    currentStepId: 'vacancy_input',
+    completedSteps: Array.from(
+      new Set([...(session.metadata.completedSteps || []), 'greeting'])
+    ),
+    collectedData: {
+      ...session.metadata.collectedData,
+      interviewMode: 'разбор вакансии',
+    },
+    flags: {
+      ...(session.metadata.flags || {}),
+      [getStepSentFlagKey('greeting')]: true,
+    },
+  };
 }
 
 export async function prepareEntryStep(session: ConversationSession): Promise<PreparedStepResult> {
@@ -1507,9 +1624,24 @@ export async function handleUserReply(
     return { message: null, metadataUpdates: scenarioUpdates };
   }
 
-  // Тренажёр по вакансии обрабатывается отдельным движком только на своих шагах
-  // (ввод вакансии и выбор режима). Приветствие-развилка и ветка пробного
-  // собеседования идут через обычную обработку сценария (collectKey + next).
+  // Jack «Разбор вакансии»: полный текст вакансии — сразу в анализ (greeting или vacancy_input).
+  if (isInterviewPrepSession(session)) {
+    const autoVacancyText = normalizeVacancyPrepInput(userMessageContent);
+    if (
+      autoVacancyText &&
+      (currentStep.id === 'greeting' || currentStep.id === 'vacancy_input')
+    ) {
+      const vacancyStep = getStep(scenarioId, 'vacancy_input');
+      if (vacancyStep) {
+        session.metadata.collectedData = {
+          ...session.metadata.collectedData,
+          interviewMode: 'разбор вакансии',
+        };
+        return handleInterviewPrepReply(session, vacancyStep, autoVacancyText, authToken);
+      }
+    }
+  }
+
   if (
     isInterviewPrepSession(session) &&
     (currentStep.id === 'vacancy_input' || currentStep.id === 'mode_select')
@@ -2140,6 +2272,18 @@ export async function handleUserReply(
     `Resolved next step for ${currentStep.id}: ${nextStepId} (collectedData: ${JSON.stringify(session.metadata.collectedData)})`
   );
 
+  if (nextStepId === 'quick_ready') {
+    const enriched = enrichQuickPathCollectedData(
+      session.metadata.collectedData as Record<string, unknown>
+    );
+    session.metadata.collectedData = enriched;
+    metadataUpdates.collectedData = {
+      ...(metadataUpdates.collectedData || {}),
+      ...enriched,
+    };
+    logger.info('Enriched Quick Path collectedData before quick_ready screen');
+  }
+
   metadataUpdates.currentStepId = nextStepId ?? undefined;
   session.metadata.currentStepId = nextStepId ?? undefined;
 
@@ -2627,6 +2771,30 @@ export async function handleCommand(
         metadataUpdates: pauseMetadataUpdates,
         nextStepId: currentStepId ?? undefined,
       };
+    }
+
+    case 'open_vacancies': {
+      // UI-only: frontend opens the vacancies tab; keep session on quick_ready.
+      return {
+        message: null,
+        metadataUpdates: scenarioUpdates,
+        nextStepId: currentStepId ?? undefined,
+      };
+    }
+
+    case 'start_detailed_analysis': {
+      if (currentStepId === 'quick_ready') {
+        logger.info('User chose detailed analysis command from quick_ready');
+        const metadataUpdates = buildQuickReadyDetailedAnalysisTransition(session, scenarioUpdates);
+        const effectiveScenarioId = scenarioId || DEFAULT_SCENARIO_ID;
+        return prepareAssistantMessageForStepId(
+          session,
+          effectiveScenarioId,
+          'career_overview',
+          metadataUpdates
+        );
+      }
+      break;
     }
 
     case 'resume': {

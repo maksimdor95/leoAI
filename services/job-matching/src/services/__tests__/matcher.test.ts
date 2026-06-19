@@ -3,8 +3,11 @@ import {
   matchJobs,
   MATCH_SCORE_THRESHOLD,
   WEAK_MATCH_SCORE_FLOOR,
+  filterWeakMatchesForPresentation,
 } from '../matcher';
 import { CollectedData } from '../userService';
+import type { MatchingScore } from '../matcher';
+import type { RoleFamily } from '../roleFamily';
 
 /**
  * Эти тесты — защита от регресса основной боли: в каталог, забитый
@@ -238,8 +241,102 @@ describe('matchJobs — Junior PM', () => {
   });
 });
 
+describe('filterWeakMatchesForPresentation', () => {
+  const mkScore = (
+    id: string,
+    jobFamily: RoleFamily,
+    familyMatch: MatchingScore['familyMatch']
+  ): MatchingScore => ({
+    job: mkJob({ id, title: id }),
+    score: 30,
+    reasons: [],
+    jobFamily,
+    familyMatch,
+  });
+
+  it('hides cross-family conflict weak matches when profile family is known', () => {
+    const weak = [
+      mkScore('w1', 'wellbeing', 'same'),
+      mkScore('w2', 'analytics', 'conflict'),
+    ];
+    const filtered = filterWeakMatchesForPresentation(weak, 'wellbeing', null);
+    expect(filtered.map((m) => m.job.id)).toEqual(['w1']);
+  });
+
+  it('shows only unknown job family when user family is unknown', () => {
+    const weak = [
+      mkScore('w1', 'analytics', 'unknown'),
+      mkScore('w2', 'unknown', 'unknown'),
+    ];
+    const filtered = filterWeakMatchesForPresentation(weak, 'unknown', null);
+    expect(filtered.map((m) => m.job.id)).toEqual(['w2']);
+  });
+});
+
 describe('Guardrails — weak floor and threshold relationships', () => {
   it('WEAK_MATCH_SCORE_FLOOR < MATCH_SCORE_THRESHOLD', () => {
     expect(WEAK_MATCH_SCORE_FLOOR).toBeLessThan(MATCH_SCORE_THRESHOLD);
+  });
+});
+
+describe('matchJobs — product vs production false positive', () => {
+  const quickHoP: CollectedData = {
+    desired_role: 'Head of product',
+    careerSummary: '10 лет в HR tech',
+    desired_location: 'Москва, удаленка',
+  };
+
+  const jobs: Job[] = [
+    mkJob({
+      id: 'prod-kaliningrad',
+      title: 'Начальник производства/Head of production the Knocked Down (KD)',
+      company: 'JETOUR',
+      location: ['Калининград'],
+      work_mode: 'office',
+      experience_level: 'lead',
+    }),
+    mkJob({
+      id: 'hop-adriver',
+      title: 'Директор по продукту/Head of Product (CPO)',
+      company: 'AdRiver',
+      location: ['Москва'],
+      work_mode: 'hybrid',
+      experience_level: 'lead',
+    }),
+    mkJob({
+      id: 'hop-domclick',
+      title: 'Head of Product',
+      company: 'Домклик',
+      location: ['Москва'],
+      work_mode: 'remote',
+      experience_level: 'lead',
+    }),
+  ];
+
+  const res = matchJobs(jobs, quickHoP);
+
+  it('does not rank manufacturing production role first', () => {
+    expect(res.matches.length).toBeGreaterThan(0);
+    expect(res.matches[0]?.job.id).not.toBe('prod-kaliningrad');
+    const hopFirst = res.matches.findIndex((m) => m.job.id === 'hop-domclick');
+    const prodIdx = res.matches.findIndex((m) => m.job.id === 'prod-kaliningrad');
+    if (prodIdx >= 0 && hopFirst >= 0) {
+      expect(hopFirst).toBeLessThan(prodIdx);
+    }
+  });
+
+  it('downranks or filters production job in Kaliningrad for remote HoP profile', () => {
+    const prod = [...res.matches, ...res.weakMatches].find((m) => m.job.id === 'prod-kaliningrad');
+    const hop = res.matches.find((m) => m.job.id === 'hop-domclick');
+    expect(hop).toBeDefined();
+    if (prod) {
+      expect(prod.jobFamily).toBe('management');
+      expect(prod.familyMatch).toBe('conflict');
+      expect(prod.score).toBeLessThan(hop!.score);
+    }
+  });
+
+  it('infers remote work mode from desired_location', () => {
+    expect(res.stats.primaryFamily).toBe('product');
   });
 });

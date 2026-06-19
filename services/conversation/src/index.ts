@@ -40,6 +40,8 @@ import {
   prepareEntryStep,
   handleCommand,
   applyImportedCollectedData,
+  analyzeVacancyFromText,
+  prepareVacancyAnalyzeSession,
 } from './services/dialogueEngine';
 import {
   generateFreeChatResponse,
@@ -330,7 +332,7 @@ app.delete('/api/conversations/:id', authenticateRequest, async (req, res) => {
 app.post('/api/chat/session', authenticateRequest, async (req, res) => {
   try {
     const user = (req as express.Request & { user: { userId: string; email: string } }).user;
-    const { createNew, sessionId: requestedSessionId, product } = req.body;
+    const { createNew, sessionId: requestedSessionId, product, intent } = req.body;
 
     let session;
 
@@ -365,20 +367,27 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
         : undefined
     );
     if (hydratedSession) {
-      const entryStepResult = await prepareEntryStep(hydratedSession);
-      if (entryStepResult.metadataUpdates) {
-        await updateSessionMetadata(hydratedSession.id, entryStepResult.metadataUpdates);
-      }
-      if (entryStepResult.message) {
-        entryAssistantMessage = entryStepResult.message;
-        await addMessageToSession(hydratedSession.id, entryStepResult.message);
-        const ttsText = getSpeakableTextFromAssistantMessage(entryStepResult.message);
-        if (ttsText) {
-          assistantAudio = await synthesizeAssistantAudio({
-            text: ttsText,
-            lang: 'ru-RU',
-            authToken: token || undefined,
-          });
+      if (intent === 'vacancy_analyze') {
+        await updateSessionMetadata(
+          hydratedSession.id,
+          prepareVacancyAnalyzeSession(hydratedSession)
+        );
+      } else {
+        const entryStepResult = await prepareEntryStep(hydratedSession);
+        if (entryStepResult.metadataUpdates) {
+          await updateSessionMetadata(hydratedSession.id, entryStepResult.metadataUpdates);
+        }
+        if (entryStepResult.message) {
+          entryAssistantMessage = entryStepResult.message;
+          await addMessageToSession(hydratedSession.id, entryStepResult.message);
+          const ttsText = getSpeakableTextFromAssistantMessage(entryStepResult.message);
+          if (ttsText) {
+            assistantAudio = await synthesizeAssistantAudio({
+              text: ttsText,
+              lang: 'ru-RU',
+              authToken: token || undefined,
+            });
+          }
         }
       }
     }
@@ -521,6 +530,94 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
   } catch (error: unknown) {
     logger.error('Error sending chat message:', error);
     res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Разбор вакансии из подбора Jack (длинный AI-запрос, отдельный таймаут на клиенте)
+app.post('/api/chat/session/:id/analyze-vacancy', authenticateRequest, async (req, res) => {
+  try {
+    const user = (req as express.Request & { user: { userId: string; email: string } }).user;
+    const sessionId = req.params.id;
+    const { vacancyText, displayLabel } = req.body as {
+      vacancyText?: string;
+      displayLabel?: string;
+    };
+
+    if (!vacancyText || !vacancyText.trim()) {
+      res.status(400).json({ error: 'vacancyText is required' });
+      return;
+    }
+
+    const session = await getSession(sessionId);
+    if (!session || session.userId !== user.userId) {
+      res.status(404).json({ error: 'Session not found or unauthorized' });
+      return;
+    }
+
+    if (
+      session.metadata.product !== 'interview-prep' &&
+      session.metadata.scenarioId !== 'interview-prep-v1'
+    ) {
+      res.status(400).json({ error: 'Analyze vacancy is only for interview-prep sessions' });
+      return;
+    }
+
+    const label = (displayLabel || 'Разбор вакансии').trim();
+    const userMessage: Message = {
+      id: uuidv4(),
+      type: MessageType.TEXT,
+      role: MessageRole.USER,
+      timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      content: label,
+    };
+    await addMessageToSession(session.id, userMessage);
+
+    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const token = extractBearerToken(
+      typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
+        ? rawAuthHeader
+        : undefined
+    );
+
+    const replyResult = await analyzeVacancyFromText(
+      session,
+      vacancyText.trim(),
+      label,
+      token || undefined
+    );
+
+    if (replyResult.metadataUpdates) {
+      await updateSessionMetadata(session.id, replyResult.metadataUpdates);
+    }
+
+    let assistantMessage = null;
+    let assistantAudio: AssistantAudioResult = null;
+    if (replyResult.message) {
+      await addMessageToSession(session.id, replyResult.message);
+      assistantMessage = replyResult.message;
+      const ttsText = getSpeakableTextFromAssistantMessage(replyResult.message);
+      if (ttsText) {
+        assistantAudio = await synthesizeAssistantAudio({
+          text: ttsText,
+          lang: 'ru-RU',
+          authToken: token || undefined,
+        });
+      }
+    }
+
+    const updatedSession = await getSession(session.id);
+    res.json({
+      userMessage,
+      assistantMessage,
+      assistantAudio: withAssistantAudioMessageId(assistantMessage, assistantAudio),
+      sessionId: updatedSession?.id,
+      messages: updatedSession?.messages || [],
+      metadata: updatedSession?.metadata,
+    });
+  } catch (error: unknown) {
+    logger.error('Error analyzing vacancy:', error);
+    res.status(500).json({ error: 'Failed to analyze vacancy' });
   }
 });
 

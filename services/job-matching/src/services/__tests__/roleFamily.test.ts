@@ -86,6 +86,12 @@ describe('classifyProfileRoles', () => {
     expect(classifyRoleFamily('аналитика well-being')).toBe('wellbeing');
     expect(classifyRoleFamily('аналитика well-being')).not.toBe('analytics');
   });
+
+  it('does not classify manufacturing production head as product', () => {
+    expect(classifyRoleFamily('Head of production the Knocked Down (KD)')).toBe('management');
+    expect(classifyRoleFamily('Начальник производства')).toBe('management');
+    expect(classifyRoleFamily('Head of Product')).toBe('product');
+  });
 });
 
 describe('keywordsForFamily', () => {

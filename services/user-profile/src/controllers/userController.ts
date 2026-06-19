@@ -38,7 +38,11 @@ function setAuthCookies(res: Response, token: string): void {
 
 export class UserController {
   private static parseProvider(providerRaw: string): OAuthProvider {
-    if (providerRaw === 'google' || providerRaw === 'yandex') {
+    // Google OAuth отключён (требования РФ). Код в oauthService сохранён для возможного возврата.
+    if (providerRaw === 'google') {
+      throw new Error('Google OAuth is disabled');
+    }
+    if (providerRaw === 'yandex') {
       return providerRaw;
     }
     throw new Error('Unsupported OAuth provider');

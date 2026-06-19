@@ -110,11 +110,18 @@ class ChatApiClient {
     });
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {},
+    timeoutMs?: number
+  ): Promise<T> {
     const token = this.token || getToken();
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      timeoutMs ?? this.requestTimeoutMs
+    );
     const url = `${this.baseUrl}${endpoint}`;
     let response: Response;
     try {
@@ -153,6 +160,7 @@ class ChatApiClient {
       sessionId?: string;
       createNew?: boolean;
       product?: ProductType;
+      intent?: 'vacancy_analyze';
     } = {}
   ): Promise<void> {
     this.token = options.token || getToken();
@@ -164,6 +172,7 @@ class ChatApiClient {
           sessionId: options.sessionId,
           createNew: options.createNew,
           product: options.product,
+          intent: options.intent,
         }),
       });
 
@@ -246,6 +255,59 @@ class ChatApiClient {
     } catch (error) {
       this.onError?.({
         message: error instanceof Error ? error.message : 'Failed to send message',
+      });
+    }
+  }
+
+  /**
+   * Разбор вакансии из подбора Jack — длинный AI-запрос, короткая подпись в истории.
+   */
+  async analyzeVacancy(vacancyText: string, displayLabel: string): Promise<void> {
+    if (!this.sessionId) {
+      this.onError?.({ message: 'Сессия не инициализирована' });
+      return;
+    }
+
+    const trimmedText = vacancyText.trim();
+    const trimmedLabel = displayLabel.trim();
+    if (!trimmedText || !trimmedLabel) {
+      return;
+    }
+
+    const analyzeTimeoutMs = Number(
+      process.env.NEXT_PUBLIC_CHAT_ANALYZE_TIMEOUT_MS || 120000
+    );
+
+    try {
+      const response = await this.request<SendMessageResponse>(
+        `/api/chat/session/${this.sessionId}/analyze-vacancy`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            vacancyText: trimmedText,
+            displayLabel: trimmedLabel,
+          }),
+        },
+        analyzeTimeoutMs
+      );
+
+      if (response.metadata) {
+        this.sessionMetadata = response.metadata;
+      }
+
+      if (response.userMessage) {
+        this.onMessage?.(response.userMessage);
+      }
+
+      if (response.assistantMessage) {
+        this.emitAssistantAudio(response.assistantAudio, response.assistantMessage);
+        this.onMessage?.(response.assistantMessage);
+      }
+
+      this.lastMessageCount = response.messages.length;
+    } catch (error) {
+      this.onError?.({
+        message: error instanceof Error ? error.message : 'Не удалось разобрать вакансию',
       });
     }
   }
@@ -586,6 +648,7 @@ export function createChatApi(
     sessionId?: string;
     createNew?: boolean;
     product?: ProductType;
+    intent?: 'vacancy_analyze';
     onConnected?: () => void;
     onDisconnected?: () => void;
     onSessionJoined?: (payload: { sessionId: string; metadata?: SessionMetadata }) => void;
@@ -626,9 +689,12 @@ export function createChatApi(
         sessionId: config.sessionId,
         createNew: config.createNew,
         product: config.product,
+        intent: config.intent,
       }),
     disconnect: () => client.disconnect(),
     sendMessage: (content: string) => client.sendMessage(content),
+    analyzeVacancy: (vacancyText: string, displayLabel: string) =>
+      client.analyzeVacancy(vacancyText, displayLabel),
     mergeCollectedData: (data: Record<string, unknown>) => client.mergeCollectedData(data),
     executeCommand: (commandId: string, action: string) => client.executeCommand(commandId, action),
     generateResume: () => client.generateResume(),

@@ -107,7 +107,7 @@ export const userAPI = {
     return response.data;
   },
 
-  getOAuthStartUrl: (provider: 'google' | 'yandex') => {
+  getOAuthStartUrl: (provider: 'yandex') => {
     return `${API_URL}/api/users/oauth/${provider}/start`;
   },
 
