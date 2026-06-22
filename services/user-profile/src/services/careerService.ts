@@ -47,6 +47,20 @@ function detectLanguage(text: string): 'ru' | 'en' | 'unknown' {
   return 'unknown';
 }
 
+function fixFilenameEncoding(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return name;
+  if (/[а-яё]/i.test(trimmed)) return trimmed;
+  if (!/[\u0080-\u00FF]/.test(trimmed)) return trimmed;
+  try {
+    const decoded = Buffer.from(trimmed, 'latin1').toString('utf8');
+    if (/[а-яё]/i.test(decoded)) return decoded;
+  } catch {
+    /* keep original */
+  }
+  return trimmed;
+}
+
 function buildResumeContentList(params: {
   userId: string;
   docId: string;
@@ -95,7 +109,7 @@ function buildResumeContentList(params: {
     docId: params.docId,
     userId: params.userId,
     sourceType: 'resume',
-    sourceName: params.sourceName || 'resume',
+    sourceName: fixFilenameEncoding(params.sourceName || 'resume'),
     version: 1,
     chunks,
   };

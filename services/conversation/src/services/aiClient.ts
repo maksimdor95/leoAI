@@ -480,6 +480,7 @@ export async function generateInterviewModeResponse(params: {
   collectedData?: Record<string, unknown>;
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
   grading?: InterviewAnswerGrade;
+  responsePhase?: 'default' | 'mock_active' | 'mock_micro_rescue' | 'mock_debrief' | 'rescue';
   authToken?: string;
 }): Promise<string> {
   try {
@@ -493,6 +494,7 @@ export async function generateInterviewModeResponse(params: {
         collectedData: params.collectedData ?? {},
         conversationHistory: params.conversationHistory ?? [],
         grading: params.grading,
+        responsePhase: params.responsePhase ?? 'default',
       },
       {
         timeout: 25000,

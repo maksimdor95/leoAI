@@ -2,6 +2,9 @@ import {
   detectInterviewModeCommandFromUserText,
   evaluateCondition,
   getScenarioIdByProduct,
+  hasDesiredRoleInCollected,
+  isResumePathMode,
+  pickResumeClarifyStepId,
   resolveNextStep,
   tagUserMessageWithInterviewMode,
   wantsDetailedProfileAnalysis,
@@ -175,6 +178,29 @@ describe('dialogueEngine', () => {
 
     it('does not treat meta clarify prompts as detailed analysis', () => {
       expect(wantsDetailedProfileAnalysis('Можно уточнить детали')).toBe(false);
+    });
+  });
+
+  describe('resume path helpers', () => {
+    it('detects resume path scenario mode', () => {
+      expect(isResumePathMode({ scenarioMode: 'готовое резюме' })).toBe(true);
+      expect(isResumePathMode({ scenarioMode: 'быстрый подбор' })).toBe(false);
+    });
+
+    it('routes greeting to resume_upload for resume mode', () => {
+      const next: ScenarioNextValue = {
+        default: 'career_overview',
+        when: [{ condition: "scenarioMode === 'готовое резюме'", to: 'resume_upload' }],
+      };
+      expect(resolveNextStep(next, { scenarioMode: 'готовое резюме' })).toBe('resume_upload');
+    });
+
+    it('picks clarify step when role or location missing', () => {
+      expect(pickResumeClarifyStepId({ desired_role: 'PM', totalExperience: 5 })).toBe(
+        'quick_location'
+      );
+      expect(pickResumeClarifyStepId({ careerSummary: '5 лет в продукте' })).toBe('quick_role');
+      expect(hasDesiredRoleInCollected({ desired_role: 'Analyst' })).toBe(true);
     });
   });
 

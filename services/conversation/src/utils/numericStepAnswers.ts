@@ -122,10 +122,32 @@ export function parsePositionsCountAnswer(raw: string): number | null {
 /**
  * Значение для записи в collectedData: числовые шаги — число, иначе trim строки.
  */
+export function normalizeScenarioMode(raw: string): string {
+  const t = raw.toLowerCase().trim().replace(/ё/g, 'е');
+  if (!t) return raw.trim();
+  if (t.includes('быстр') || t === 'quick' || t === '1') return 'быстрый подбор';
+  if (t.includes('детал') || t.includes('развернут') || t.includes('полный')) {
+    return 'детализированный анализ';
+  }
+  if (
+    t.includes('резюме') ||
+    t.includes('готовое') ||
+    t.includes('pdf') ||
+    t.includes('docx') ||
+    t.includes('загруз')
+  ) {
+    return 'готовое резюме';
+  }
+  return raw.trim();
+}
+
 export function resolveCollectValueForStep(
   collectKey: string | undefined,
   raw: string
 ): string | number {
+  if (collectKey === 'scenarioMode') {
+    return normalizeScenarioMode(raw);
+  }
   if (collectKey === 'positionsCount') {
     const n = parsePositionsCountAnswer(raw);
     if (n !== null) return n;

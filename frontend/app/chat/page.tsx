@@ -1236,6 +1236,12 @@ function ChatPageContent() {
 
       try {
         const { extractedText, contentList } = await uploadResumeFile(file);
+        if (!extractedText || extractedText.trim().length < 40) {
+          throw new Error(
+            'Не удалось прочитать файл. Попробуйте другой PDF/DOCX или выберите «Быстрый подбор».'
+          );
+        }
+
         const scenarioId =
           chatRef.current.metadata?.scenarioId ||
           (currentProduct === 'interview-prep'
@@ -1244,10 +1250,27 @@ function ChatPageContent() {
               ? 'wannanew-pm-v1'
               : 'jack-profile-v2');
         const { fields } = await extractProfileFromResumeText(extractedText, scenarioId);
+        const hasSignal =
+          fields.desired_role ||
+          fields.desiredRole ||
+          fields.careerSummary ||
+          fields.skills_hard ||
+          fields.skills ||
+          fields.position_1_role;
+        if (!hasSignal) {
+          messageApi.destroy('resume-import');
+          messageApi.warning(
+            'Не удалось извлечь данные из резюме. Попробуйте другой файл или «Быстрый подбор».'
+          );
+          await chatRef.current.sendMessage('Быстрый подбор');
+          return;
+        }
+
         const imported = contentList
           ? { ...fields, __resumeContentList: contentList }
           : fields;
         await chatRef.current.mergeCollectedData(imported);
+        syncSessionMetadata();
         messageApi.destroy('resume-import');
         messageApi.success('Данные из резюме добавлены в профиль диалога');
       } catch (err) {
@@ -1257,7 +1280,67 @@ function ChatPageContent() {
         setResumeImportLoading(false);
       }
     },
-    [currentProduct, messageApi]
+    [currentProduct, messageApi, syncSessionMetadata]
+  );
+
+  const handleResumeTextImport = useCallback(
+    async (resumeText: string) => {
+      if (!chatRef.current) {
+        return;
+      }
+
+      const trimmed = resumeText.trim();
+      if (trimmed.length < 40) {
+        return false;
+      }
+
+      setResumeImportLoading(true);
+      messageApi.open({
+        type: 'loading',
+        content: 'Разбор текста резюме…',
+        key: 'resume-import',
+        duration: 0,
+      });
+
+      try {
+        const scenarioId =
+          chatRef.current.metadata?.scenarioId ||
+          (currentProduct === 'interview-prep'
+            ? 'interview-prep-v1'
+            : currentProduct === 'wannanew'
+              ? 'wannanew-pm-v1'
+              : 'jack-profile-v2');
+        const { fields } = await extractProfileFromResumeText(trimmed, scenarioId);
+        const hasSignal =
+          fields.desired_role ||
+          fields.desiredRole ||
+          fields.careerSummary ||
+          fields.skills_hard ||
+          fields.skills ||
+          fields.position_1_role;
+        if (!hasSignal) {
+          messageApi.destroy('resume-import');
+          messageApi.warning(
+            'Не удалось извлечь данные из текста. Попробуйте загрузить файл или «Быстрый подбор».'
+          );
+          await chatRef.current.sendMessage('Быстрый подбор');
+          return true;
+        }
+
+        await chatRef.current.mergeCollectedData(fields);
+        syncSessionMetadata();
+        messageApi.destroy('resume-import');
+        messageApi.success('Данные из резюме добавлены в профиль диалога');
+        return true;
+      } catch (err) {
+        messageApi.destroy('resume-import');
+        messageApi.error(err instanceof Error ? err.message : 'Не удалось обработать текст');
+        return true;
+      } finally {
+        setResumeImportLoading(false);
+      }
+    },
+    [currentProduct, messageApi, syncSessionMetadata]
   );
 
   const runReportDownload = useCallback(async () => {
@@ -1409,6 +1492,18 @@ function ChatPageContent() {
       isListeningRef.current = false;
     }
 
+    if (
+      currentProduct === 'jack' &&
+      sessionCurrentStepId === 'resume_upload' &&
+      messageText.trim().length >= 40
+    ) {
+      form.resetFields();
+      setInputText('');
+      finalTranscriptRef.current = '';
+      void handleResumeTextImport(messageText);
+      return;
+    }
+
     chatRef.current.sendMessage(messageText);
     form.resetFields();
     setInputText('');
@@ -1468,8 +1563,13 @@ function ChatPageContent() {
       return;
     }
 
-    if (command.action === 'open_vacancies') {
-      await fetchMatchedJobs({ revealPanel: true });
+    if (command.action === 'open_vacancies' || command.action === 'show_recommendations') {
+      await fetchMatchedJobs({ revealPanel: true, triggerWeakMatchGate: true });
+      return;
+    }
+
+    if (command.action === 'resume_start_quick') {
+      await chatRef.current.executeCommand(command.id, command.action);
       return;
     }
 
@@ -1646,9 +1746,12 @@ function ChatPageContent() {
     };
   }, [connected, sessionId, currentProduct, latestInfoCard?.title, latestInfoCard?.id]);
 
-  /** Блок загрузки резюме под вопросом (шаг «резюме / опыт»), не в строке ввода */
+  /** Блок загрузки резюме — только на шаге resume_upload, не на greeting */
   const showResumeUploadInQuestion = useMemo(() => {
     if (!connected) return false;
+    if (currentProduct === 'jack') {
+      return sessionCurrentStepId === 'resume_upload';
+    }
     const q = latestQuestion;
     if (!q) return false;
     const t = `${q.question} ${q.placeholder || ''}`.toLowerCase();
@@ -1656,7 +1759,7 @@ function ChatPageContent() {
       return /резюме|pdf|docx/.test(t);
     }
     return /резюме|pdf|docx|cv\b/.test(t);
-  }, [connected, latestQuestion, currentProduct]);
+  }, [connected, latestQuestion, currentProduct, sessionCurrentStepId]);
 
   /** Чипы выбора сценария под первым вопросом (jack — подбор; interview-prep — собеседование). */
   const scenarioQuickReplies = useMemo(() => {
@@ -1667,9 +1770,14 @@ function ChatPageContent() {
     const text = `${q.question} ${q.placeholder || ''}`.toLowerCase();
 
     if (currentProduct === 'jack') {
+      if (sessionCurrentStepId && sessionCurrentStepId !== 'greeting') {
+        return undefined;
+      }
       const looksLikeScenarioChooser =
-        (ph.includes('быстрый подбор') && ph.includes('детализированный анализ')) ||
-        (text.includes('быстр') && text.includes('детал') && text.includes('сценар'));
+        (ph.includes('быстрый подбор') && ph.includes('детализированный')) ||
+        (text.includes('быстр') && text.includes('детал') && text.includes('сценар')) ||
+        text.includes('готовое резюме') ||
+        text.includes('проанализировать');
       if (!looksLikeScenarioChooser) return undefined;
       return [
         { label: 'Быстрый подбор', value: 'Быстрый подбор', hint: '3 вопроса · 1–2 минуты' },
@@ -1677,6 +1785,11 @@ function ChatPageContent() {
           label: 'Детальный анализ',
           value: 'Детализированный анализ',
           hint: 'Полный профиль · 5–7 минут',
+        },
+        {
+          label: 'Проанализировать готовое резюме',
+          value: 'Проанализировать готовое резюме',
+          hint: 'Мгновенный подбор',
         },
       ];
     }
@@ -1701,7 +1814,7 @@ function ChatPageContent() {
     }
 
     return undefined;
-  }, [connected, currentProduct, latestQuestion]);
+  }, [connected, currentProduct, latestQuestion, sessionCurrentStepId]);
 
   const latestUserMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -1899,7 +2012,11 @@ function ChatPageContent() {
     }
   }, [handleCloseProfileEdit, messageApi, profileEditForm, profileEditableRows]);
 
-  const fetchMatchedJobs = useCallback(async (options?: { revealPanel?: boolean; silent?: boolean }) => {
+  const fetchMatchedJobs = useCallback(async (options?: {
+    revealPanel?: boolean;
+    silent?: boolean;
+    triggerWeakMatchGate?: boolean;
+  }) => {
     const token = getToken();
     if (!token) {
       if (!options?.silent) {
@@ -2023,6 +2140,22 @@ function ChatPageContent() {
 
       previousJobIdsRef.current = incomingIds;
 
+      if (options?.triggerWeakMatchGate) {
+        const stepId =
+          typeof chatRef.current?.metadata?.currentStepId === 'string'
+            ? chatRef.current.metadata.currentStepId
+            : sessionCurrentStepId;
+        const weakMatch =
+          stepId === 'resume_ready' &&
+          jobs.length === 0 &&
+          (weakJobs.length === 0 ? jobsInDb > 0 : true);
+        if (weakMatch && chatRef.current) {
+          messageApi.info('Подбор пока слабый — уточним пару деталей в чате.');
+          await chatRef.current.executeCommand('resume_weak_clarify', 'resume_weak_match');
+          syncSessionMetadata();
+        }
+      }
+
       if (!options?.silent) {
         if (jobs.length > 0 || weakJobs.length > 0) {
           if (jobs.length > 0 && weakJobs.length > 0) {
@@ -2059,7 +2192,7 @@ function ChatPageContent() {
         setIsJobsLoading(false);
       }
     }
-  }, [getJobMatchingBaseUrl, getUserIdFromToken, messageApi]);
+  }, [getJobMatchingBaseUrl, getUserIdFromToken, messageApi, sessionCurrentStepId, syncSessionMetadata]);
 
   /**
    * Кнопка reload теперь делает «умное обновление»:

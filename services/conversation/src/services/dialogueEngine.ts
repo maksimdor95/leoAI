@@ -44,6 +44,16 @@ import {
   resolveCollectValueForStep,
 } from '../utils/numericStepAnswers';
 import {
+  buildMockBriefingMessage,
+  getRescueAttemptLimit,
+  getRescueCountKey,
+  isMockReadySignal,
+  isModeStartCommand,
+  MockPhase,
+  shouldTriggerFullRescue,
+  shouldTriggerMicroRescue,
+} from '../utils/interviewPrepProtocol';
+import {
   normalizeVacancyPrepInput,
   stripHtmlFromText,
 } from '../utils/vacancyPrepText';
@@ -134,6 +144,9 @@ function shouldSkipStepOnResumeImport(
   if (step.id === 'clarify' || step.id === 'completion_gap') {
     return true;
   }
+  if (isResumePathMode(collected) && step.id === 'resume_upload') {
+    return true;
+  }
   if (step.id === 'pause_reminder') {
     const r = collected.readyToStart;
     const s = typeof r === 'string' ? r.toLowerCase().trim() : '';
@@ -142,6 +155,48 @@ function shouldSkipStepOnResumeImport(
     return !paused;
   }
   return false;
+}
+
+/** Путь «готовое резюме» в Jack-сценарии. */
+export function isResumePathMode(collected: Record<string, unknown>): boolean {
+  const mode = String(collected.scenarioMode || '')
+    .toLowerCase()
+    .trim();
+  return mode === 'готовое резюме' || (mode.includes('резюме') && !mode.includes('детал'));
+}
+
+export function hasDesiredRoleInCollected(collected: Record<string, unknown>): boolean {
+  const role = collected.desired_role ?? collected.desiredRole;
+  return typeof role === 'string' && role.trim().length > 0;
+}
+
+export function hasResumeExtractedSignal(collected: Record<string, unknown>): boolean {
+  if (hasDesiredRoleInCollected(collected)) return true;
+  if (typeof collected.careerSummary === 'string' && collected.careerSummary.trim().length > 20) {
+    return true;
+  }
+  for (let i = 1; i <= 3; i += 1) {
+    const role = collected[`position_${i}_role`];
+    if (typeof role === 'string' && role.trim()) return true;
+  }
+  const skills = collected.skills_hard ?? collected.skills;
+  if (typeof skills === 'string' && skills.trim().length > 2) return true;
+  if (Array.isArray(skills) && skills.length > 0) return true;
+  return false;
+}
+
+/** Первый шаг уточнения при слабом матче на resume-path. */
+export function pickResumeClarifyStepId(collected: Record<string, unknown>): string | null {
+  if (!hasDesiredRoleInCollected(collected)) return 'quick_role';
+  const exp = collected.totalExperience;
+  const hasExp =
+    (typeof exp === 'number' && exp > 0) ||
+    (typeof exp === 'string' && exp.trim() !== '') ||
+    (typeof collected.careerSummary === 'string' && collected.careerSummary.trim().length > 10);
+  if (!hasExp) return 'quick_experience';
+  const loc = collected.desired_location ?? collected.desiredLocation;
+  if (typeof loc !== 'string' || !loc.trim()) return 'quick_location';
+  return null;
 }
 
 function recomputeCompletedQuestionSteps(
@@ -213,6 +268,47 @@ export async function applyImportedCollectedData(
   session.metadata.completedSteps = Array.from(
     new Set([...(session.metadata.completedSteps || []), ...fromData])
   );
+
+  if (isResumePathMode(session.metadata.collectedData)) {
+    const effectiveScenarioId = scenarioId || DEFAULT_SCENARIO_ID;
+    const enriched = enrichQuickPathCollectedData(
+      session.metadata.collectedData as Record<string, unknown>
+    );
+    session.metadata.collectedData = enriched;
+    const completed = Array.from(
+      new Set([...(session.metadata.completedSteps || []), 'resume_upload'])
+    );
+    session.metadata.completedSteps = completed;
+
+    if (!hasResumeExtractedSignal(enriched)) {
+      session.metadata.collectedData = {
+        ...enriched,
+        scenarioMode: 'быстрый подбор',
+      };
+      logger.info('Resume import: insufficient extracted data, falling back to quick_role');
+      return prepareAssistantMessageForStepId(session, effectiveScenarioId, 'quick_role', {
+        ...scenarioUpdates,
+        collectedData: session.metadata.collectedData,
+        completedSteps: completed,
+      });
+    }
+
+    if (!hasDesiredRoleInCollected(enriched)) {
+      logger.info('Resume import: no desired_role in resume, asking via quick_role');
+      return prepareAssistantMessageForStepId(session, effectiveScenarioId, 'quick_role', {
+        ...scenarioUpdates,
+        collectedData: enriched,
+        completedSteps: completed,
+      });
+    }
+
+    logger.info('Resume import: profile ready, advancing to resume_ready');
+    return prepareAssistantMessageForStepId(session, effectiveScenarioId, 'resume_ready', {
+      ...scenarioUpdates,
+      collectedData: enriched,
+      completedSteps: completed,
+    });
+  }
 
   const nextStepId = findFirstIncompleteStepIdAfterImport(
     scenario,
@@ -784,6 +880,57 @@ function buildInfoCardMessage(
     return msg;
   }
 
+  if (step.id === 'resume_ready') {
+    const collectedData = session.metadata.collectedData;
+    const cards: Array<{ title: string; content: string; icon?: string }> = [];
+    if (collectedData.desired_role) {
+      cards.push({
+        icon: '💼',
+        title: 'Роль',
+        content: String(collectedData.desired_role),
+      });
+    }
+    if (collectedData.careerSummary) {
+      cards.push({
+        icon: '📋',
+        title: 'Опыт',
+        content: String(collectedData.careerSummary),
+      });
+    }
+    if (collectedData.skills_hard || collectedData.skills) {
+      cards.push({
+        icon: '🛠',
+        title: 'Навыки',
+        content: String(collectedData.skills_hard || collectedData.skills),
+      });
+    }
+    if (collectedData.desired_location) {
+      cards.push({
+        icon: '📍',
+        title: 'Локация и условия',
+        content: String(collectedData.desired_location),
+      });
+    }
+
+    const msg: InfoCardMessage = {
+      id: uuidv4(),
+      type: MessageType.INFO_CARD,
+      role: MessageRole.ASSISTANT,
+      timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      title: step.title,
+      description: step.description,
+      cards:
+        cards.length > 0
+          ? cards
+          : [{ title: 'Профиль', content: 'Данные из резюме пока не сохранены' }],
+    };
+    if (step.commands && step.commands.length > 0) {
+      msg.commands = step.commands;
+    }
+    return msg;
+  }
+
   const msg: InfoCardMessage = {
     id: uuidv4(),
     type: MessageType.INFO_CARD,
@@ -906,6 +1053,32 @@ function buildQuickReadyDetailedAnalysisTransition(
     scenarioMode: 'детализированный анализ',
   };
   return metadataUpdates;
+}
+
+async function handleResumeReadyReply(
+  session: ConversationSession,
+  scenarioId: string,
+  userMessageContent: string,
+  scenarioUpdates: PreparedStepResult['metadataUpdates']
+): Promise<PreparedStepResult> {
+  if (wantsDetailedProfileAnalysis(userMessageContent)) {
+    const metadataUpdates = buildQuickReadyDetailedAnalysisTransition(session, scenarioUpdates);
+    return prepareAssistantMessageForStepId(session, scenarioId, 'career_overview', metadataUpdates);
+  }
+
+  return {
+    message: {
+      id: uuidv4(),
+      type: MessageType.TEXT,
+      role: MessageRole.ASSISTANT,
+      timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      content:
+        'Нажмите «Показать рекомендации», чтобы открыть подбор вакансий. Чтобы поправить данные — вкладка «Профиль».',
+    },
+    metadataUpdates: scenarioUpdates,
+    nextStepId: null,
+  };
 }
 
 async function handleQuickReadyReply(
@@ -1287,33 +1460,69 @@ async function buildInterviewModeMessage(
   authToken?: string
 ): Promise<{ message: Message; metadataUpdates: PreparedStepResult['metadataUpdates'] }> {
   const collectedData = session.metadata.collectedData;
+  const vacancyProfile = collectedData.vacancyProfile as VacancyProfile | undefined;
+  const prepPlan = (collectedData.prepPlan as InterviewPrepPlanDay[] | undefined) ?? [];
   const previousMode = collectedData.activeMode as InterviewPrepMode | undefined;
+  const conversationHistory = getInterviewConversationHistory(session, mode);
+
+  const baseMetadata: PreparedStepResult['metadataUpdates'] = {
+    collectedData: { activeMode: mode },
+    currentStepId: 'mode_select',
+  };
+
+  if (mode === 'mock') {
+    return buildMockModeMessage(
+      session,
+      userMessageContent,
+      collectedData,
+      vacancyProfile,
+      prepPlan,
+      previousMode,
+      conversationHistory,
+      authToken
+    );
+  }
+
   const shouldGrade =
     previousMode === mode &&
-    (mode === 'case' || mode === 'mock' || mode === 'star') &&
-    userMessageContent.trim().length > 20;
+    (mode === 'case' || mode === 'star') &&
+    userMessageContent.trim().length > 20 &&
+    !isModeStartCommand(userMessageContent);
 
   const grading = shouldGrade
     ? await gradeInterviewAnswer({
         mode,
         answer: userMessageContent,
-        vacancyProfile: collectedData.vacancyProfile as VacancyProfile | undefined,
+        vacancyProfile,
         collectedData,
         authToken,
       })
     : null;
+
   if (shouldGrade && mode === 'case') {
     logger.info(`event=case_answer_submitted sessionId=${session.id}`);
   }
 
+  const rescueKey = getRescueCountKey(mode);
+  const rescueCount = Number(collectedData[rescueKey] ?? 0);
+  const rescueLimit = getRescueAttemptLimit(vacancyProfile?.level);
+  const useRescue =
+    shouldGrade &&
+    grading != null &&
+    shouldTriggerFullRescue(grading, userMessageContent, mode) &&
+    rescueCount < rescueLimit;
+
+  const responsePhase = useRescue ? 'rescue' : 'default';
+
   const response = await generateInterviewModeResponse({
     mode,
     userMessage: userMessageContent,
-    vacancyProfile: collectedData.vacancyProfile as VacancyProfile | undefined,
-    prepPlan: (collectedData.prepPlan as InterviewPrepPlanDay[] | undefined) ?? [],
+    vacancyProfile,
+    prepPlan,
     collectedData,
-    conversationHistory: getInterviewConversationHistory(session, mode),
+    conversationHistory,
     grading: grading ?? undefined,
+    responsePhase,
     authToken,
   });
 
@@ -1321,7 +1530,9 @@ async function buildInterviewModeMessage(
   const modeHistory = Array.isArray(collectedData[modeHistoryKey])
     ? (collectedData[modeHistoryKey] as unknown[])
     : [];
+
   const metadataUpdates: PreparedStepResult['metadataUpdates'] = {
+    ...baseMetadata,
     collectedData: {
       activeMode: mode,
       lastInterviewGrade: grading ?? undefined,
@@ -1332,54 +1543,185 @@ async function buildInterviewModeMessage(
           at: new Date().toISOString(),
           userMessage: userMessageContent,
           grading: grading ?? undefined,
+          responsePhase,
         },
       ],
+      ...(useRescue
+        ? {
+            [rescueKey]: rescueCount + 1,
+            lastRescueAt: new Date().toISOString(),
+            rescueTriggered: true,
+          }
+        : {}),
     },
-    currentStepId: 'mode_select',
   };
-
-  if (mode === 'mock' && previousMode === mode && userMessageContent.trim().length > 20) {
-    const mockAnswers = Array.isArray(collectedData.mockAnswers)
-      ? (collectedData.mockAnswers as unknown[])
-      : [];
-    const nextMockAnswers = [
-      ...mockAnswers,
-      { answer: userMessageContent, grading: grading ?? undefined, at: new Date().toISOString() },
-    ];
-    metadataUpdates.collectedData = {
-      ...metadataUpdates.collectedData,
-      mockAnswers: nextMockAnswers,
-      mockInterview: {
-        currentQuestionIndex: nextMockAnswers.length + 1,
-        answers: nextMockAnswers,
-      },
-    };
-
-    if (nextMockAnswers.length >= 3) {
-      const summary = await generateMockInterviewSummary({
-        vacancyProfile: collectedData.vacancyProfile as VacancyProfile | undefined,
-        answers: nextMockAnswers,
-        authToken,
-      });
-      logger.info(`event=mock_interview_completed sessionId=${session.id}`);
-      metadataUpdates.collectedData = {
-        ...metadataUpdates.collectedData,
-        mockSummary: summary,
-      };
-      return {
-        message: buildInterviewTextMessage(
-          session,
-          `${response}\n\n## Итог мок-интервью\n\n${summary}\n\nМожем перейти к кейсам, теории или STAR-историям.`,
-          mode
-        ),
-        metadataUpdates,
-      };
-    }
-  }
 
   if (mode === 'diagnostics') {
     return {
       message: buildInterviewQuestionMessage(session, response.trim(), undefined, mode),
+      metadataUpdates,
+    };
+  }
+
+  return {
+    message: buildInterviewTextMessage(session, response, mode),
+    metadataUpdates,
+  };
+}
+
+async function buildMockModeMessage(
+  session: ConversationSession,
+  userMessageContent: string,
+  collectedData: Record<string, unknown>,
+  vacancyProfile: VacancyProfile | undefined,
+  prepPlan: InterviewPrepPlanDay[],
+  previousMode: InterviewPrepMode | undefined,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+  authToken?: string
+): Promise<{ message: Message; metadataUpdates: PreparedStepResult['metadataUpdates'] }> {
+  const mode: InterviewPrepMode = 'mock';
+  let mockPhase = collectedData.mockPhase as MockPhase | undefined;
+  const mockAnswers = Array.isArray(collectedData.mockAnswers)
+    ? (collectedData.mockAnswers as unknown[])
+    : [];
+  const startingMock =
+    previousMode !== 'mock' || isModeStartCommand(userMessageContent) || mockPhase === 'complete';
+
+  if ((startingMock || mockPhase === 'briefing') && !isMockReadySignal(userMessageContent)) {
+    logger.info(`event=mock_briefing_started sessionId=${session.id}`);
+    return {
+      message: buildInterviewTextMessage(
+        session,
+        buildMockBriefingMessage(vacancyProfile?.role),
+        mode
+      ),
+      metadataUpdates: {
+        collectedData: {
+          activeMode: mode,
+          mockPhase: 'briefing',
+          mockAnswers: [],
+          mockInterview: { currentQuestionIndex: 0, answers: [] },
+        },
+        currentStepId: 'mode_select',
+      },
+    };
+  }
+
+  if (
+    isMockReadySignal(userMessageContent) &&
+    mockPhase !== 'active' &&
+    mockPhase !== 'complete'
+  ) {
+    mockPhase = 'active';
+    const response = await generateInterviewModeResponse({
+      mode,
+      userMessage: 'Задай первый вопрос мок-интервью. Один вопрос, без вступления.',
+      vacancyProfile,
+      prepPlan,
+      collectedData: { ...collectedData, mockPhase: 'active' },
+      conversationHistory,
+      responsePhase: 'mock_active',
+      authToken,
+    });
+    logger.info(`event=mock_active_started sessionId=${session.id}`);
+    return {
+      message: buildInterviewQuestionMessage(session, response.trim(), undefined, mode),
+      metadataUpdates: {
+        collectedData: {
+          activeMode: mode,
+          mockPhase: 'active',
+          mockAnswers: [],
+          mockInterview: { currentQuestionIndex: 1, answers: [] },
+        },
+        currentStepId: 'mode_select',
+      },
+    };
+  }
+
+  const shouldGrade =
+    mockPhase === 'active' &&
+    userMessageContent.trim().length > 20 &&
+    !isModeStartCommand(userMessageContent);
+
+  const grading = shouldGrade
+    ? await gradeInterviewAnswer({
+        mode,
+        answer: userMessageContent,
+        vacancyProfile,
+        collectedData,
+        authToken,
+      })
+    : null;
+
+  const responsePhase = shouldTriggerMicroRescue(grading, mode, mockPhase)
+    ? 'mock_micro_rescue'
+    : 'mock_active';
+
+  const response = await generateInterviewModeResponse({
+    mode,
+    userMessage: userMessageContent,
+    vacancyProfile,
+    prepPlan,
+    collectedData,
+    conversationHistory,
+    grading: grading ?? undefined,
+    responsePhase: shouldGrade ? responsePhase : 'mock_active',
+    authToken,
+  });
+
+  const metadataUpdates: PreparedStepResult['metadataUpdates'] = {
+    collectedData: {
+      activeMode: mode,
+      mockPhase: mockPhase ?? 'active',
+      lastInterviewGrade: grading ?? undefined,
+    },
+    currentStepId: 'mode_select',
+  };
+
+  if (!shouldGrade) {
+    return {
+      message: buildInterviewTextMessage(session, response, mode),
+      metadataUpdates,
+    };
+  }
+
+  const nextMockAnswers = [
+    ...mockAnswers,
+    { answer: userMessageContent, grading: grading ?? undefined, at: new Date().toISOString() },
+  ];
+  metadataUpdates.collectedData = {
+    ...metadataUpdates.collectedData,
+    mockAnswers: nextMockAnswers,
+    mockInterview: {
+      currentQuestionIndex: nextMockAnswers.length + 1,
+      answers: nextMockAnswers,
+    },
+  };
+
+  if (nextMockAnswers.length >= 3) {
+    const summary = await generateMockInterviewSummary({
+      vacancyProfile,
+      answers: nextMockAnswers,
+      authToken,
+    });
+    const debrief = await generateInterviewModeResponse({
+      mode,
+      userMessage: `Итог мок-интервью для debrief:\n${summary}`,
+      vacancyProfile,
+      prepPlan,
+      collectedData: metadataUpdates.collectedData,
+      conversationHistory,
+      responsePhase: 'mock_debrief',
+      authToken,
+    });
+    logger.info(`event=mock_interview_completed sessionId=${session.id}`);
+    metadataUpdates.collectedData = {
+      ...metadataUpdates.collectedData,
+      mockPhase: 'complete',
+      mockSummary: summary,
+    };
+    return {
+      message: buildInterviewTextMessage(session, debrief, mode),
       metadataUpdates,
     };
   }
@@ -1806,6 +2148,8 @@ export async function handleUserReply(
         scenarioUpdates,
         authToken
       );
+    } else if (currentStep.id === 'resume_ready') {
+      return handleResumeReadyReply(session, scenarioId, userMessageContent, scenarioUpdates);
     } else {
       // For other info_card steps, automatically advance (existing behavior)
       const nextStepId = resolveNextStep(currentStep.next, session.metadata.collectedData);
@@ -2110,12 +2454,14 @@ export async function handleUserReply(
 
   // Check context for non-clarify, non-completion-gap, non-pause, and non-choice steps.
   // 'greeting' is a scenario chooser (быстрый/детальный) — не прогоняем через context-redirect.
+  // 'resume_upload' — ждём файл или длинную вставку текста резюме.
   if (
     currentStep.type === 'question' &&
     currentStep.id !== 'clarify' &&
     currentStep.id !== 'completion_gap' &&
     currentStep.id !== 'pause_reminder' &&
-    currentStep.id !== 'greeting'
+    currentStep.id !== 'greeting' &&
+    currentStep.id !== 'resume_upload'
   ) {
     // Check if user is staying on topic
     const contextCheck = await checkContext({
@@ -2258,6 +2604,25 @@ export async function handleUserReply(
     ...scenarioUpdates,
   };
 
+  if (currentStep.type === 'question' && currentStep.id === 'resume_upload') {
+    const trimmed = userMessageContent.trim();
+    if (trimmed.length < 40) {
+      return {
+        message: {
+          id: uuidv4(),
+          type: MessageType.TEXT,
+          role: MessageRole.ASSISTANT,
+          timestamp: new Date().toISOString(),
+          sessionId: session.id,
+          content:
+            'Загрузите PDF или DOCX через зону ниже или вставьте полный текст резюме. Если удобнее — выберите «Быстрый подбор».',
+        },
+        metadataUpdates: scenarioUpdates,
+        nextStepId: 'resume_upload',
+      };
+    }
+  }
+
   if (currentStep.type === 'question') {
     if (currentStep.collectKey) {
       const trimmedValue = userMessageContent.trim();
@@ -2358,6 +2723,18 @@ export async function handleUserReply(
       ...enriched,
     };
     logger.info('Enriched Quick Path collectedData before quick_ready screen');
+  }
+
+  if (nextStepId === 'resume_ready') {
+    const enriched = enrichQuickPathCollectedData(
+      session.metadata.collectedData as Record<string, unknown>
+    );
+    session.metadata.collectedData = enriched;
+    metadataUpdates.collectedData = {
+      ...(metadataUpdates.collectedData || {}),
+      ...enriched,
+    };
+    logger.info('Enriched resume-path collectedData before resume_ready screen');
   }
 
   metadataUpdates.currentStepId = nextStepId ?? undefined;
@@ -2849,8 +3226,9 @@ export async function handleCommand(
       };
     }
 
-    case 'open_vacancies': {
-      // UI-only: frontend opens the vacancies tab; keep session on quick_ready.
+    case 'open_vacancies':
+    case 'show_recommendations': {
+      // UI-only: frontend opens the vacancies tab; keep session on ready screen.
       return {
         message: null,
         metadataUpdates: scenarioUpdates,
@@ -2858,9 +3236,36 @@ export async function handleCommand(
       };
     }
 
+    case 'resume_start_quick': {
+      const effectiveScenarioId = scenarioId || DEFAULT_SCENARIO_ID;
+      session.metadata.collectedData = {
+        ...session.metadata.collectedData,
+        scenarioMode: 'быстрый подбор',
+      };
+      return prepareAssistantMessageForStepId(session, effectiveScenarioId, 'quick_role', {
+        ...scenarioUpdates,
+        collectedData: session.metadata.collectedData,
+      });
+    }
+
+    case 'resume_weak_match': {
+      const effectiveScenarioId = scenarioId || DEFAULT_SCENARIO_ID;
+      const clarifyStepId = pickResumeClarifyStepId(session.metadata.collectedData);
+      if (clarifyStepId) {
+        logger.info(`Resume weak match: clarifying via step ${clarifyStepId}`);
+        return prepareAssistantMessageForStepId(
+          session,
+          effectiveScenarioId,
+          clarifyStepId,
+          scenarioUpdates
+        );
+      }
+      break;
+    }
+
     case 'start_detailed_analysis': {
-      if (currentStepId === 'quick_ready') {
-        logger.info('User chose detailed analysis command from quick_ready');
+      if (currentStepId === 'quick_ready' || currentStepId === 'resume_ready') {
+        logger.info(`User chose detailed analysis command from ${currentStepId}`);
         const metadataUpdates = buildQuickReadyDetailedAnalysisTransition(session, scenarioUpdates);
         const effectiveScenarioId = scenarioId || DEFAULT_SCENARIO_ID;
         return prepareAssistantMessageForStepId(

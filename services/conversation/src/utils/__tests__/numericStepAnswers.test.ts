@@ -1,4 +1,5 @@
 import {
+  normalizeScenarioMode,
   parseTotalExperienceYearsFromText,
   resolveCollectValueForStep,
 } from '../numericStepAnswers';
@@ -24,5 +25,16 @@ describe('parseTotalExperienceYearsFromText', () => {
 describe('resolveCollectValueForStep totalExperience', () => {
   it('returns number when text contains years', () => {
     expect(resolveCollectValueForStep('totalExperience', 'около 5 лет')).toBe(5);
+  });
+});
+
+describe('normalizeScenarioMode', () => {
+  it('maps resume quick reply to готовое резюме', () => {
+    expect(normalizeScenarioMode('Проанализировать готовое резюме')).toBe('готовое резюме');
+  });
+
+  it('maps quick path labels', () => {
+    expect(normalizeScenarioMode('Быстрый подбор')).toBe('быстрый подбор');
+    expect(normalizeScenarioMode('Детализированный анализ')).toBe('детализированный анализ');
   });
 });

@@ -9,7 +9,24 @@ export type JackFieldDef = {
   section: string;
 };
 
-const OMIT_DISPLAY_KEYS = new Set(['clarifiedAnswer', 'scenarioMode']);
+const OMIT_DISPLAY_KEYS = new Set([
+  'clarifiedAnswer',
+  'scenarioMode',
+  'resumeUploadHint',
+  /** Алиасы и обогащение quick/resume path — уже есть в основных полях */
+  'desiredRole',
+  'total_experience',
+  'location',
+  'skills',
+  'workMode',
+  'work_mode',
+]);
+
+/** Служебные ключи collectedData (RAG, флаги) — не показываем в «Профиль» */
+function shouldOmitProfileKey(key: string): boolean {
+  if (key.startsWith('__')) return true;
+  return OMIT_DISPLAY_KEYS.has(key);
+}
 
 export const JACK_PROFILE_FIELD_ORDER: JackFieldDef[] = [
   { section: 'Старт', key: 'readyToStart', label: 'Готовность начать' },
@@ -135,7 +152,7 @@ export function getJackProfileSidebarRows(collected: Record<string, unknown>): P
   }
 
   for (const key of Object.keys(collected)) {
-    if (used.has(key) || OMIT_DISPLAY_KEYS.has(key)) continue;
+    if (used.has(key) || shouldOmitProfileKey(key)) continue;
     const raw = collected[key];
     rows.push({
       section: 'Другое',

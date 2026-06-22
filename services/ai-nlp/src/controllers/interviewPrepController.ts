@@ -17,6 +17,11 @@ import {
   parseJsonObject,
   PromptVacancyProfile,
 } from '../services/interviewPrepPrompts';
+import {
+  buildPhaseRespondPrompt,
+  buildPhaseSystemMessage,
+  InterviewResponsePhase,
+} from '../services/interviewPrepPhasePrompts';
 import { logger } from '../utils/logger';
 
 const modeSchema = z.enum([
@@ -89,6 +94,9 @@ const respondSchema = z.object({
     .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string() }))
     .optional(),
   grading: interviewGradeSchema.optional(),
+  responsePhase: z
+    .enum(['default', 'mock_active', 'mock_micro_rescue', 'mock_debrief', 'rescue'])
+    .optional(),
 });
 
 const gradeAnswerSchema = z.object({
@@ -325,16 +333,31 @@ export async function generatePrepPlan(req: Request, res: Response) {
 export async function respondToInterviewMode(req: Request, res: Response) {
   try {
     const parsed = respondSchema.parse(req.body);
+    const responsePhase: InterviewResponsePhase = parsed.responsePhase ?? 'default';
+    const usePhasePrompts = responsePhase !== 'default';
+
     const messages = [
-      buildInterviewSystemMessage(parsed.mode, parsed.vacancyProfile),
-      buildRespondPrompt({
-        mode: parsed.mode,
-        userMessage: parsed.userMessage,
-        vacancyProfile: parsed.vacancyProfile,
-        prepPlan: parsed.prepPlan,
-        conversationHistory: parsed.conversationHistory,
-        grading: parsed.grading,
-      }),
+      usePhasePrompts
+        ? buildPhaseSystemMessage(parsed.mode, parsed.vacancyProfile, responsePhase)
+        : buildInterviewSystemMessage(parsed.mode, parsed.vacancyProfile),
+      usePhasePrompts
+        ? buildPhaseRespondPrompt({
+            mode: parsed.mode,
+            userMessage: parsed.userMessage,
+            vacancyProfile: parsed.vacancyProfile,
+            prepPlan: parsed.prepPlan,
+            conversationHistory: parsed.conversationHistory,
+            grading: parsed.grading,
+            responsePhase,
+          })
+        : buildRespondPrompt({
+            mode: parsed.mode,
+            userMessage: parsed.userMessage,
+            vacancyProfile: parsed.vacancyProfile,
+            prepPlan: parsed.prepPlan,
+            conversationHistory: parsed.conversationHistory,
+            grading: parsed.grading,
+          }),
     ];
 
     const aiResponse = await callYandexModel({

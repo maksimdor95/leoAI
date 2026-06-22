@@ -26,10 +26,11 @@ export const JACK_SCENARIO: ScenarioDefinition = {
       type: 'question',
       label: 'Приветствие и выбор сценария',
       instruction:
-        'Поздоровайся с кандидатом как LEO, AI-помощник по подбору вакансий. Объясни, что за 5-7 минут соберёшь профиль (опыт, достижения, навыки), чтобы подобрать идеальные позиции. Предложи выбрать сценарий: быстрый подбор или детализированный анализ.',
+        'Поздоровайся с кандидатом как LEO, AI-помощник по подбору вакансий. Объясни, что за 5-7 минут соберёшь профиль (опыт, достижения, навыки), чтобы подобрать идеальные позиции. Предложи выбрать сценарий: быстрый подбор, детализированный анализ или загрузку готового резюме.',
       fallbackText:
-        'Здравствуйте! Я LEO, AI-помощник по подбору вакансий. За 5-7 минут соберу ваш профиль: опыт, достижения, навыки — чтобы подобрать идеальные позиции. Выберите сценарий: быстрый подбор или детализированный анализ?',
-      placeholder: 'Напишите «быстрый подбор» или «детализированный анализ».',
+        'Здравствуйте! Я LEO, AI-помощник по подбору вакансий. Соберу ваш профиль и подберу вакансии. Выберите сценарий: быстрый подбор, детализированный анализ или проанализировать готовое резюме.',
+      placeholder:
+        'Быстрый подбор, детализированный анализ или загрузите резюме (PDF/DOCX).',
       collectKey: 'scenarioMode',
       next: {
         default: 'career_overview',
@@ -39,6 +40,8 @@ export const JACK_SCENARIO: ScenarioDefinition = {
           { condition: "scenarioMode === 'быстро'", to: 'quick_role' },
           { condition: "scenarioMode === 'quick'", to: 'quick_role' },
           { condition: "scenarioMode === '1'", to: 'quick_role' },
+          { condition: "scenarioMode === 'готовое резюме'", to: 'resume_upload' },
+          { condition: "scenarioMode === 'резюме'", to: 'resume_upload' },
         ],
       },
     },
@@ -80,7 +83,10 @@ export const JACK_SCENARIO: ScenarioDefinition = {
         'Где и в каком формате хотите работать? Если есть зарплатные ожидания — укажите их тоже.',
       placeholder: 'Например: Москва, гибрид, от 350 000 ₽',
       collectKey: 'desired_location',
-      next: 'quick_ready',
+      next: {
+        default: 'quick_ready',
+        when: [{ condition: "scenarioMode === 'готовое резюме'", to: 'resume_ready' }],
+      },
     },
     {
       id: 'quick_ready',
@@ -100,6 +106,50 @@ export const JACK_SCENARIO: ScenarioDefinition = {
       ],
       next: null,
     },
+
+    // ============================================
+    // БЛОК 0.6: Путь «готовое резюме» (upload → match)
+    // ============================================
+    {
+      id: 'resume_upload',
+      type: 'question',
+      label: 'Загрузка резюме',
+      instruction:
+        'Попроси загрузить резюме PDF или DOCX через зону ниже. Можно вставить текст резюме в чат. После разбора покажем рекомендации вакансий.',
+      fallbackText:
+        'Загрузите резюме PDF или DOCX — разберу опыт и подберу вакансии. Можно вставить текст резюме в чат. Когда файл загружен, нажмите «Показать рекомендации».',
+      placeholder: 'PDF или DOCX до 12 МБ, либо вставьте текст резюме',
+      collectKey: 'resumeUploadHint',
+      next: null,
+    },
+    {
+      id: 'resume_ready',
+      type: 'info_card',
+      label: 'Резюме разобрано',
+      title: '✅ Профиль из резюме готов',
+      description:
+        'Данные из резюме сохранены. Нажмите «Показать рекомендации» — подберём вакансии с объяснением совпадения. Ошиблись — вкладка «Профиль».',
+      cards: [],
+      commands: [
+        {
+          id: 'resume_show_recommendations',
+          label: 'Показать рекомендации',
+          action: 'show_recommendations',
+        },
+        {
+          id: 'resume_start_quick',
+          label: 'Быстрый подбор',
+          action: 'resume_start_quick',
+        },
+        {
+          id: 'resume_start_detailed',
+          label: 'Детальный анализ',
+          action: 'start_detailed_analysis',
+        },
+      ],
+      next: null,
+    },
+
     {
       id: 'pause_reminder',
       type: 'question',

@@ -50,7 +50,7 @@ type StagePanelProps = {
     disabled?: boolean;
   };
   /** Быстрые ответы-чипы под вопросом (например, выбор сценария подбора). */
-  quickReplies?: Array<{ label: string; value: string; hint?: string }>;
+  quickReplies?: Array<{ label: string; value: string; hint?: string; fullWidth?: boolean }>;
   onQuickReply?: (value: string) => void;
   /** Прогресс детального пути Jack: «Вопрос 12 из 36». */
   detailedProgressLabel?: string | null;
@@ -142,13 +142,16 @@ export function StagePanel({
               </p>
             )}
             {quickReplies && quickReplies.length > 0 && onQuickReply ? (
-              <div className="flex flex-wrap gap-2 pt-1">
+              <div className="flex flex-wrap gap-2 pt-1 w-full">
                 {quickReplies.map((reply) => (
                   <button
                     key={reply.value}
                     type="button"
                     onClick={() => onQuickReply(reply.value)}
-                    className="group/qr inline-flex flex-col items-start rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-left transition-all hover:border-green-500/40 hover:bg-white/[0.08] active:scale-[0.98]"
+                    className={[
+                      'group/qr inline-flex flex-col items-start rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-left transition-all hover:border-green-500/40 hover:bg-white/[0.08] active:scale-[0.98]',
+                      reply.fullWidth ? 'w-full basis-full' : '',
+                    ].join(' ')}
                   >
                     <span className="text-sm font-semibold text-white">{reply.label}</span>
                     {reply.hint ? (

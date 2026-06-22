@@ -54,7 +54,7 @@ export type PromptVacancyProfile = {
   assumptions?: string[];
 };
 
-type InterviewRespondPromptParams = {
+export type InterviewRespondPromptParams = {
   mode: InterviewPrepMode;
   userMessage: string;
   vacancyProfile?: PromptVacancyProfile;
@@ -77,6 +77,8 @@ function isAnalyticsRolePack(profile?: PromptVacancyProfile): boolean {
   return inferRoleTrack(profile) === 'analytics_data';
 }
 
+export { isPmRolePack, isAnalyticsRolePack };
+
 export function parseJsonObject<T>(raw: string, fallback: T): T {
   const trimmed = raw.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
@@ -92,12 +94,12 @@ export function parseJsonObject<T>(raw: string, fallback: T): T {
   }
 }
 
-function normalizeProfileText(profile?: PromptVacancyProfile): string {
+export function normalizeProfileText(profile?: PromptVacancyProfile): string {
   if (!profile) return 'Профиль вакансии пока не извлечен.';
   return JSON.stringify(profile, null, 2);
 }
 
-function normalizeHistory(
+export function normalizeHistory(
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
 ): string {
   if (!history || history.length === 0) return 'История пуста.';

@@ -57,7 +57,7 @@ import {
   parseProfileSummaryDraft,
   type ProfileSummaryExport,
 } from './services/summaryExport';
-import { handleConversationCompletion } from './services/integrationService';
+import { handleConversationCompletion, triggerProfileDrivenScrape } from './services/integrationService';
 import { validateAndLogConfig } from './utils/configValidator';
 import { getHealthStatus } from './utils/healthCheck';
 
@@ -651,6 +651,15 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
         ? rawAuthHeader
         : undefined
     );
+
+    const mergedRole =
+      (result.metadataUpdates?.collectedData?.desired_role as string | undefined) ||
+      (session.metadata.collectedData?.desired_role as string | undefined);
+    if (mergedRole && token && session.userId) {
+      triggerProfileDrivenScrape(session.userId, token).catch((err) => {
+        logger.warn(`Profile-driven scrape after resume import failed: ${String(err)}`);
+      });
+    }
 
     let assistantMessage = null;
     let assistantAudio: AssistantAudioResult = null;

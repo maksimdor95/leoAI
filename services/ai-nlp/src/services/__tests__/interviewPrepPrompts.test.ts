@@ -12,6 +12,12 @@ import {
   parseJsonObject,
   resolveInterviewLanguage,
 } from '../interviewPrepPrompts';
+import {
+  buildCoachPersona,
+  buildPhaseRespondPrompt,
+  buildPhaseSystemMessage,
+  buildRescueProtocol,
+} from '../interviewPrepPhasePrompts';
 
 describe('interviewPrepPrompts', () => {
   it('parses fenced json returned by the model', () => {
@@ -161,5 +167,44 @@ describe('interviewPrepPrompts', () => {
     });
 
     expect(prompt.text).toContain('Write focus and every task in Russian');
+  });
+});
+
+describe('interviewPrepPhasePrompts', () => {
+  it('builds coach and rescue protocol sections', () => {
+    expect(buildCoachPersona()).toContain('LEO-Coach');
+    expect(buildRescueProtocol()).toContain('Rescue Protocol');
+  });
+
+  it('builds phase system message for rescue', () => {
+    const message = buildPhaseSystemMessage('case', { role: 'PM' }, 'rescue');
+    expect(message.text).toContain('LEO-Coach');
+    expect(message.text).toContain('Rescue Protocol');
+  });
+
+  it('builds phase respond prompt with response phase', () => {
+    const prompt = buildPhaseRespondPrompt({
+      mode: 'case',
+      userMessage: 'слабый ответ',
+      responsePhase: 'rescue',
+      grading: {
+        overallScore: 2,
+        dimensionScores: {
+          structure: 2,
+          depth: 2,
+          metrics: 2,
+          tradeOffs: 2,
+          communication: 2,
+          seniorityFit: 2,
+        },
+        fatalGaps: ['нет метрик'],
+        strengths: [],
+        improvements: ['добавить цифры'],
+        followUpToProbe: 'Какие метрики?',
+        modelStructure: ['цель', 'метрика', 'результат'],
+      },
+    });
+    expect(prompt.text).toContain('Response phase: rescue');
+    expect(prompt.text).toContain('Rescue Protocol');
   });
 });
