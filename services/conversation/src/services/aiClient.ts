@@ -437,6 +437,12 @@ export async function generateInterviewPrepPlan(params: {
   vacancyProfile: VacancyProfile;
   availableDays?: number;
   authToken?: string;
+  candidateSeniority?: string;
+  prepContext?: {
+    priorFatalGaps?: string[];
+    prepSessionNumber?: number;
+    sameRoleTrack?: boolean;
+  };
 }): Promise<InterviewPrepPlanDay[]> {
   try {
     const response = await axios.post<InterviewApiResponse<{ plan: InterviewPrepPlanDay[] }>>(
@@ -444,6 +450,8 @@ export async function generateInterviewPrepPlan(params: {
       {
         vacancyProfile: params.vacancyProfile,
         availableDays: params.availableDays ?? 5,
+        candidateSeniority: params.candidateSeniority,
+        prepContext: params.prepContext,
       },
       {
         timeout: 20000,
@@ -480,7 +488,16 @@ export async function generateInterviewModeResponse(params: {
   collectedData?: Record<string, unknown>;
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
   grading?: InterviewAnswerGrade;
-  responsePhase?: 'default' | 'mock_active' | 'mock_micro_rescue' | 'mock_debrief' | 'rescue';
+  responsePhase?:
+    | 'default'
+    | 'mock_active'
+    | 'mock_micro_rescue'
+    | 'mock_debrief'
+    | 'rescue'
+    | 'theory_learn'
+    | 'theory_check'
+    | 'diagnostics_pack'
+    | 'employer_questions_pack';
   authToken?: string;
 }): Promise<string> {
   try {

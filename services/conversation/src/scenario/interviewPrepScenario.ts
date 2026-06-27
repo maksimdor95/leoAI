@@ -232,5 +232,19 @@ export const INTERVIEW_PREP_SCENARIO: ScenarioDefinition = {
       ],
       next: null,
     },
+    {
+      id: 'prep_complete',
+      type: 'info_card',
+      label: 'Подготовка завершена',
+      title: 'Подготовка завершена!',
+      description:
+        'Мок-интервью пройдено. Скачайте PDF-отчёт или начните подготовку по новой вакансии.',
+      cards: [],
+      commands: [
+        { id: 'download_prep_report', label: 'Скачать PDF-отчёт', action: 'download_prep_report' },
+        { id: 'new_vacancy', label: 'Новая вакансия', action: 'new_vacancy' },
+      ],
+      next: null,
+    },
   ],
 };

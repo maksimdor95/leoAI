@@ -3,6 +3,10 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import { reportGenerator } from '../services/reportGenerator';
 import { reportService } from '../services/reportService';
 import { CollectedData } from '../types/report';
+import {
+  interviewPrepReportGenerator,
+  isInterviewPrepTrainerCollected,
+} from '../services/interviewPrepReportGenerator';
 import { logger } from '../utils/logger';
 import fs from 'fs';
 
@@ -17,7 +21,15 @@ export const reportController = {
         res.status(400).json({ error: 'collectedData object required' });
         return;
       }
-      const data = reportGenerator.buildReportDataFromCollected(raw as CollectedData, req.userEmail);
+      const collected = raw as CollectedData;
+      if (isInterviewPrepTrainerCollected(collected as Record<string, unknown>)) {
+        const sessionId =
+          typeof req.body?.sessionId === 'string' ? req.body.sessionId : 'preview';
+        const data = interviewPrepReportGenerator.buildFromCollected(sessionId, collected);
+        res.json(data);
+        return;
+      }
+      const data = reportGenerator.buildReportDataFromCollected(collected, req.userEmail);
       res.json(data);
     } catch (error) {
       logger.error('Failed to build preview from collected data', { error: (error as Error).message });
@@ -109,7 +121,6 @@ export const reportController = {
     }
   },
 
-  /** JSON-разбор отчёта для экрана «Интервью завершено» (без генерации PDF). */
   async previewSessionReport(req: AuthenticatedRequest, res: Response): Promise<void> {
     const { sessionId } = req.params;
     const userId = req.userId!;

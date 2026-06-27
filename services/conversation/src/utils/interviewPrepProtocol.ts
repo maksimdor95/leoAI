@@ -27,6 +27,11 @@ export function isModeStartCommand(userMessage: string): boolean {
 }
 
 export function isMockReadySignal(userMessage: string): boolean {
+  return isPrepReadySignal(userMessage);
+}
+
+/** «готов» / «начать» после урока или перед моком */
+export function isPrepReadySignal(userMessage: string): boolean {
   const value = userMessage.trim().toLowerCase();
   if (isModeStartCommand(userMessage)) {
     return false;
@@ -116,4 +121,28 @@ export function buildMockBriefingMessage(role?: string): string {
 
 export function getRescueCountKey(mode: string): string {
   return `${mode}RescueCount`;
+}
+
+export type LessonPhase = 'learn' | 'check';
+
+export const DIAGNOSTICS_PACK_MIN_ANSWERS = 4;
+export const DIAGNOSTICS_PACK_MIN_ANSWERS_SHORTENED = 2;
+
+export function shouldEmitDiagnosticsPack(
+  diagnosticsHistoryLength: number,
+  userMessage: string,
+  minAnswers: number = DIAGNOSTICS_PACK_MIN_ANSWERS
+): boolean {
+  const trimmed = userMessage.trim().toLowerCase();
+  if (/^(итог|достаточно|заверш|готово|карта пробелов)$/.test(trimmed)) {
+    return diagnosticsHistoryLength >= 1;
+  }
+  return diagnosticsHistoryLength >= minAnswers;
+}
+
+export function resolveCandidateSeniorityLevel(
+  vacancyLevel?: string,
+  explicit?: string
+): string | undefined {
+  return explicit?.trim() || vacancyLevel?.trim() || undefined;
 }

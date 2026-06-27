@@ -19,6 +19,7 @@ import {
   CommandItem,
   CommandMessage,
   InfoCardMessage,
+  InterviewPrepMode,
   Message,
   MessageRole,
   MessageType,
@@ -45,10 +46,15 @@ import {
   INTERVIEW_PREP_MODES,
   INTERVIEW_PREP_MODE_LABELS,
   INTERVIEW_PREP_MODE_TAB_LABELS,
+  buildInterviewPrepModeStartMessage,
+  getInterviewPrepStageModeLabel,
   interviewModeCommandItem,
+  isInterviewPrepStageAssistantMessage,
   parseInterviewModeFromAction,
   type PrepHistoryFilter,
 } from '@/lib/interviewPrepModes';
+import { computePrepProgress, evaluateMockGate } from '@/lib/prepActivities';
+import { resolvePrepArtifacts } from '@/lib/prepArtifacts';
 import { VoiceIndicator, type VoiceIndicatorMode } from '@/components/chat/VoiceIndicator';
 import { StagePanel, type PrepModeStageContent } from '@/components/chat/StagePanel';
 import { InterviewPrepInfoOverview } from '@/components/chat/InterviewPrepInfoOverview';
@@ -274,6 +280,7 @@ function ChatPageContent() {
     Map<string, { audioBase64: string; mimeType?: string; format?: 'mp3' | 'oggopus' }>
   >(new Map());
   const typingMessageIdRef = useRef<string | null>(null);
+  const typingMessageRef = useRef<Message | null>(null);
   const handledSpeechMessageIdsRef = useRef<Set<string>>(new Set());
   const speechChainRef = useRef(Promise.resolve());
   /** Браузерный speechSynthesis только если явно включён — иначе только Яндекс TTS с сервера. */
@@ -285,6 +292,7 @@ function ChatPageContent() {
   const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
   useEffect(() => {
     typingMessageIdRef.current = typingMessage?.id ?? null;
+    typingMessageRef.current = typingMessage;
   }, [typingMessage]);
 
   const [currentProduct, setCurrentProduct] = useState<ProductType>('jack');
@@ -998,10 +1006,20 @@ function ChatPageContent() {
           }
 
           setMessages((prev) => {
-            if (shouldAnimateMessage(payload.message, prev)) {
-              setTypingMessage(payload.message);
-              setTypingOptions({ speed: 50, delay: 700 });
-              setIsTyping(true);
+            const skipAnimation = Boolean(payload.skipAnimation);
+
+            if (!skipAnimation && shouldAnimateMessage(payload.message, prev)) {
+              const pending = typingMessageRef.current;
+              let base = prev;
+              if (pending && pending.id !== payload.message.id) {
+                base = appendMessage(base, pending);
+              }
+
+              if (typingMessageIdRef.current !== payload.message.id) {
+                setTypingMessage(payload.message);
+                setTypingOptions({ speed: 50, delay: 700 });
+                setIsTyping(true);
+              }
 
               if (payload.message.type === MessageType.QUESTION) {
                 void speakQuestionWithPriority(payload.message as QuestionMessage);
@@ -1012,7 +1030,7 @@ function ChatPageContent() {
                 void speakAssistantMessageWithPriority(payload.message);
               }
 
-              return prev;
+              return base;
             }
 
             if (
@@ -1558,8 +1576,13 @@ function ChatPageContent() {
       return;
     }
 
-    if (command.action === 'download_report') {
+    if (command.action === 'download_report' || command.action === 'download_prep_report') {
       await runReportDownload();
+      return;
+    }
+
+    if (command.action === 'new_vacancy') {
+      handleInterviewRestart();
       return;
     }
 
@@ -1577,10 +1600,104 @@ function ChatPageContent() {
     if (modeFromAction) {
       setPrepHistoryFilter(modeFromAction);
       setSidePanelTab('chat');
+      if (modeFromAction === 'mock') {
+        const gate = evaluateMockGate(interviewPrepCollectedSnapshot);
+        if (!gate.allowed) {
+          return;
+        }
+      }
+      await chatRef.current.sendMessage(buildInterviewPrepModeStartMessage(modeFromAction));
+      return;
     }
 
     chatRef.current.executeCommand(command.id, command.action);
   };
+
+  const jackCollectedSnapshot = useMemo((): Record<string, unknown> => {
+    const raw = chatRef.current?.metadata?.collectedData;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      return { ...(raw as Record<string, unknown>) };
+    }
+    return {};
+  }, [messages.length, sessionId, connected, sidePanelTab]);
+
+  const interviewPrepCollectedSnapshot = useMemo((): Record<string, unknown> => {
+    if (currentProduct !== 'interview-prep') {
+      return {};
+    }
+    return jackCollectedSnapshot;
+  }, [currentProduct, jackCollectedSnapshot]);
+
+  const interviewPrepPlanDays = useMemo(() => {
+    const raw = interviewPrepCollectedSnapshot.prepPlan;
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+    return raw.filter(
+      (day): day is { day: number; focus: string; tasks: string[] } =>
+        day != null &&
+        typeof day === 'object' &&
+        typeof (day as { day?: unknown }).day === 'number' &&
+        typeof (day as { focus?: unknown }).focus === 'string' &&
+        Array.isArray((day as { tasks?: unknown }).tasks)
+    );
+  }, [interviewPrepCollectedSnapshot.prepPlan]);
+
+  const interviewPrepProgress = useMemo(() => {
+    if (interviewPrepPlanDays.length === 0) {
+      return null;
+    }
+    return (
+      (interviewPrepCollectedSnapshot.prepProgress as ReturnType<typeof computePrepProgress>) ??
+      computePrepProgress(interviewPrepPlanDays, interviewPrepCollectedSnapshot)
+    );
+  }, [interviewPrepPlanDays, interviewPrepCollectedSnapshot]);
+
+  const mockGateBlockers = useMemo(() => {
+    if (currentProduct !== 'interview-prep') {
+      return [];
+    }
+    return evaluateMockGate(interviewPrepCollectedSnapshot).blockers;
+  }, [currentProduct, interviewPrepCollectedSnapshot]);
+
+  const interviewPrepArtifacts = useMemo(() => {
+    if (currentProduct !== 'interview-prep') {
+      return [];
+    }
+    return resolvePrepArtifacts(interviewPrepCollectedSnapshot, messages);
+  }, [currentProduct, interviewPrepCollectedSnapshot, messages]);
+
+  const handleOpenArtifactInChat = useCallback((artifact: { mode: InterviewPrepMode }) => {
+    setPrepHistoryFilter(artifact.mode);
+    setSidePanelTab('chat');
+  }, []);
+
+  const handlePrepActivityStart = useCallback(
+    async (mode: InterviewPrepMode, startMessage: string) => {
+      unlockAudio();
+      if (!chatRef.current) {
+        return;
+      }
+      if (mode === 'mock') {
+        const gate = evaluateMockGate(interviewPrepCollectedSnapshot);
+        if (!gate.allowed) {
+          return;
+        }
+        await handleCommandSelect(interviewModeCommandItem('mock'));
+        return;
+      }
+      setPrepHistoryFilter(mode);
+      setSidePanelTab('chat');
+      // Один round-trip: executeCommand + sendMessage давали два ответа LEO и «ребит» печати на сцене.
+      await chatRef.current.sendMessage(startMessage);
+    },
+    [handleCommandSelect, interviewPrepCollectedSnapshot]
+  );
+
+  const handleMockStart = useCallback(() => {
+    unlockAudio();
+    chatRef.current?.sendMessage('готов');
+  }, []);
 
   const latestQuestion = useMemo(
     () => extractLatest<QuestionMessage>(messages, MessageType.QUESTION),
@@ -1597,6 +1714,9 @@ function ChatPageContent() {
       return latestQuestion;
     }
     if (vacancyAnalyzeFlowActive || !latestQuestion) {
+      return undefined;
+    }
+    if (interviewPrepCollectedSnapshot.lesson_phase === 'learn') {
       return undefined;
     }
 
@@ -1618,12 +1738,23 @@ function ChatPageContent() {
     }
 
     return undefined;
-  }, [currentProduct, vacancyAnalyzeFlowActive, latestQuestion, messages]);
+  }, [currentProduct, vacancyAnalyzeFlowActive, latestQuestion, messages, interviewPrepCollectedSnapshot.lesson_phase]);
+
+  const handleTheoryReady = useCallback(() => {
+    unlockAudio();
+    chatRef.current?.sendMessage('готов');
+  }, []);
 
   const VACANCY_PROFILE_CARD_TITLE = 'Профиль вакансии и план подготовки';
 
+const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
+
   const centerStagePrepContent = useMemo((): PrepModeStageContent | undefined => {
     if (currentProduct !== 'interview-prep' || vacancyAnalyzeFlowActive || centerStageQuestion) {
+      return undefined;
+    }
+
+    if (latestInfoCard?.title === PREP_COMPLETE_CARD_TITLE) {
       return undefined;
     }
 
@@ -1651,6 +1782,35 @@ function ChatPageContent() {
     return {
       modeLabel: INTERVIEW_PREP_MODE_LABELS[latestAssistantText.interviewMode],
       content: latestAssistantText.content,
+      packType: latestAssistantText.packType,
+      badge:
+        interviewPrepCollectedSnapshot.lastResponsePhase === 'rescue'
+          ? 'rescue'
+          : interviewPrepCollectedSnapshot.lastResponsePhase === 'mock_micro_rescue'
+            ? 'micro_rescue'
+            : latestAssistantText.packType === 'rescue_cheatsheet'
+              ? 'rescue'
+              : undefined,
+      theoryLearnReady:
+        latestAssistantText.interviewMode === 'theory' &&
+        interviewPrepCollectedSnapshot.lesson_phase === 'learn' &&
+        !latestAssistantText.packType,
+      onTheoryReady: handleTheoryReady,
+      mockBriefing:
+        latestAssistantText.interviewMode === 'mock' &&
+        interviewPrepCollectedSnapshot.mockPhase === 'briefing',
+      mockQuestionLabel:
+        latestAssistantText.interviewMode === 'mock' &&
+        interviewPrepCollectedSnapshot.mockPhase === 'active'
+          ? (() => {
+              const mockInterview = interviewPrepCollectedSnapshot.mockInterview as
+                | { currentQuestionIndex?: number }
+                | undefined;
+              const index = mockInterview?.currentQuestionIndex ?? 1;
+              return `Вопрос ${Math.min(index, 3)}/3`;
+            })()
+          : undefined,
+      onMockStart: handleMockStart,
     };
   }, [
     currentProduct,
@@ -1658,6 +1818,9 @@ function ChatPageContent() {
     centerStageQuestion,
     messages,
     latestInfoCard,
+    interviewPrepCollectedSnapshot,
+    handleMockStart,
+    handleTheoryReady,
   ]);
 
   const interviewPrepThreadsEnabled = useMemo(
@@ -1687,6 +1850,9 @@ function ChatPageContent() {
       latestInfoCard?.title === 'Интервью завершено!'
     ) {
       return undefined;
+    }
+    if (currentProduct === 'interview-prep' && latestInfoCard?.title === PREP_COMPLETE_CARD_TITLE) {
+      return latestInfoCard.commands;
     }
     const fromCard = latestInfoCard?.commands;
     if (fromCard && fromCard.length > 0) {
@@ -1824,14 +1990,6 @@ function ChatPageContent() {
     }
     return null;
   }, [messages]);
-
-  const jackCollectedSnapshot = useMemo((): Record<string, unknown> => {
-    const raw = chatRef.current?.metadata?.collectedData;
-    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-      return { ...(raw as Record<string, unknown>) };
-    }
-    return {};
-  }, [messages.length, sessionId, connected, sidePanelTab]);
 
   const jackProfileReadyForMatch = useMemo(
     () => jackCollectedDataReadyForJobMatch(jackCollectedSnapshot),
@@ -2509,6 +2667,18 @@ function ChatPageContent() {
                           typingSpeed={typingOptions.speed}
                           delay={typingOptions.delay}
                           onComplete={handleTypingComplete}
+                          variant={
+                            currentProduct === 'interview-prep' &&
+                            isInterviewPrepStageAssistantMessage(typingMessage)
+                              ? 'stage'
+                              : 'bubble'
+                          }
+                          stageModeLabel={
+                            currentProduct === 'interview-prep' &&
+                            isInterviewPrepStageAssistantMessage(typingMessage)
+                              ? getInterviewPrepStageModeLabel(typingMessage)
+                              : undefined
+                          }
                         />
                       </div>
                     ) : (
@@ -2918,8 +3088,22 @@ function ChatPageContent() {
                           commands={latestInfoCard.commands}
                           onCommandSelect={handleCommandSelect}
                           onPrepModeSelect={(mode) => {
+                            if (mode === 'mock' && mockGateBlockers.length > 0) {
+                              return;
+                            }
                             void handleCommandSelect(interviewModeCommandItem(mode));
                           }}
+                          prepProgress={interviewPrepProgress}
+                          collectedData={interviewPrepCollectedSnapshot}
+                          onActivityStart={(mode, startMessage) => {
+                            void handlePrepActivityStart(mode, startMessage);
+                          }}
+                          mockGateBlockers={mockGateBlockers}
+                          onDownloadReport={() => {
+                            void runReportDownload();
+                          }}
+                          prepArtifacts={interviewPrepArtifacts}
+                          onOpenArtifactInChat={handleOpenArtifactInChat}
                         />
                       ) : (
                         <div className="text-sm text-slate-400 leading-relaxed">

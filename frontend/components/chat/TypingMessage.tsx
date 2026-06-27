@@ -6,6 +6,9 @@ type TypingMessageProps = {
   typingSpeed?: number; // ms per character
   delay?: number; // initial delay before typing starts
   onComplete?: () => void;
+  /** На главной сцене interview-prep — тот же layout, что StagePanel, без «пузыря» чата. */
+  variant?: 'bubble' | 'stage';
+  stageModeLabel?: string;
 };
 
 /**
@@ -16,6 +19,8 @@ export function TypingMessage({
   typingSpeed = 50,
   delay = 0,
   onComplete,
+  variant = 'bubble',
+  stageModeLabel,
 }: TypingMessageProps) {
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -72,10 +77,25 @@ export function TypingMessage({
     return () => {
       clearTimeout(timeout);
     };
-  }, [targetText, typingSpeed, delay, onComplete]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restart only when message identity changes
+  }, [message?.id, targetText, typingSpeed, delay, onComplete]);
 
   if (!message || !targetText) {
     return null;
+  }
+
+  if (variant === 'stage') {
+    return (
+      <div className="w-full space-y-2 text-left max-h-[min(52vh,28rem)] overflow-y-auto chat-history-scroll pr-1">
+        <div className="text-xs uppercase tracking-[0.4em] text-green-300/70">
+          {stageModeLabel ?? 'LEO'}
+        </div>
+        <div className="text-sm sm:text-base text-slate-100 leading-relaxed whitespace-pre-line break-words">
+          {displayedText}
+          {isTyping ? <span className="ml-0.5 animate-pulse">▍</span> : null}
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -13,6 +13,11 @@ router.post('/preview-compute', authMiddleware, async (req: AuthenticatedRequest
   await reportController.previewFromCollected(req, res);
 });
 
+router.post('/interview-prep/:sessionId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  req.body = { ...req.body, sessionId: req.params.sessionId };
+  await reportController.generateReport(req, res);
+});
+
 // Generate a new report
 router.post('/generate', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   await reportController.generateReport(req, res);

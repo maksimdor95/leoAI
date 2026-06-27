@@ -47,17 +47,45 @@ import {
   buildMockBriefingMessage,
   getRescueAttemptLimit,
   getRescueCountKey,
+  inferSeniorityFromLevel,
   isMockReadySignal,
   isModeStartCommand,
+  isPrepReadySignal,
+  LessonPhase,
   MockPhase,
+  resolveCandidateSeniorityLevel,
+  shouldEmitDiagnosticsPack,
   shouldTriggerFullRescue,
   shouldTriggerMicroRescue,
 } from '../utils/interviewPrepProtocol';
+import {
+  buildMockGateBlockedMessage,
+  buildReadinessChecklist,
+  computePrepProgress,
+  evaluateMockGate,
+} from '../utils/prepActivities';
+import {
+  mergePrepArtifacts,
+  packTitle,
+  type PrepPackType,
+} from '../utils/prepArtifacts';
 import {
   normalizeVacancyPrepInput,
   stripHtmlFromText,
 } from '../utils/vacancyPrepText';
 import { enrichQuickPathCollectedData } from '../utils/quickPathEnrichment';
+import {
+  buildPrepRetentionState,
+  buildPriorPrepSnapshot,
+  buildReturningUserWelcome,
+  buildStarBankEntryFromAnswer,
+  extractStarEntriesFromCollected,
+  getDiagnosticsPackMinAnswers,
+  mergeStarBankEntries,
+  type PrepRetentionState,
+} from '../utils/prepRetention';
+import { appendUserStarBankEntry, loadUserStarBank, saveUserStarBank } from './prepRetentionStore';
+import { getUserSessions } from './sessionService';
 import { logger } from '../utils/logger';
 import { triggerProfileDrivenScrape } from './integrationService';
 
@@ -602,25 +630,29 @@ async function buildQuestionMessage(
     logger.info(`🔧 Enhanced clarify instruction with previous step context: ${previousStepId}`);
   }
 
-  try {
-    logger.info(`🤖 Attempting to generate question text via AI for step: ${step.id}`);
-    const generated = await generateStepQuestionText({
-      stepId: step.id,
-      instruction: enhancedInstruction,
-      fallbackText: step.fallbackText,
-      collectedData: session.metadata.collectedData,
-    });
+  const useFallbackOnly = step.id === 'greeting';
 
-    if (generated && generated.trim().length > 0) {
-      questionText = generated.trim();
-      logger.info(`✅ AI-generated question text used for step: ${step.id}`);
-      logger.info(`   Generated: "${questionText}"`);
-    } else {
-      logger.warn(`⚠️ AI returned empty text for step ${step.id}, using fallback`);
+  if (!useFallbackOnly) {
+    try {
+      logger.info(`🤖 Attempting to generate question text via AI for step: ${step.id}`);
+      const generated = await generateStepQuestionText({
+        stepId: step.id,
+        instruction: enhancedInstruction,
+        fallbackText: step.fallbackText,
+        collectedData: session.metadata.collectedData,
+      });
+
+      if (generated && generated.trim().length > 0) {
+        questionText = generated.trim();
+        logger.info(`✅ AI-generated question text used for step: ${step.id}`);
+        logger.info(`   Generated: "${questionText}"`);
+      } else {
+        logger.warn(`⚠️ AI returned empty text for step ${step.id}, using fallback`);
+      }
+    } catch (error: unknown) {
+      logger.warn(`⚠️ Failed to generate question text for step ${step.id}, using fallback.`, error);
+      logger.warn(`   Using fallback text: "${step.fallbackText}"`);
     }
-  } catch (error: unknown) {
-    logger.warn(`⚠️ Failed to generate question text for step ${step.id}, using fallback.`, error);
-    logger.warn(`   Using fallback text: "${step.fallbackText}"`);
   }
 
   return {
@@ -1305,7 +1337,8 @@ function formatPrepPlan(plan: InterviewPrepPlanDay[]): string {
 function buildVacancyProfileCard(
   session: ConversationSession,
   profile: VacancyProfile,
-  prepPlan: InterviewPrepPlanDay[]
+  prepPlan: InterviewPrepPlanDay[],
+  retentionWelcome?: string
 ): InfoCardMessage {
   const roleLine = [profile.role, profile.level].filter(Boolean).join(' / ') || 'роль требует уточнения';
   const locationLine = [profile.location, profile.format, profile.interviewLanguage]
@@ -1325,8 +1358,12 @@ function buildVacancyProfileCard(
     timestamp: new Date().toISOString(),
     sessionId: session.id,
     title: 'Профиль вакансии и план подготовки',
-    description:
+    description: [
+      retentionWelcome,
       'Я выделил ключевые ожидания по роли. Если где-то данных мало, считаю это предположением и буду уточнять в подготовке.',
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
     cards: [
       {
         title: 'Должность / уровень',
@@ -1377,6 +1414,73 @@ function buildVacancyProfileCard(
   };
 }
 
+const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
+
+function formatChecklistForCard(collected: Record<string, unknown>, prepPlan: InterviewPrepPlanDay[]): string {
+  const progress = computePrepProgress(prepPlan, collected);
+  const checklist = buildReadinessChecklist(collected, progress);
+  return checklist.map((item) => `${item.done ? '✓' : '○'} ${item.label}`).join('\n');
+}
+
+function buildPrepCompleteCard(
+  session: ConversationSession,
+  profile: VacancyProfile | undefined,
+  prepPlan: InterviewPrepPlanDay[],
+  collectedData: Record<string, unknown>,
+  mockSummary: string,
+  debrief: string
+): InfoCardMessage {
+  const roleLine = [profile?.role, profile?.level].filter(Boolean).join(' · ') || 'Вакансия';
+  const progress = computePrepProgress(prepPlan, {
+    ...collectedData,
+    mockPhase: 'complete',
+    prepComplete: true,
+  });
+
+  return {
+    id: uuidv4(),
+    type: MessageType.INFO_CARD,
+    role: MessageRole.ASSISTANT,
+    timestamp: new Date().toISOString(),
+    sessionId: session.id,
+    title: PREP_COMPLETE_CARD_TITLE,
+    packType: 'prep_complete',
+    description:
+      debrief.trim() ||
+      'Мок-интервью завершено. Скачайте PDF-отчёт — это сжатая выжимка перед реальным собеседованием.',
+    cards: [
+      {
+        title: '📊 Готовность',
+        content: `${progress.overallPercent}% · ${roleLine}`,
+        icon: '📊',
+      },
+      {
+        title: '✓ Чеклист',
+        content: formatChecklistForCard(
+          { ...collectedData, mockPhase: 'complete' },
+          prepPlan
+        ),
+        icon: '✓',
+      },
+      {
+        title: '📝 Итог мока',
+        content: mockSummary.slice(0, 1200) || 'Итог мок-интервью сохранён в отчёте.',
+        icon: '📝',
+      },
+      {
+        title: '📄 PDF-отчёт',
+        content:
+          'Полный отчёт: профиль вакансии, карта компетенций, STAR, пробелы и шпаргалки — без дампа чата.',
+        icon: '📄',
+      },
+    ],
+    commands: [
+      { id: 'download_prep_report', label: 'Скачать PDF-отчёт', action: 'download_prep_report' },
+      { id: 'new_vacancy', label: 'Новая вакансия', action: 'new_vacancy' },
+    ],
+  };
+}
+
 function getInterviewConversationHistory(session: ConversationSession, mode?: InterviewPrepMode) {
   const activeMode =
     mode ?? (session.metadata.collectedData.activeMode as InterviewPrepMode | undefined);
@@ -1395,10 +1499,23 @@ function getInterviewConversationHistory(session: ConversationSession, mode?: In
     }));
 }
 
+function mergeCollectedWithPrepProgress(
+  collectedData: Record<string, unknown>,
+  prepPlan: InterviewPrepPlanDay[] | undefined,
+  patch: Record<string, unknown>
+): Record<string, unknown> {
+  const merged = { ...collectedData, ...patch };
+  if (prepPlan?.length) {
+    merged.prepProgress = computePrepProgress(prepPlan, merged);
+  }
+  return merged;
+}
+
 function buildInterviewTextMessage(
   session: ConversationSession,
   content: string,
-  interviewMode?: InterviewPrepMode
+  interviewMode?: InterviewPrepMode,
+  packType?: PrepPackType
 ): Message {
   return {
     id: uuidv4(),
@@ -1408,7 +1525,31 @@ function buildInterviewTextMessage(
     sessionId: session.id,
     content,
     ...(interviewMode ? { interviewMode } : {}),
+    ...(packType ? { packType } : {}),
   };
+}
+
+function withPackArtifact(
+  session: ConversationSession,
+  content: string,
+  mode: InterviewPrepMode,
+  packType: PrepPackType,
+  baseCollected: Record<string, unknown>,
+  metadataPatch: Record<string, unknown>,
+  prepPlan?: InterviewPrepPlanDay[]
+): { message: Message; collectedData: Record<string, unknown> } {
+  const message = buildInterviewTextMessage(session, content, mode, packType);
+  let collectedData = mergePrepArtifacts(baseCollected, metadataPatch, {
+    packType,
+    mode,
+    title: packTitle(packType, mode),
+    content,
+    messageId: message.id,
+  });
+  if (prepPlan?.length) {
+    collectedData = mergeCollectedWithPrepProgress(baseCollected, prepPlan, collectedData);
+  }
+  return { message, collectedData };
 }
 
 function buildInterviewQuestionMessage(
@@ -1483,6 +1624,50 @@ async function buildInterviewModeMessage(
     );
   }
 
+  if (mode === 'theory') {
+    return buildTheoryModeMessage(
+      session,
+      userMessageContent,
+      collectedData,
+      vacancyProfile,
+      prepPlan,
+      previousMode,
+      conversationHistory,
+      authToken
+    );
+  }
+
+  if (mode === 'diagnostics') {
+    return buildDiagnosticsModeMessage(
+      session,
+      userMessageContent,
+      collectedData,
+      vacancyProfile,
+      prepPlan,
+      previousMode,
+      conversationHistory,
+      authToken
+    );
+  }
+
+  if (mode === 'employer_questions') {
+    return buildEmployerQuestionsModeMessage(
+      session,
+      userMessageContent,
+      collectedData,
+      vacancyProfile,
+      prepPlan,
+      previousMode,
+      conversationHistory,
+      authToken
+    );
+  }
+
+  const seniorityLevel = resolveCandidateSeniorityLevel(
+    vacancyProfile?.level,
+    collectedData.candidateSeniority as string | undefined
+  );
+
   const shouldGrade =
     previousMode === mode &&
     (mode === 'case' || mode === 'star') &&
@@ -1505,7 +1690,7 @@ async function buildInterviewModeMessage(
 
   const rescueKey = getRescueCountKey(mode);
   const rescueCount = Number(collectedData[rescueKey] ?? 0);
-  const rescueLimit = getRescueAttemptLimit(vacancyProfile?.level);
+  const rescueLimit = getRescueAttemptLimit(seniorityLevel);
   const useRescue =
     shouldGrade &&
     grading != null &&
@@ -1546,6 +1731,7 @@ async function buildInterviewModeMessage(
           responsePhase,
         },
       ],
+      lastResponsePhase: responsePhase,
       ...(useRescue
         ? {
             [rescueKey]: rescueCount + 1,
@@ -1556,16 +1742,337 @@ async function buildInterviewModeMessage(
     },
   };
 
-  if (mode === 'diagnostics') {
-    return {
-      message: buildInterviewQuestionMessage(session, response.trim(), undefined, mode),
-      metadataUpdates,
-    };
+  if (useRescue) {
+    const packed = withPackArtifact(
+      session,
+      response,
+      mode,
+      'rescue_cheatsheet',
+      collectedData,
+      metadataUpdates.collectedData as Record<string, unknown>,
+      prepPlan
+    );
+    return { message: packed.message, metadataUpdates: { ...metadataUpdates, collectedData: packed.collectedData } };
+  }
+
+  let packType: PrepPackType | undefined;
+  if (shouldGrade && grading?.modelStructure?.length) {
+    packType = mode === 'star' ? 'star_pack' : mode === 'case' ? 'case_structure' : undefined;
+  }
+
+  if (packType) {
+    const packed = withPackArtifact(
+      session,
+      response,
+      mode,
+      packType,
+      collectedData,
+      metadataUpdates.collectedData as Record<string, unknown>,
+      prepPlan
+    );
+    return { message: packed.message, metadataUpdates: { ...metadataUpdates, collectedData: packed.collectedData } };
+  }
+
+  if (shouldGrade && mode === 'star' && grading) {
+    const starEntry = buildStarBankEntryFromAnswer({
+      sessionId: session.id,
+      collectedData,
+      userMessage: userMessageContent,
+      grading,
+    });
+    if (starEntry && session.userId) {
+      void appendUserStarBankEntry(session.userId, starEntry).catch(() => undefined);
+      const sessionBank = Array.isArray(collectedData.starBank)
+        ? (collectedData.starBank as ReturnType<typeof mergeStarBankEntries>)
+        : [];
+      metadataUpdates.collectedData = {
+        ...metadataUpdates.collectedData,
+        starBank: mergeStarBankEntries(sessionBank, [starEntry]),
+      };
+    }
   }
 
   return {
     message: buildInterviewTextMessage(session, response, mode),
     metadataUpdates,
+  };
+}
+
+async function buildTheoryModeMessage(
+  session: ConversationSession,
+  userMessageContent: string,
+  collectedData: Record<string, unknown>,
+  vacancyProfile: VacancyProfile | undefined,
+  prepPlan: InterviewPrepPlanDay[],
+  previousMode: InterviewPrepMode | undefined,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+  authToken?: string
+): Promise<{ message: Message; metadataUpdates: PreparedStepResult['metadataUpdates'] }> {
+  const mode: InterviewPrepMode = 'theory';
+  let lessonPhase = collectedData.lesson_phase as LessonPhase | undefined;
+  const startingTheory =
+    previousMode !== 'theory' || isModeStartCommand(userMessageContent) || !lessonPhase;
+
+  if (startingTheory) {
+    lessonPhase = 'learn';
+    const learnPrompt =
+      userMessageContent.trim().length > 0 && !isModeStartCommand(userMessageContent)
+        ? userMessageContent
+        : 'Начни микро-урок по первой приоритетной теме из плана подготовки для этой вакансии.';
+    const response = await generateInterviewModeResponse({
+      mode,
+      userMessage: learnPrompt,
+      vacancyProfile,
+      prepPlan,
+      collectedData: { ...collectedData, lesson_phase: 'learn' },
+      conversationHistory,
+      responsePhase: 'theory_learn',
+      authToken,
+    });
+    logger.info(`event=theory_learn_started sessionId=${session.id}`);
+    return {
+      message: buildInterviewTextMessage(session, response, mode),
+      metadataUpdates: {
+        collectedData: { activeMode: mode, lesson_phase: 'learn' },
+        currentStepId: 'mode_select',
+      },
+    };
+  }
+
+  if (lessonPhase === 'learn' && isPrepReadySignal(userMessageContent)) {
+    const response = await generateInterviewModeResponse({
+      mode,
+      userMessage:
+        'Кандидат готов к мини-проверке. Задай один короткий вопрос по теме последнего урока.',
+      vacancyProfile,
+      prepPlan,
+      collectedData: { ...collectedData, lesson_phase: 'check' },
+      conversationHistory,
+      responsePhase: 'theory_check',
+      authToken,
+    });
+    return {
+      message: buildInterviewQuestionMessage(session, response.trim(), undefined, mode),
+      metadataUpdates: {
+        collectedData: { activeMode: mode, lesson_phase: 'check' },
+        currentStepId: 'mode_select',
+      },
+    };
+  }
+
+  if (lessonPhase === 'check' && userMessageContent.trim().length > 15) {
+    const response = await generateInterviewModeResponse({
+      mode,
+      userMessage: userMessageContent,
+      vacancyProfile,
+      prepPlan,
+      collectedData,
+      conversationHistory,
+      responsePhase: 'default',
+      authToken,
+    });
+    const patch = {
+      activeMode: mode,
+      lesson_phase: undefined,
+      theoryLessonsCompleted: Number(collectedData.theoryLessonsCompleted ?? 0) + 1,
+    };
+    const packed = withPackArtifact(
+      session,
+      response,
+      mode,
+      'theory_cheatsheet',
+      collectedData,
+      patch,
+      prepPlan
+    );
+    return {
+      message: packed.message,
+      metadataUpdates: {
+        collectedData: packed.collectedData,
+        currentStepId: 'mode_select',
+      },
+    };
+  }
+
+  const response = await generateInterviewModeResponse({
+    mode,
+    userMessage: userMessageContent,
+    vacancyProfile,
+    prepPlan,
+    collectedData: { ...collectedData, lesson_phase: lessonPhase ?? 'learn' },
+    conversationHistory,
+    responsePhase: lessonPhase === 'check' ? 'theory_check' : 'theory_learn',
+    authToken,
+  });
+
+  return {
+    message:
+      lessonPhase === 'check'
+        ? buildInterviewQuestionMessage(session, response.trim(), undefined, mode)
+        : buildInterviewTextMessage(session, response, mode),
+    metadataUpdates: {
+      collectedData: { activeMode: mode, lesson_phase: lessonPhase ?? 'learn' },
+      currentStepId: 'mode_select',
+    },
+  };
+}
+
+async function buildDiagnosticsModeMessage(
+  session: ConversationSession,
+  userMessageContent: string,
+  collectedData: Record<string, unknown>,
+  vacancyProfile: VacancyProfile | undefined,
+  prepPlan: InterviewPrepPlanDay[],
+  previousMode: InterviewPrepMode | undefined,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+  authToken?: string
+): Promise<{ message: Message; metadataUpdates: PreparedStepResult['metadataUpdates'] }> {
+  const mode: InterviewPrepMode = 'diagnostics';
+  const diagnosticsHistory = Array.isArray(collectedData.diagnosticsHistory)
+    ? (collectedData.diagnosticsHistory as unknown[])
+    : [];
+  const isFollowUp =
+    previousMode === mode &&
+    userMessageContent.trim().length > 5 &&
+    !isModeStartCommand(userMessageContent);
+
+  if (isFollowUp) {
+    diagnosticsHistory.push({
+      at: new Date().toISOString(),
+      userMessage: userMessageContent,
+    });
+  }
+
+  const emitPack =
+    isFollowUp &&
+    shouldEmitDiagnosticsPack(
+      diagnosticsHistory.length,
+      userMessageContent,
+      getDiagnosticsPackMinAnswers(
+        collectedData.prepRetention as PrepRetentionState | undefined
+      )
+    );
+
+  const responsePhase = emitPack ? 'diagnostics_pack' : 'default';
+  const response = await generateInterviewModeResponse({
+    mode,
+    userMessage: emitPack
+      ? `Сформируй итоговую карту пробелов на основе диалога:\n${JSON.stringify(diagnosticsHistory.slice(-8))}`
+      : userMessageContent,
+    vacancyProfile,
+    prepPlan,
+    collectedData: { ...collectedData, diagnosticsHistory },
+    conversationHistory,
+    responsePhase,
+    authToken,
+  });
+
+  const metadataUpdates: PreparedStepResult['metadataUpdates'] = {
+    collectedData: {
+      activeMode: mode,
+      diagnosticsHistory,
+      ...(emitPack ? { diagnosticsPackComplete: true } : {}),
+    },
+    currentStepId: 'mode_select',
+  };
+
+  if (emitPack) {
+    logger.info(`event=diagnostics_pack_emitted sessionId=${session.id}`);
+    const patch = {
+      activeMode: mode,
+      diagnosticsHistory,
+      diagnosticsPackComplete: true,
+    };
+    const packed = withPackArtifact(
+      session,
+      response,
+      mode,
+      'diagnostics_map',
+      collectedData,
+      patch,
+      prepPlan
+    );
+    return {
+      message: packed.message,
+      metadataUpdates: {
+        collectedData: packed.collectedData,
+        currentStepId: 'mode_select',
+      },
+    };
+  }
+
+  return {
+    message: buildInterviewQuestionMessage(session, response.trim(), undefined, mode),
+    metadataUpdates,
+  };
+}
+
+async function buildEmployerQuestionsModeMessage(
+  session: ConversationSession,
+  userMessageContent: string,
+  collectedData: Record<string, unknown>,
+  vacancyProfile: VacancyProfile | undefined,
+  prepPlan: InterviewPrepPlanDay[],
+  previousMode: InterviewPrepMode | undefined,
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+  authToken?: string
+): Promise<{ message: Message; metadataUpdates: PreparedStepResult['metadataUpdates'] }> {
+  const mode: InterviewPrepMode = 'employer_questions';
+  const packComplete = Boolean(collectedData.employerQuestionsPackComplete);
+  const starting =
+    previousMode !== mode || isModeStartCommand(userMessageContent) || !packComplete;
+
+  if (starting) {
+    const response = await generateInterviewModeResponse({
+      mode,
+      userMessage:
+        'Сформируй PACK: 8–12 вопросов работодателю по вакансии. Сгруппируй по роли, команде и метрикам успеха.',
+      vacancyProfile,
+      prepPlan,
+      collectedData,
+      conversationHistory,
+      responsePhase: 'employer_questions_pack',
+      authToken,
+    });
+    const patch = {
+      activeMode: mode,
+      employerQuestionsPackComplete: true,
+    };
+    const packed = withPackArtifact(
+      session,
+      response,
+      mode,
+      'employer_questions',
+      collectedData,
+      patch,
+      prepPlan
+    );
+    logger.info(`event=employer_questions_pack_emitted sessionId=${session.id}`);
+    return {
+      message: packed.message,
+      metadataUpdates: {
+        collectedData: packed.collectedData,
+        currentStepId: 'mode_select',
+      },
+    };
+  }
+
+  const response = await generateInterviewModeResponse({
+    mode,
+    userMessage: userMessageContent,
+    vacancyProfile,
+    prepPlan,
+    collectedData,
+    conversationHistory,
+    authToken,
+  });
+
+  return {
+    message: buildInterviewTextMessage(session, response, mode),
+    metadataUpdates: {
+      collectedData: { activeMode: mode },
+      currentStepId: 'mode_select',
+    },
   };
 }
 
@@ -1587,6 +2094,21 @@ async function buildMockModeMessage(
   const startingMock =
     previousMode !== 'mock' || isModeStartCommand(userMessageContent) || mockPhase === 'complete';
 
+  const gate = evaluateMockGate(collectedData);
+  if (
+    (startingMock || mockPhase === 'briefing' || isMockReadySignal(userMessageContent)) &&
+    !gate.allowed
+  ) {
+    logger.info(`event=mock_gate_blocked sessionId=${session.id} blockers=${gate.blockers.length}`);
+    return {
+      message: buildInterviewTextMessage(session, buildMockGateBlockedMessage(gate.blockers), mode),
+      metadataUpdates: {
+        collectedData: mergeCollectedWithPrepProgress(collectedData, prepPlan, { activeMode: mode }),
+        currentStepId: 'mode_select',
+      },
+    };
+  }
+
   if ((startingMock || mockPhase === 'briefing') && !isMockReadySignal(userMessageContent)) {
     logger.info(`event=mock_briefing_started sessionId=${session.id}`);
     return {
@@ -1596,12 +2118,13 @@ async function buildMockModeMessage(
         mode
       ),
       metadataUpdates: {
-        collectedData: {
+        collectedData: mergeCollectedWithPrepProgress(collectedData, prepPlan, {
           activeMode: mode,
           mockPhase: 'briefing',
           mockAnswers: [],
           mockInterview: { currentQuestionIndex: 0, answers: [] },
-        },
+          lastResponsePhase: 'mock_briefing',
+        }),
         currentStepId: 'mode_select',
       },
     };
@@ -1627,12 +2150,13 @@ async function buildMockModeMessage(
     return {
       message: buildInterviewQuestionMessage(session, response.trim(), undefined, mode),
       metadataUpdates: {
-        collectedData: {
+        collectedData: mergeCollectedWithPrepProgress(collectedData, prepPlan, {
           activeMode: mode,
           mockPhase: 'active',
           mockAnswers: [],
           mockInterview: { currentQuestionIndex: 1, answers: [] },
-        },
+          lastResponsePhase: 'mock_active',
+        }),
         currentStepId: 'mode_select',
       },
     };
@@ -1674,6 +2198,7 @@ async function buildMockModeMessage(
       activeMode: mode,
       mockPhase: mockPhase ?? 'active',
       lastInterviewGrade: grading ?? undefined,
+      lastResponsePhase: shouldGrade ? responsePhase : 'mock_active',
     },
     currentStepId: 'mode_select',
   };
@@ -1715,13 +2240,39 @@ async function buildMockModeMessage(
       authToken,
     });
     logger.info(`event=mock_interview_completed sessionId=${session.id}`);
-    metadataUpdates.collectedData = {
+    let mergedCollected = mergeCollectedWithPrepProgress(collectedData, prepPlan, {
       ...metadataUpdates.collectedData,
       mockPhase: 'complete',
       mockSummary: summary,
-    };
+      prepComplete: true,
+      lastResponsePhase: 'mock_debrief',
+    });
+    mergedCollected = mergePrepArtifacts(mergedCollected, {}, {
+      packType: 'mock_summary',
+      mode: 'mock',
+      title: packTitle('mock_summary', 'mock'),
+      content: summary,
+    });
+    metadataUpdates.collectedData = mergedCollected;
+    metadataUpdates.currentStepId = 'prep_complete';
+    const completeCard = buildPrepCompleteCard(
+      session,
+      vacancyProfile,
+      prepPlan,
+      mergedCollected,
+      summary,
+      debrief
+    );
+    mergedCollected = mergePrepArtifacts(mergedCollected, {}, {
+      packType: 'prep_complete',
+      mode: 'mock',
+      title: PREP_COMPLETE_CARD_TITLE,
+      content: [debrief, summary].filter(Boolean).join('\n\n'),
+      messageId: completeCard.id,
+    });
+    metadataUpdates.collectedData = mergedCollected;
     return {
-      message: buildInterviewTextMessage(session, debrief, mode),
+      message: completeCard,
       metadataUpdates,
     };
   }
@@ -1767,22 +2318,75 @@ async function handleInterviewPrepReply(
       authToken,
     });
     logger.info(`event=vacancy_profile_extracted sessionId=${session.id} role=${profile.role ?? 'unknown'}`);
+
+    const priorSessions = (await getUserSessions(session.userId)).filter(
+      (item) => item.id !== session.id
+    );
+    const prepRetention = buildPrepRetentionState({
+      priorSessions,
+      newProfile: profile,
+    });
+    const latestPriorSession = priorSessions
+      .filter(
+        (item) =>
+          item.id !== session.id &&
+          Boolean(item.metadata.collectedData?.vacancyProfile && item.metadata.collectedData?.prepPlan)
+      )
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+    const priorPrepSnapshot = latestPriorSession
+      ? buildPriorPrepSnapshot(latestPriorSession) ?? undefined
+      : undefined;
+    const sessionStarEntries = priorSessions.flatMap((item) =>
+      extractStarEntriesFromCollected(item.metadata.collectedData ?? {}, item.id)
+    );
+    const persistedStarBank = session.userId ? await loadUserStarBank(session.userId) : [];
+    const starBank = mergeStarBankEntries(persistedStarBank, sessionStarEntries);
+    if (session.userId && starBank.length > 0) {
+      await saveUserStarBank(session.userId, starBank);
+    }
+
+    const candidateSeniority = inferSeniorityFromLevel(profile.level);
     const prepPlan = await generateInterviewPrepPlan({
       vacancyProfile: profile,
       availableDays: 5,
       authToken,
+      candidateSeniority,
+      prepContext: prepRetention.isReturningUser
+        ? {
+            priorFatalGaps: prepRetention.priorFatalGaps,
+            prepSessionNumber: prepRetention.prepSessionNumber,
+            sameRoleTrack: prepRetention.sameRoleTrack,
+          }
+        : undefined,
     });
-    logger.info(`event=prep_plan_generated sessionId=${session.id} days=${prepPlan.length}`);
+    logger.info(
+      `event=prep_plan_generated sessionId=${session.id} days=${prepPlan.length} returning=${prepRetention.isReturningUser}`
+    );
+
+    const retentionWelcome = buildReturningUserWelcome(
+      prepRetention,
+      profile.role ?? 'новой роли',
+      starBank.length
+    );
 
     return {
-      message: buildVacancyProfileCard(session, profile, prepPlan),
+      message: buildVacancyProfileCard(session, profile, prepPlan, retentionWelcome),
       metadataUpdates: {
-        collectedData: {
-          vacancySource: detectVacancySource(vacancyText),
-          vacancyRawText: vacancyText,
-          vacancyProfile: profile,
+        collectedData: mergeCollectedWithPrepProgress(
+          session.metadata.collectedData ?? {},
           prepPlan,
-        },
+          {
+            vacancySource: detectVacancySource(vacancyText),
+            vacancyRawText: vacancyText,
+            vacancyProfile: profile,
+            prepPlan,
+            candidateSeniority,
+            prepRetention,
+            prepVacancyHistory: prepRetention.prepVacancyHistory,
+            priorPrepSnapshot,
+            starBank,
+          }
+        ),
         completedSteps: ['vacancy_input'],
         currentStepId: 'mode_select',
       },
@@ -1809,6 +2413,17 @@ async function handleInterviewPrepReply(
     logger.info(`event=mode_selected sessionId=${session.id} mode=${explicitMode}`);
   }
   const result = await buildInterviewModeMessage(session, mode, userMessageContent, authToken);
+  const prepPlan = session.metadata.collectedData.prepPlan as InterviewPrepPlanDay[] | undefined;
+  if (result.metadataUpdates?.collectedData && prepPlan?.length) {
+    const merged = {
+      ...session.metadata.collectedData,
+      ...result.metadataUpdates.collectedData,
+    };
+    result.metadataUpdates.collectedData = {
+      ...result.metadataUpdates.collectedData,
+      prepProgress: computePrepProgress(prepPlan, merged),
+    };
+  }
   return {
     message: result.message,
     metadataUpdates: result.metadataUpdates,

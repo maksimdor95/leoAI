@@ -25,6 +25,17 @@ export type InterviewPrepMode =
   | 'star'
   | 'employer_questions';
 
+/** Pack-артефакт LAR (C3). */
+export type PrepPackType =
+  | 'diagnostics_map'
+  | 'theory_cheatsheet'
+  | 'rescue_cheatsheet'
+  | 'star_pack'
+  | 'case_structure'
+  | 'mock_summary'
+  | 'employer_questions'
+  | 'prep_complete';
+
 export interface BaseMessage {
   id: string;
   type: MessageTypeValue;
@@ -32,6 +43,7 @@ export interface BaseMessage {
   timestamp: string;
   sessionId: string;
   interviewMode?: InterviewPrepMode;
+  packType?: PrepPackType;
 }
 
 export interface TextMessage extends BaseMessage {

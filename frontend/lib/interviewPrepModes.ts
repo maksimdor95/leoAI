@@ -1,4 +1,5 @@
 import type { CommandItem, InterviewPrepMode, Message } from '@/types/chat';
+import { MessageRole, MessageType } from '@/types/chat';
 
 export const INTERVIEW_PREP_MODES: InterviewPrepMode[] = [
   'diagnostics',
@@ -65,4 +66,43 @@ export function interviewModeCommandItem(mode: InterviewPrepMode): CommandItem {
     label: INTERVIEW_PREP_MODE_LABELS[mode],
     action: `interview_mode:${mode}`,
   };
+}
+
+/** Одно сообщение для старта режима (без executeCommand + sendMessage). */
+export function buildInterviewPrepModeStartMessage(
+  mode: InterviewPrepMode,
+  day?: number
+): string {
+  const label = INTERVIEW_PREP_MODE_LABELS[mode];
+  return typeof day === 'number' ? `Начать режим: ${label} · день ${day}` : `Начать режим: ${label}`;
+}
+
+export function isInterviewPrepStageAssistantMessage(message: Message): boolean {
+  if (message.role !== MessageRole.ASSISTANT) {
+    return false;
+  }
+  if (message.type === MessageType.QUESTION && message.interviewMode) {
+    return true;
+  }
+  return message.type === MessageType.TEXT && Boolean(message.interviewMode);
+}
+
+export function getInterviewPrepStageText(message: Message): string {
+  if (message.type === MessageType.QUESTION) {
+    return message.question;
+  }
+  if (message.type === MessageType.TEXT) {
+    return message.content;
+  }
+  return '';
+}
+
+export function getInterviewPrepStageModeLabel(message: Message): string {
+  if (message.type === MessageType.QUESTION) {
+    return 'Вопрос';
+  }
+  if (message.type === MessageType.TEXT && message.interviewMode) {
+    return INTERVIEW_PREP_MODE_LABELS[message.interviewMode];
+  }
+  return 'LEO';
 }

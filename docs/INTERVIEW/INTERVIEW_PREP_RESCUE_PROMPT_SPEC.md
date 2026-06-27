@@ -2,7 +2,8 @@
 
 **Версия:** 1.0  
 **Связь:** `INTERVIEW_PREP_METHODOLOGY.md` §4.6  
-**Код:** `interviewPrepPhasePrompts.ts`, `interviewPrepProtocol.ts`, `dialogueEngine.ts`
+**Код:** `interviewPrepPhasePrompts.ts`, `interviewPrepProtocol.ts`, `dialogueEngine.ts`  
+**План:** [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md) — фазы 0, A3, B4, C3
 
 ---
 

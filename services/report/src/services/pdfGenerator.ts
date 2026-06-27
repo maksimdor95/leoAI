@@ -497,6 +497,41 @@ async function getBrowser(): Promise<Browser> {
 }
 
 export const pdfGenerator = {
+  async generatePdfFromHtml(html: string, logLabel?: string): Promise<Buffer> {
+    logger.info('Generating PDF from HTML', { logLabel });
+
+    try {
+      const browser = await getBrowser();
+      const page = await browser.newPage();
+      try {
+        await page.setContent(html, {
+          waitUntil: 'domcontentloaded',
+          timeout: 45000,
+        });
+
+        const pdfBuffer = await page.pdf({
+          format: 'A4',
+          printBackground: true,
+          timeout: 60000,
+          margin: {
+            top: '20mm',
+            right: '15mm',
+            bottom: '20mm',
+            left: '15mm',
+          },
+        });
+
+        logger.info('PDF generated successfully', { size: pdfBuffer.length, logLabel });
+        return Buffer.from(pdfBuffer);
+      } finally {
+        await page.close();
+      }
+    } catch (error) {
+      logger.error('HTML PDF rendering failed', { logLabel, error: (error as Error).message });
+      throw error;
+    }
+  },
+
   async generatePdf(reportData: ReportData): Promise<Buffer> {
     logger.info('Generating PDF for report', { positionTitle: reportData.positionTitle });
 

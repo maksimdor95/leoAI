@@ -9,6 +9,11 @@ import {
 import { reportGenerator } from './reportGenerator';
 import { pdfGenerator } from './pdfGenerator';
 import { storageService } from './storageService';
+import {
+  interviewPrepReportGenerator,
+  isInterviewPrepTrainerCollected,
+} from './interviewPrepReportGenerator';
+import { interviewPrepPdfGenerator } from './interviewPrepPdfGenerator';
 
 const REPORT_PREFIX = 'report:';
 const REPORT_TTL = 60 * 60 * 24 * 7; // 7 days
@@ -57,16 +62,24 @@ export const reportService = {
 
       logger.info('Starting report generation', { reportId, sessionId: request.sessionId });
 
-      // 1. Fetch session data and generate report content
-      const reportData = await reportGenerator.generateReportData(
-        request.sessionId,
-        request.userId,
-        request.email,
-        { authorization: request.authorization }
-      );
+      const sessionData = await reportGenerator.fetchSessionData(request.sessionId, {
+        authorization: request.authorization,
+      });
+      const collected = (sessionData.metadata?.collectedData || {}) as Record<string, unknown>;
 
-      // 2. Generate PDF from report data
-      const pdfBuffer = await pdfGenerator.generatePdf(reportData);
+      let pdfBuffer: Buffer;
+      if (isInterviewPrepTrainerCollected(collected)) {
+        const prepData = interviewPrepReportGenerator.buildFromCollected(request.sessionId, collected);
+        pdfBuffer = await interviewPrepPdfGenerator.generatePdf(prepData);
+      } else {
+        const reportData = await reportGenerator.generateReportData(
+          request.sessionId,
+          request.userId,
+          request.email,
+          { authorization: request.authorization }
+        );
+        pdfBuffer = await pdfGenerator.generatePdf(reportData);
+      }
 
       // 3. Upload to storage
       const s3Key = `reports/${request.userId}/${reportId}.pdf`;

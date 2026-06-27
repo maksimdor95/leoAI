@@ -3,6 +3,8 @@ import {
   getRescueAttemptLimit,
   isMockReadySignal,
   isModeStartCommand,
+  isPrepReadySignal,
+  shouldEmitDiagnosticsPack,
   shouldTriggerFullRescue,
   shouldTriggerMicroRescue,
 } from '../interviewPrepProtocol';
@@ -41,5 +43,20 @@ describe('interviewPrepProtocol', () => {
   it('returns rescue limits by seniority', () => {
     expect(getRescueAttemptLimit('Junior')).toBe(3);
     expect(getRescueAttemptLimit('Lead')).toBe(1);
+  });
+
+  it('detects prep ready signal', () => {
+    expect(isPrepReadySignal('готов')).toBe(true);
+  });
+
+  it('emits diagnostics pack when threshold reached', () => {
+    expect(shouldEmitDiagnosticsPack(4, 'ответ')).toBe(true);
+    expect(shouldEmitDiagnosticsPack(2, 'итог')).toBe(true);
+    expect(shouldEmitDiagnosticsPack(2, 'продолжаем')).toBe(false);
+  });
+
+  it('supports shortened diagnostics threshold', () => {
+    expect(shouldEmitDiagnosticsPack(2, 'ответ', 2)).toBe(true);
+    expect(shouldEmitDiagnosticsPack(1, 'продолжаем', 2)).toBe(false);
   });
 });

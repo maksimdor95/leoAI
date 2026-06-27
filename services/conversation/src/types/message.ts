@@ -29,6 +29,17 @@ export type InterviewPrepMode =
   | 'star'
   | 'employer_questions';
 
+/** Pack-артефакт LAR (C3) — шпаргалка, карта пробелов, итог мока. */
+export type PrepPackType =
+  | 'diagnostics_map'
+  | 'theory_cheatsheet'
+  | 'rescue_cheatsheet'
+  | 'star_pack'
+  | 'case_structure'
+  | 'mock_summary'
+  | 'employer_questions'
+  | 'prep_complete';
+
 /**
  * Base message interface
  */
@@ -40,6 +51,8 @@ export interface BaseMessage {
   sessionId: string;
   /** Тред режима подготовки (диагностика, теория, …). */
   interviewMode?: InterviewPrepMode;
+  /** Метка Pack-артефакта для UI и PDF (§C3). */
+  packType?: PrepPackType;
 }
 
 /**

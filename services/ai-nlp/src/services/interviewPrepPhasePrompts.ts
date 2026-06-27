@@ -14,10 +14,19 @@ import {
   buildLanguageInstruction,
   buildRoleAdaptationPrompt,
   buildRolePackModePrompt,
-  buildSeniorityPrompt,
-  inferSeniority,
+  buildSeniorityIntensityPrompt,
+  resolveInterviewSeniority,
   isAnalyticsRolePack,
+  isCustomerSuccessRolePack,
+  isDesignRolePack,
+  isEngineeringRolePack,
+  isHrRolePack,
+  isLeadershipRolePack,
+  isMarketingRolePack,
+  isOperationsRolePack,
   isPmRolePack,
+  isQaRolePack,
+  isSalesRolePack,
   normalizeHistory,
   normalizeProfileText,
   resolveInterviewLanguage,
@@ -28,7 +37,11 @@ export type InterviewResponsePhase =
   | 'mock_active'
   | 'mock_micro_rescue'
   | 'mock_debrief'
-  | 'rescue';
+  | 'rescue'
+  | 'theory_learn'
+  | 'theory_check'
+  | 'diagnostics_pack'
+  | 'employer_questions_pack';
 
 export function buildCoachPersona(): string {
   return `# Role: LEO-Coach
@@ -102,11 +115,48 @@ Rules:
 - Under 800 characters if possible.`;
 }
 
+export function buildTheoryLearnProtocol(): string {
+  return `# Theory Phase: Learn
+- Deliver a micro-lesson ONLY (no grading, no interview pressure).
+- Structure: why it matters on this interview -> core idea -> how to say it in an answer -> typical mistake -> 3-line cheat sheet.
+- STRICTLY FORBIDDEN: assessment questions at the end. Do NOT ask the user to answer yet.
+- End with: "Когда будете готовы к мини-проверке — напишите «готов» или нажмите кнопку на экране."
+- No markdown headers or long bullet lists. Coach persona only.`;
+}
+
+export function buildTheoryCheckProtocol(): string {
+  return `# Theory Phase: Mini-Check
+- Ask exactly ONE short verification question on the lesson topic.
+- Do not start a new lesson. Coach persona only.
+- No markdown headers.`;
+}
+
+export function buildDiagnosticsPackProtocol(): string {
+  return `# Diagnostics Phase: Gap Map Pack
+- Diagnostics intake is complete. Switch to analyst + coach tone.
+- Output a structured gap map with exactly 3 zones: Сильные стороны / Пробелы / Приоритет на подготовку.
+- Under Пробелы: 3 specific fatal-gap style bullets tied to the vacancy.
+- Under Приоритет: 3 recommended next steps (theory topics or STAR/case), in order.
+- No motivational speech. No new interview questions.
+- Conversational Russian, no markdown headers.`;
+}
+
+export function buildEmployerQuestionsPackProtocol(): string {
+  return `# Employer Questions Phase: Pack
+- Generate a takeaway Pack of 8–12 high-signal questions for the candidate to ask the employer.
+- Group by purpose when useful: роль / команда / метрики успеха / риски / развитие.
+- Tailor to vacancy gaps and seniority; avoid generic filler.
+- Short lead-in (1–2 sentences), then numbered or bulleted questions.
+- Consultant persona; no interview grading.`;
+}
+
 export function buildPhaseSystemMessage(
   mode: InterviewPrepMode,
   profile?: PromptVacancyProfile,
-  responsePhase: InterviewResponsePhase = 'default'
+  responsePhase: InterviewResponsePhase = 'default',
+  candidateSeniority?: string
 ): AIMessage {
+  const seniorityBlock = buildSeniorityIntensityPrompt(profile, candidateSeniority);
   const sections: string[] = [buildLanguageInstruction(profile), buildAntiWaterRules()];
 
   switch (responsePhase) {
@@ -118,7 +168,7 @@ export function buildPhaseSystemMessage(
         buildInterviewerPersona(),
         buildMockActiveProtocol(),
         buildRoleAdaptationPrompt(profile),
-        buildSeniorityPrompt(profile)
+        seniorityBlock
       );
       break;
     case 'mock_micro_rescue':
@@ -131,17 +181,33 @@ export function buildPhaseSystemMessage(
     case 'mock_debrief':
       sections.push(buildCoachPersona(), buildAnalystPersona(), buildMockDebriefProtocol());
       break;
-    default:
+    case 'theory_learn':
       sections.push(
         buildCoachPersona(),
-        buildInterviewerPersona(),
+        buildTheoryLearnProtocol(),
         buildRoleAdaptationPrompt(profile),
-        buildSeniorityPrompt(profile)
+        seniorityBlock
       );
+      break;
+    case 'theory_check':
+      sections.push(buildCoachPersona(), buildTheoryCheckProtocol(), buildRoleAdaptationPrompt(profile));
+      break;
+    case 'diagnostics_pack':
+      sections.push(buildCoachPersona(), buildAnalystPersona(), buildDiagnosticsPackProtocol());
+      break;
+    case 'employer_questions_pack':
+      sections.push(buildCoachPersona(), buildEmployerQuestionsPackProtocol());
+      break;
+    default:
+      sections.push(buildCoachPersona(), buildRoleAdaptationPrompt(profile), seniorityBlock);
       break;
   }
 
-  if (responsePhase === 'default' || responsePhase === 'mock_active') {
+  if (
+    responsePhase === 'default' ||
+    responsePhase === 'mock_active' ||
+    responsePhase === 'theory_learn'
+  ) {
     const rolePack = buildRolePackModePrompt(mode, profile);
     if (rolePack) {
       sections.push(rolePack);
@@ -164,6 +230,7 @@ export function buildPhaseSystemMessage(
 export function buildPhaseRespondPrompt(
   params: InterviewRespondPromptParams & {
     responsePhase?: InterviewResponsePhase;
+    candidateSeniority?: string;
   }
 ): AIMessage {
   const phase = params.responsePhase ?? 'default';
@@ -187,13 +254,21 @@ export function buildPhaseRespondPrompt(
 - Stay in interviewer persona.`,
     mock_debrief: `- Deliver mock debrief using the summary in the user message.
 - Follow debrief protocol: exit interviewer role, 3+3+3, closing recommendation.`,
+    theory_learn: `- Deliver the micro-lesson per Theory Learn protocol.
+- NO verification question at the end.`,
+    theory_check: `- Ask exactly one mini-check question.`,
+    diagnostics_pack: `- Produce the gap map Pack per protocol. No new questions.`,
+    employer_questions_pack: `- Produce the employer questions Pack per protocol.
+- Structured list of questions is allowed and expected.`,
   };
 
-  const seniority = inferSeniority(params.vacancyProfile);
+  const seniority = resolveInterviewSeniority(params.vacancyProfile, params.candidateSeniority);
   const seniorityNote =
     seniority === 'junior'
       ? '- Candidate is junior: slightly more structure hints allowed in rescue only.'
-      : '';
+      : seniority === 'senior' || seniority === 'lead'
+        ? '- Candidate is senior/lead: minimize hand-holding; probe judgment and trade-offs.'
+        : '';
 
   return buildUserMessage(`Mode: ${params.mode}
 Response phase: ${phase}
@@ -217,7 +292,18 @@ ${phaseInstructions[phase]}
 ${seniorityNote}
 ${resolveInterviewLanguage(params.vacancyProfile) === 'ru' ? '- Respond in Russian.' : '- Respond in English.'}
 ${isPmRolePack(params.vacancyProfile) ? '- PM/Product role pack active.' : ''}
-${isAnalyticsRolePack(params.vacancyProfile) ? '- Analytics/Data role pack active.' : ''}`);
+${isAnalyticsRolePack(params.vacancyProfile) ? '- Analytics/Data role pack active.' : ''}
+${isEngineeringRolePack(params.vacancyProfile) ? '- Engineering/Systems role pack active.' : ''}
+${isQaRolePack(params.vacancyProfile) ? '- QA/Testing role pack active.' : ''}
+${isSalesRolePack(params.vacancyProfile) ? '- Sales/Commercial role pack active.' : ''}
+${isOperationsRolePack(params.vacancyProfile) ? '- Operations/Delivery role pack active.' : ''}
+${isDesignRolePack(params.vacancyProfile) ? '- Design/UX role pack active.' : ''}
+${isLeadershipRolePack(params.vacancyProfile) ? '- Leadership/Behavioral role pack active.' : ''}
+${isMarketingRolePack(params.vacancyProfile) ? '- Marketing/Growth role pack active.' : ''}
+${isCustomerSuccessRolePack(params.vacancyProfile) ? '- Customer Success role pack active.' : ''}
+${isHrRolePack(params.vacancyProfile) ? '- HR/People role pack active.' : ''}
+${params.shortenedDiagnostics && params.mode === 'diagnostics' ? '- Shortened diagnostics for returning candidate in same role track.' : ''}
+${params.mode === 'star' && params.starBank?.length ? `- STAR bank active (${params.starBank.length} stories).` : ''}`);
 }
 
 export function gradingSupportsRescue(grading?: InterviewAnswerGrade): boolean {

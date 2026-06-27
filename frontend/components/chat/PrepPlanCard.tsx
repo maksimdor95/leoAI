@@ -5,15 +5,23 @@ import {
   INTERVIEW_PREP_MODE_TAB_LABELS,
   PREP_DAY_SUGGESTED_MODES,
 } from '@/lib/interviewPrepModes';
+import { Tooltip } from 'antd';
 
 type PrepPlanCardProps = {
   title: string;
   planDays: PrepPlanDayItem[];
   compact?: boolean;
   onModeSelect?: (mode: InterviewPrepMode) => void;
+  mockGateBlockers?: string[];
 };
 
-export function PrepPlanCard({ title, planDays, compact, onModeSelect }: PrepPlanCardProps) {
+export function PrepPlanCard({
+  title,
+  planDays,
+  compact,
+  onModeSelect,
+  mockGateBlockers = [],
+}: PrepPlanCardProps) {
   if (planDays.length === 0) {
     return null;
   }
@@ -50,13 +58,23 @@ export function PrepPlanCard({ title, planDays, compact, onModeSelect }: PrepPla
                   <span className="text-[9px] sm:text-[10px] text-slate-500 shrink-0">
                     Режимы:
                   </span>
-                  {suggestedModes.map((mode) =>
-                    onModeSelect ? (
+                  {suggestedModes.map((mode) => {
+                    const mockBlocked = mode === 'mock' && mockGateBlockers.length > 0;
+                    const chip = onModeSelect ? (
                       <button
                         key={`${day.day}-${mode}`}
                         type="button"
-                        onClick={() => onModeSelect(mode)}
-                        className="inline-flex h-6 shrink-0 items-center rounded-full border border-green-500/25 bg-green-500/10 px-2 text-[10px] font-medium text-green-200/95 transition-colors hover:border-green-400/50 hover:bg-green-500/20"
+                        disabled={mockBlocked}
+                        onClick={() => {
+                          if (!mockBlocked) {
+                            onModeSelect(mode);
+                          }
+                        }}
+                        className={`inline-flex h-6 shrink-0 items-center rounded-full border px-2 text-[10px] font-medium transition-colors ${
+                          mockBlocked
+                            ? 'border-white/5 bg-white/[0.02] text-slate-600 cursor-not-allowed'
+                            : 'border-green-500/25 bg-green-500/10 text-green-200/95 hover:border-green-400/50 hover:bg-green-500/20'
+                        }`}
                       >
                         {INTERVIEW_PREP_MODE_TAB_LABELS[mode]}
                       </button>
@@ -67,8 +85,30 @@ export function PrepPlanCard({ title, planDays, compact, onModeSelect }: PrepPla
                       >
                         {INTERVIEW_PREP_MODE_TAB_LABELS[mode]}
                       </span>
-                    )
-                  )}
+                    );
+
+                    if (mockBlocked) {
+                      return (
+                        <Tooltip
+                          key={`${day.day}-${mode}`}
+                          title={
+                            <div className="max-w-xs space-y-1">
+                              <div className="font-medium">Мок пока недоступен</div>
+                              <ul className="list-disc pl-4 text-xs">
+                                {mockGateBlockers.map((item) => (
+                                  <li key={item}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          }
+                        >
+                          <span>{chip}</span>
+                        </Tooltip>
+                      );
+                    }
+
+                    return chip;
+                  })}
                 </div>
               ) : null}
             </div>

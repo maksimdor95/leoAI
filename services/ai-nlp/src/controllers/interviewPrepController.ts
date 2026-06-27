@@ -14,6 +14,7 @@ import {
   inferRoleTrack,
   InterviewAnswerGrade,
   InterviewPrepMode,
+  InterviewRespondPromptParams,
   parseJsonObject,
   PromptVacancyProfile,
 } from '../services/interviewPrepPrompts';
@@ -82,6 +83,14 @@ const extractVacancySchema = z.object({
 const generatePlanSchema = z.object({
   vacancyProfile: vacancyProfileSchema,
   availableDays: z.number().min(1).max(14).optional(),
+  candidateSeniority: z.string().optional(),
+  prepContext: z
+    .object({
+      priorFatalGaps: z.array(z.string()).optional(),
+      prepSessionNumber: z.number().min(1).optional(),
+      sameRoleTrack: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 const respondSchema = z.object({
@@ -95,7 +104,17 @@ const respondSchema = z.object({
     .optional(),
   grading: interviewGradeSchema.optional(),
   responsePhase: z
-    .enum(['default', 'mock_active', 'mock_micro_rescue', 'mock_debrief', 'rescue'])
+    .enum([
+      'default',
+      'mock_active',
+      'mock_micro_rescue',
+      'mock_debrief',
+      'rescue',
+      'theory_learn',
+      'theory_check',
+      'diagnostics_pack',
+      'employer_questions_pack',
+    ])
     .optional(),
 });
 
@@ -211,6 +230,284 @@ function getFallbackGrade(profile?: PromptVacancyProfile): InterviewAnswerGrade 
       ],
     };
   }
+  if (inferRoleTrack(profile) === 'engineering_systems') {
+    return {
+      overallScore: 5,
+      dimensionScores: {
+        structure: 5,
+        depth: 5,
+        metrics: 4,
+        tradeOffs: 4,
+        communication: 6,
+        seniorityFit: 5,
+      },
+      fatalGaps: [
+        'Не хватает инженерной глубины: требований, масштаба, trade-offs, failure modes или операционной ответственности.',
+      ],
+      strengths: ['Есть попытка технического рассуждения, но решение пока недостаточно обосновано.'],
+      improvements: [
+        'Сначала уточни требования и допущения по нагрузке/масштабу.',
+        'Покажи архитектурные trade-offs и что сломается первым.',
+        'Добавь observability, rollout и план эксплуатации.',
+      ],
+      followUpToProbe:
+        'Какие требования и масштаб ты заложишь, и какие trade-offs сделаешь между latency, cost и complexity?',
+      modelStructure: [
+        'Уточни требования и scale assumptions',
+        'Опиши API/контракты и data model',
+        'Предложи архитектуру и ключевые компоненты',
+        'Назови bottlenecks и failure modes',
+        'Объясни trade-offs и план наблюдаемости/релиза',
+      ],
+    };
+  }
+  if (inferRoleTrack(profile) === 'qa_quality') {
+    return {
+      overallScore: 5,
+      dimensionScores: {
+        structure: 5,
+        depth: 5,
+        metrics: 4,
+        tradeOffs: 4,
+        communication: 6,
+        seniorityFit: 5,
+      },
+      fatalGaps: [
+        'Не хватает QA-мышления: risk-based стратегии, приоритизации, критериев релиза или чёткой коммуникации дефектов.',
+      ],
+      strengths: ['Есть попытка говорить о тестировании, но стратегия пока слишком общая.'],
+      improvements: [
+        'Начни с рисков и критичных сценариев, а не с «проверю всё».',
+        'Опиши типы тестов, пирамиду и что автоматизируешь первым.',
+        'Добавь entry/exit criteria и go/no-go для релиза.',
+      ],
+      followUpToProbe:
+        'Какие риски ты приоритизируешь первыми и по каким критериям примешь решение о релизе?',
+      modelStructure: [
+        'Уточни scope фичи и ограничения релиза',
+        'Выдели highest-risk области',
+        'Опиши test strategy и coverage',
+        'Определи automation scope и данные/окружения',
+        'Сформулируй release recommendation и метрики качества',
+      ],
+    };
+  }
+  if (inferRoleTrack(profile) === 'sales_commercial') {
+    return {
+      overallScore: 5,
+      dimensionScores: {
+        structure: 5,
+        depth: 5,
+        metrics: 4,
+        tradeOffs: 4,
+        communication: 6,
+        seniorityFit: 5,
+      },
+      fatalGaps: [
+        'Не хватает sales-мышления: discovery, квалификации, работы с возражениями, next step или цифр по сделке/пайплайну.',
+      ],
+      strengths: ['Есть попытка продавать, но структура разговора и доказательства пока слабые.'],
+      improvements: [
+        'Начни с вопросов о боли, контексте и критериях решения, а не с питча продукта.',
+        'Квалифицируй fit, бюджет, ЛПР и сроки.',
+        'Заверши конкретным next step и назови метрики: размер сделки, конверсия, quota.',
+      ],
+      followUpToProbe:
+        'Какие discovery-вопросы ты задашь первыми и как поймёшь, что сделка реальна?',
+      modelStructure: [
+        'Уточни контекст покупателя и цель разговора',
+        'Проведи discovery и квалификацию',
+        'Свяжи ценность с болью клиента',
+        'Отработай ключевое возражение',
+        'Зафиксируй next step и метрики сделки',
+      ],
+    };
+  }
+  if (inferRoleTrack(profile) === 'operations_delivery') {
+    return {
+      overallScore: 5,
+      dimensionScores: {
+        structure: 5,
+        depth: 5,
+        metrics: 4,
+        tradeOffs: 4,
+        communication: 6,
+        seniorityFit: 5,
+      },
+      fatalGaps: [
+        'Не хватает delivery-мышления: зависимостей, рисков, приоритизации, эскалации или коммуникации со стейкхолдерами.',
+      ],
+      strengths: ['Есть попытка описать процесс, но план восстановления и trade-offs пока слабые.'],
+      improvements: [
+        'Сначала уточни scope, дедлайн, зависимости и стейкхолдеров.',
+        'Выдели top risks и critical path.',
+        'Покажи, что descope/эскалируешь и как сообщишь плохие новости.',
+      ],
+      followUpToProbe:
+        'Что ты сдвинешь в первую очередь при срыве дедлайна и кому эскалируешь?',
+      modelStructure: [
+        'Уточни scope, сроки и стейкхолдеров',
+        'Составь карту зависимостей и critical path',
+        'Приоритизируй риски и действия recovery',
+        'Определи trade-offs scope/time/quality',
+        'Опиши коммуникацию и меры против повторения',
+      ],
+    };
+  }
+  if (inferRoleTrack(profile) === 'design_ux') {
+    return {
+      overallScore: 5,
+      dimensionScores: {
+        structure: 5,
+        depth: 5,
+        metrics: 4,
+        tradeOffs: 4,
+        communication: 6,
+        seniorityFit: 5,
+      },
+      fatalGaps: [
+        'Не хватает UX-мышления: пользователя, доказательств, usability trade-offs, метрик успеха или handoff.',
+      ],
+      strengths: ['Есть попытка говорить о дизайне, но решение пока недостаточно обосновано.'],
+      improvements: [
+        'Сначала сформулируй user problem и business goal.',
+        'Покажи research/evidence и trade-offs между вариантами.',
+        'Добавь метрики успеха и план валидации.',
+      ],
+      followUpToProbe:
+        'Какую пользовательскую проблему ты решаешь и как измеришь успех дизайна?',
+      modelStructure: [
+        'Уточни пользователя и job-to-be-done',
+        'Опиши evidence/research',
+        'Предложи варианты и trade-offs',
+        'Назови usability риски и edge cases',
+        'Определи метрики и план валидации',
+      ],
+    };
+  }
+  if (inferRoleTrack(profile) === 'leadership_behavioral') {
+    return {
+      overallScore: 5,
+      dimensionScores: {
+        structure: 5,
+        depth: 5,
+        metrics: 4,
+        tradeOffs: 4,
+        communication: 6,
+        seniorityFit: 5,
+      },
+      fatalGaps: [
+        'Не хватает leadership-сигналов: личной ответственности, влияния, trade-offs, делегирования или измеримого результата для команды/организации.',
+      ],
+      strengths: ['Есть попытка leadership-нарратива, но ownership и impact пока слабые.'],
+      improvements: [
+        'Говори от первого лица: что именно ТЫ решил и сделал.',
+        'Покажи конфликт/stakeholder trade-off и как ты повлиял на исход.',
+        'Добавь метрики команды или бизнеса.',
+      ],
+      followUpToProbe:
+        'Какое конкретное решение ты принял и какой измеримый результат получила команда?',
+      modelStructure: [
+        'Контекст и stakes',
+        'Твоя роль и ответственность',
+        'Решение и trade-offs',
+        'Действия по влиянию/делегированию',
+        'Измеримый результат и урок',
+      ],
+    };
+  }
+  if (inferRoleTrack(profile) === 'marketing_growth') {
+    return {
+      overallScore: 5,
+      dimensionScores: {
+        structure: 5,
+        depth: 5,
+        metrics: 4,
+        tradeOffs: 4,
+        communication: 6,
+        seniorityFit: 5,
+      },
+      fatalGaps: [
+        'Не хватает marketing-мышления: метрик воронки, channel trade-offs, гипотез, attribution или ROI.',
+      ],
+      strengths: ['Есть попытка говорить о маркетинге, но измеримость и стратегия пока слабые.'],
+      improvements: [
+        'Начни с цели, аудитории и primary metric.',
+        'Покажи channel mix и budget trade-offs.',
+        'Добавь план измерения и attribution caveats.',
+      ],
+      followUpToProbe: 'Какую метрику возьмёшь главной и как докажешь вклад канала?',
+      modelStructure: [
+        'Цель и аудитория',
+        'Метрика и baseline',
+        'Гипотезы и каналы',
+        'Бюджет/trade-offs',
+        'Измерение и итерация',
+      ],
+    };
+  }
+  if (inferRoleTrack(profile) === 'customer_success') {
+    return {
+      overallScore: 5,
+      dimensionScores: {
+        structure: 5,
+        depth: 5,
+        metrics: 4,
+        tradeOffs: 4,
+        communication: 6,
+        seniorityFit: 5,
+      },
+      fatalGaps: [
+        'Не хватает CS-мышления: диагностики риска, эскалации, плана действий или метрик retention/expansion.',
+      ],
+      strengths: ['Есть попытка говорить о клиентах, но проактивность и метрики пока слабые.'],
+      improvements: [
+        'Диагностируй риск и root cause, а не только «свяжусь с клиентом».',
+        'Покажи план действий и вовлечение внутренних команд.',
+        'Добавь метрики health, adoption, churn или expansion.',
+      ],
+      followUpToProbe:
+        'Какие сигналы риска ты увидишь первыми и что сделаешь в первые 48 часов?',
+      modelStructure: [
+        'Контекст аккаунта и impact',
+        'Сигналы риска',
+        'План действий и owners',
+        'Коммуникация с клиентом',
+        'Метрики и follow-up',
+      ],
+    };
+  }
+  if (inferRoleTrack(profile) === 'hr_people') {
+    return {
+      overallScore: 5,
+      dimensionScores: {
+        structure: 5,
+        depth: 5,
+        metrics: 4,
+        tradeOffs: 4,
+        communication: 6,
+        seniorityFit: 5,
+      },
+      fatalGaps: [
+        'Не хватает HR/recruiting-мышления: калибровки роли, sourcing, оценки, pipeline-метрик или работы с hiring manager.',
+      ],
+      strengths: ['Есть попытка описать найм, но процесс и метрики пока слабые.'],
+      improvements: [
+        'Сначала откалибруй профиль и success criteria.',
+        'Опиши sourcing + assessment plan.',
+        'Добавь pipeline metrics и партнёрство с hiring manager.',
+      ],
+      followUpToProbe:
+        'Как ты откалибруешь роль и какие метрики pipeline будешь отслеживать?',
+      modelStructure: [
+        'Профиль и success criteria',
+        'Sourcing plan',
+        'Assessment/scorecard',
+        'Pipeline metrics',
+        'Риски и candidate experience',
+      ],
+    };
+  }
   return fallbackGrade;
 }
 
@@ -304,6 +601,8 @@ export async function generatePrepPlan(req: Request, res: Response) {
       buildPrepPlanPrompt({
         vacancyProfile: parsed.vacancyProfile,
         availableDays: days,
+        candidateSeniority: parsed.candidateSeniority,
+        prepContext: parsed.prepContext,
       }),
       buildJsonOnlyInstruction(`{
   "plan": [
@@ -330,16 +629,61 @@ export async function generatePrepPlan(req: Request, res: Response) {
   }
 }
 
+function resolveRetentionPromptParams(collectedData?: Record<string, unknown>): {
+  starBank?: InterviewRespondPromptParams['starBank'];
+  shortenedDiagnostics?: boolean;
+} {
+  if (!collectedData) {
+    return {};
+  }
+  const prepRetention = collectedData.prepRetention as { shortenedDiagnostics?: boolean } | undefined;
+  const starBankRaw = collectedData.starBank;
+  const starBank = Array.isArray(starBankRaw)
+    ? starBankRaw
+        .filter((entry) => entry && typeof entry === 'object')
+        .map((entry) => {
+          const row = entry as {
+            role?: string;
+            userMessage?: string;
+            modelStructure?: string[];
+            overallScore?: number;
+          };
+          return {
+            role: row.role,
+            userMessage: row.userMessage ?? '',
+            modelStructure: row.modelStructure,
+            overallScore: row.overallScore,
+          };
+        })
+        .filter((entry) => entry.userMessage.trim().length > 0)
+    : undefined;
+
+  return {
+    starBank,
+    shortenedDiagnostics: Boolean(prepRetention?.shortenedDiagnostics),
+  };
+}
+
 export async function respondToInterviewMode(req: Request, res: Response) {
   try {
     const parsed = respondSchema.parse(req.body);
     const responsePhase: InterviewResponsePhase = parsed.responsePhase ?? 'default';
     const usePhasePrompts = responsePhase !== 'default';
+    const candidateSeniority =
+      typeof parsed.collectedData?.candidateSeniority === 'string'
+        ? parsed.collectedData.candidateSeniority
+        : undefined;
+    const retentionParams = resolveRetentionPromptParams(parsed.collectedData);
 
     const messages = [
       usePhasePrompts
-        ? buildPhaseSystemMessage(parsed.mode, parsed.vacancyProfile, responsePhase)
-        : buildInterviewSystemMessage(parsed.mode, parsed.vacancyProfile),
+        ? buildPhaseSystemMessage(
+            parsed.mode,
+            parsed.vacancyProfile,
+            responsePhase,
+            candidateSeniority
+          )
+        : buildInterviewSystemMessage(parsed.mode, parsed.vacancyProfile, candidateSeniority),
       usePhasePrompts
         ? buildPhaseRespondPrompt({
             mode: parsed.mode,
@@ -349,6 +693,8 @@ export async function respondToInterviewMode(req: Request, res: Response) {
             conversationHistory: parsed.conversationHistory,
             grading: parsed.grading,
             responsePhase,
+            candidateSeniority,
+            ...retentionParams,
           })
         : buildRespondPrompt({
             mode: parsed.mode,
@@ -357,6 +703,7 @@ export async function respondToInterviewMode(req: Request, res: Response) {
             prepPlan: parsed.prepPlan,
             conversationHistory: parsed.conversationHistory,
             grading: parsed.grading,
+            ...retentionParams,
           }),
     ];
 

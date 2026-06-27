@@ -1084,7 +1084,7 @@ app.get('/api/chat/session/:id/report-preview', authenticateRequest, async (req,
       // Report не дергает conversation по сети — передаём collectedData после проверки сессии здесь.
       const response = await axios.post(
         `${reportServiceUrl}/api/report/preview-compute`,
-        { collectedData: session.metadata.collectedData || {} },
+        { collectedData: session.metadata.collectedData || {}, sessionId },
         {
           headers: {
             Authorization: bearer,

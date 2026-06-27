@@ -68,6 +68,11 @@ interface SendResumeEmailResponse extends ChatSession {
   assistantAudio?: AssistantAudioPayload | null;
 }
 
+export type ChatMessageDelivery = {
+  message: Message;
+  skipAnimation?: boolean;
+};
+
 class ChatApiClient {
   private baseUrl: string;
   private token: string | null = null;
@@ -80,7 +85,7 @@ class ChatApiClient {
   // Event callbacks
   public onSessionJoined?: (sessionId: string, metadata?: SessionMetadata) => void;
   public onHistory?: (messages: Message[]) => void;
-  public onMessage?: (message: Message) => void;
+  public onMessage?: (payload: ChatMessageDelivery) => void;
   public onError?: (error: { message: string }) => void;
   public onSendStateChange?: (state: 'sending' | 'idle') => void;
   public onConnected?: () => void;
@@ -250,13 +255,13 @@ class ChatApiClient {
 
       // Emit user message
       if (response.userMessage) {
-        this.onMessage?.(response.userMessage);
+        this.onMessage?.({ message: response.userMessage, skipAnimation: true });
       }
 
       // Emit assistant message
       if (response.assistantMessage) {
         this.emitAssistantAudio(response.assistantAudio, response.assistantMessage);
-        this.onMessage?.(response.assistantMessage);
+        this.onMessage?.({ message: response.assistantMessage });
       }
 
       this.lastMessageCount = response.messages.length;
@@ -312,12 +317,12 @@ class ChatApiClient {
       }
 
       if (response.userMessage) {
-        this.onMessage?.(response.userMessage);
+        this.onMessage?.({ message: response.userMessage, skipAnimation: true });
       }
 
       if (response.assistantMessage) {
         this.emitAssistantAudio(response.assistantAudio, response.assistantMessage);
-        this.onMessage?.(response.assistantMessage);
+        this.onMessage?.({ message: response.assistantMessage });
       }
 
       this.lastMessageCount = response.messages.length;
@@ -352,7 +357,7 @@ class ChatApiClient {
 
       if (response.assistantMessage) {
         this.emitAssistantAudio(response.assistantAudio, response.assistantMessage);
-        this.onMessage?.(response.assistantMessage);
+        this.onMessage?.({ message: response.assistantMessage });
       }
 
       this.lastMessageCount = response.messages.length;
@@ -393,7 +398,27 @@ class ChatApiClient {
             newMessages.find((msg) => msg.id === response.assistantAudio?.messageId)) ||
           [...newMessages].reverse().find((msg) => msg.role === 'assistant');
         this.emitAssistantAudio(response.assistantAudio, audioTarget ?? null);
-        newMessages.forEach((msg) => this.onMessage?.(msg));
+
+        const lastAnimatableIndex = (() => {
+          for (let i = newMessages.length - 1; i >= 0; i -= 1) {
+            const msg = newMessages[i];
+            if (
+              msg.role === 'assistant' &&
+              (msg.type === 'question' || (msg.type === 'text' && msg.interviewMode))
+            ) {
+              return i;
+            }
+          }
+          return -1;
+        })();
+
+        newMessages.forEach((msg, index) => {
+          if (!this.onMessage) return;
+          this.onMessage({
+            message: msg,
+            skipAnimation: lastAnimatableIndex >= 0 && index !== lastAnimatableIndex,
+          });
+        });
       }
 
       this.lastMessageCount = response.messages.length;
@@ -420,10 +445,10 @@ class ChatApiClient {
 
     if (response.assistantMessage) {
       this.emitAssistantAudio(response.assistantAudio, response.assistantMessage);
-      this.onMessage?.(response.assistantMessage);
+      this.onMessage?.({ message: response.assistantMessage });
     }
     if (response.downloadCommand) {
-      this.onMessage?.(response.downloadCommand);
+      this.onMessage?.({ message: response.downloadCommand, skipAnimation: true });
     }
 
     this.lastMessageCount = response.messages.length;
@@ -477,10 +502,10 @@ class ChatApiClient {
 
     if (response.assistantMessage) {
       this.emitAssistantAudio(response.assistantAudio, response.assistantMessage);
-      this.onMessage?.(response.assistantMessage);
+      this.onMessage?.({ message: response.assistantMessage });
     }
     if (response.downloadCommand) {
-      this.onMessage?.(response.downloadCommand);
+      this.onMessage?.({ message: response.downloadCommand, skipAnimation: true });
     }
 
     this.lastMessageCount = response.messages.length;
@@ -534,7 +559,7 @@ class ChatApiClient {
 
     if (response.assistantMessage) {
       this.emitAssistantAudio(response.assistantAudio, response.assistantMessage);
-      this.onMessage?.(response.assistantMessage);
+      this.onMessage?.({ message: response.assistantMessage });
     }
 
     this.lastMessageCount = response.messages.length;
@@ -561,7 +586,7 @@ class ChatApiClient {
         // Check for new messages
         if (session.messages.length > this.lastMessageCount) {
           const newMessages = session.messages.slice(this.lastMessageCount);
-          newMessages.forEach((msg) => this.onMessage?.(msg));
+          newMessages.forEach((msg) => this.onMessage?.({ message: msg }));
           this.lastMessageCount = session.messages.length;
         }
       } catch (error) {
@@ -669,7 +694,7 @@ export function createChatApi(
     onDisconnected?: () => void;
     onSessionJoined?: (payload: { sessionId: string; metadata?: SessionMetadata }) => void;
     onHistory?: (payload: { messages: Message[] }) => void;
-    onMessage?: (payload: { message: Message }) => void;
+    onMessage?: (payload: ChatMessageDelivery) => void;
     onAssistantAudio?: (payload: {
       messageId: string;
       audioBase64: string;
@@ -692,7 +717,7 @@ export function createChatApi(
     client.onHistory = (messages) => config.onHistory?.({ messages });
   }
   if (config.onMessage) {
-    client.onMessage = (message) => config.onMessage?.({ message });
+    client.onMessage = (payload) => config.onMessage?.(payload);
   }
   if (config.onAssistantAudio) {
     client.onAssistantAudio = config.onAssistantAudio;

@@ -4,6 +4,11 @@ import { Button } from 'antd';
 import type { CommandItem, InfoCardMessage, InterviewPrepMode } from '@/types/chat';
 import { CommandBar } from '@/components/chat/CommandBar';
 import { PrepPlanCard } from '@/components/chat/PrepPlanCard';
+import { PrepTodayPanel } from '@/components/chat/PrepTodayPanel';
+import { PrepArtifactsPanel } from '@/components/chat/PrepArtifactsPanel';
+import { PrepRetentionPanel } from '@/components/chat/PrepRetentionPanel';
+import type { PrepProgress } from '@/lib/prepActivities';
+import type { PrepArtifact } from '@/lib/prepArtifacts';
 
 const PREP_PLAN_TITLE = 'План подготовки';
 
@@ -24,6 +29,13 @@ export type InterviewPrepInfoOverviewProps = {
   hidePrepPlan?: boolean;
   onOpenPrepPlan?: () => void;
   onPrepModeSelect?: (mode: InterviewPrepMode) => void;
+  prepProgress?: PrepProgress | null;
+  collectedData?: Record<string, unknown>;
+  onActivityStart?: (mode: InterviewPrepMode, startMessage: string) => void;
+  mockGateBlockers?: string[];
+  onDownloadReport?: () => void;
+  prepArtifacts?: PrepArtifact[];
+  onOpenArtifactInChat?: (artifact: PrepArtifact) => void;
 };
 
 export function InterviewPrepInfoOverview({
@@ -35,6 +47,13 @@ export function InterviewPrepInfoOverview({
   hidePrepPlan = false,
   onOpenPrepPlan,
   onPrepModeSelect,
+  prepProgress,
+  collectedData,
+  onActivityStart,
+  mockGateBlockers = [],
+  onDownloadReport,
+  prepArtifacts = [],
+  onOpenArtifactInChat,
 }: InterviewPrepInfoOverviewProps) {
   const hasCommands = Boolean(commands?.length && onCommandSelect);
   const gridClass = compact
@@ -101,12 +120,32 @@ export function InterviewPrepInfoOverview({
         </Button>
       ) : null}
 
+      {collectedData ? <PrepRetentionPanel collectedData={collectedData} compact={compact} /> : null}
+
+      {!hidePrepPlan && prepProgress && collectedData && onActivityStart ? (
+        <PrepTodayPanel
+          progress={prepProgress}
+          collectedData={collectedData}
+          onActivityStart={onActivityStart}
+          onDownloadReport={onDownloadReport}
+        />
+      ) : null}
+
+      {!hidePrepPlan ? (
+        <PrepArtifactsPanel
+          artifacts={prepArtifacts}
+          compact={compact}
+          onOpenInChat={onOpenArtifactInChat}
+        />
+      ) : null}
+
       {!hidePrepPlan && prepPlanCard?.planDays && prepPlanCard.planDays.length > 0 ? (
         <PrepPlanCard
           title={prepPlanCard.title}
           planDays={prepPlanCard.planDays}
           compact={compact}
           onModeSelect={onPrepModeSelect}
+          mockGateBlockers={mockGateBlockers}
         />
       ) : !hidePrepPlan && prepPlanCard ? (
         <div className="rounded-lg border border-white/10 bg-white/5 px-2.5 sm:px-3 py-2.5">

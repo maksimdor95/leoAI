@@ -9,12 +9,21 @@ import {
 } from '@/components/chat/InterviewReportCards';
 import { ProfileCompletionCards } from '@/components/chat/ProfileCompletionCards';
 import { InterviewPrepInfoOverview } from '@/components/chat/InterviewPrepInfoOverview';
+import { PrepPackStageCard } from '@/components/chat/PrepPackStageCard';
+import type { PrepPackType } from '@/types/chat';
 
 const VACANCY_PROFILE_CARD_TITLE = 'Профиль вакансии и план подготовки';
 
 export type PrepModeStageContent = {
   modeLabel: string;
   content: string;
+  badge?: 'rescue' | 'micro_rescue';
+  mockBriefing?: boolean;
+  mockQuestionLabel?: string;
+  onMockStart?: () => void;
+  packType?: PrepPackType;
+  theoryLearnReady?: boolean;
+  onTheoryReady?: () => void;
 };
 
 type StagePanelProps = {
@@ -185,12 +194,62 @@ export function StagePanel({
       ) : showPrepModeContent && prepModeContent ? (
         <Fragment>
           <div className="space-y-2 text-left w-full max-h-[min(52vh,28rem)] overflow-y-auto chat-history-scroll pr-1">
-            <div className="text-xs uppercase tracking-[0.4em] text-green-300/70">
-              {prepModeContent.modeLabel}
+            {prepModeContent.packType ? (
+              <PrepPackStageCard
+                packType={prepModeContent.packType}
+                modeLabel={prepModeContent.modeLabel}
+                content={prepModeContent.content}
+              />
+            ) : (
+              <>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-xs uppercase tracking-[0.4em] text-green-300/70">
+                {prepModeContent.modeLabel}
+              </div>
+              {prepModeContent.mockQuestionLabel ? (
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium text-slate-300">
+                  {prepModeContent.mockQuestionLabel}
+                </span>
+              ) : null}
+              {prepModeContent.badge === 'rescue' ? (
+                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+                  Разбор коуча
+                </span>
+              ) : prepModeContent.badge === 'micro_rescue' ? (
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-200/80">
+                  Подсказка структуры
+                </span>
+              ) : null}
             </div>
             <div className="text-sm sm:text-base text-slate-100 leading-relaxed whitespace-pre-line break-words">
               {prepModeContent.content}
             </div>
+              </>
+            )}
+            {prepModeContent.theoryLearnReady && prepModeContent.onTheoryReady ? (
+              <div className="pt-1">
+                <Button
+                  type="primary"
+                  size="middle"
+                  onClick={prepModeContent.onTheoryReady}
+                  className="!rounded-full !border-none !bg-gradient-to-r !from-violet-500 !to-violet-600 !text-sm !font-semibold !shadow-lg hover:!from-violet-400 hover:!to-violet-500"
+                >
+                  Готов к проверке
+                </Button>
+              </div>
+            ) : null}
+            {prepModeContent.mockBriefing && prepModeContent.onMockStart ? (
+              <div className="pt-1">
+                <Button
+                  type="primary"
+                  size="middle"
+                  onClick={prepModeContent.onMockStart}
+                  className="!rounded-full !border-none !bg-gradient-to-r !from-green-500 !to-green-600 !text-sm !font-semibold !shadow-lg hover:!from-green-400 hover:!to-green-500"
+                >
+                  Начать мок
+                </Button>
+              </div>
+            ) : null}
             {interviewPrepOnOpenOverview ? (
               <div className="pt-2">
                 <Button
