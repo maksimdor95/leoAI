@@ -137,7 +137,7 @@ export interface ConversationPreview {
   messageCount: number;
   status: string;
   collectedData: Record<string, unknown>;
-  product?: 'jack' | 'wannanew';
+  product?: 'jack' | 'wannanew' | 'interview-prep';
   scenarioId?: string;
 }
 
