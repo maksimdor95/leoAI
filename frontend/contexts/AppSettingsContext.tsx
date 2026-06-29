@@ -11,7 +11,6 @@ import {
 } from 'react';
 import { readAppSettings, writeAppSettings } from '@/lib/appSettingsStorage';
 import {
-  DEFAULT_APP_SETTINGS,
   type AppLocale,
   type AppSettings,
   type AppTheme,
@@ -36,13 +35,11 @@ function applySettingsToDocument(settings: AppSettings): void {
 }
 
 export function AppSettingsProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [settings, setSettings] = useState<AppSettings>(() => readAppSettings());
 
   useEffect(() => {
-    const stored = readAppSettings();
-    setSettings(stored);
-    applySettingsToDocument(stored);
-  }, []);
+    applySettingsToDocument(settings);
+  }, [settings]);
 
   const persist = useCallback((updater: AppSettings | ((prev: AppSettings) => AppSettings)) => {
     setSettings((prev) => {

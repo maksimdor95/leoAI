@@ -11,6 +11,11 @@ html {
   overflow-x: hidden;
 }
 
+html[data-theme='leo-dark'] body {
+  background-color: #050913;
+  color: #fff;
+}
+
 body {
   margin: 0;
   padding: 0;

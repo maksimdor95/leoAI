@@ -3,6 +3,8 @@ import { localeToTtsLang, normalizeTtsVoice } from '@/lib/ttsVoices';
 
 const STORAGE_KEY = 'leo.app.settings.v1';
 
+export const APP_SETTINGS_STORAGE_KEY = STORAGE_KEY;
+
 export function readAppSettings(): AppSettings {
   if (typeof window === 'undefined') {
     return DEFAULT_APP_SETTINGS;

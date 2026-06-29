@@ -5,6 +5,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { AppSettingsProvider } from '@/contexts/AppSettingsContext';
 import { GlobalAuthModal } from '@/components/GlobalAuthModal';
 import { PostHogProvider } from '@/components/PostHogProvider';
+import { THEME_INIT_SCRIPT } from '@/lib/themeInitScript';
 import './globals.css';
 import '../styles/theme-hume.css';
 
@@ -35,8 +36,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" className={`${humeSans.variable} ${humeMono.variable}`}>
-      <body>
+    <html lang="ru" suppressHydrationWarning className={`${humeSans.variable} ${humeMono.variable}`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body suppressHydrationWarning>
         <ConfigProvider>
           <PostHogProvider>
             <AppSettingsProvider>
