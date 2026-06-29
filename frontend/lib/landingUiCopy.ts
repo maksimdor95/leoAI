@@ -24,7 +24,7 @@ type LandingStrings = {
   heroBadge: string;
   heroSubtitle: string;
   heroCta: string;
-  settingsChip: string;
+  settingsLanguageHint: string;
   previewEyebrow: string;
   previewTitle: string;
   previewLiveBadge: string;

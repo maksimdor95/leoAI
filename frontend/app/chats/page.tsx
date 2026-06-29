@@ -26,7 +26,7 @@ import { useHumeTheme } from '@/lib/useHumeTheme';
 
 const { Content } = Layout;
 
-function productChipLabel(product: string): string {
+function productChipLabel(product: string | undefined): string {
   if (product === 'wannanew') return 'Leo';
   if (product === 'interview-prep') return 'Prep';
   return 'LEO';
