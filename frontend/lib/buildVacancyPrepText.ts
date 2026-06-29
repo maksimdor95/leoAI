@@ -1,3 +1,5 @@
+import { uniqueLocationLabels } from '@/lib/locationLabels';
+
 export type VacancyPrepJobInput = {
   title: string;
   company: string;
@@ -12,7 +14,7 @@ export type VacancyPrepJobInput = {
   salary_max?: number | null;
 };
 
-function stripHtmlFromText(html: string): string {
+export function stripHtmlFromText(html: string): string {
   return html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
@@ -48,8 +50,9 @@ export function buildVacancyPrepText(job: VacancyPrepJobInput): string {
     `Компания: ${job.company}`,
   ];
 
-  if (job.location?.length) {
-    lines.push(`Локация: ${job.location.join(', ')}`);
+  const locations = uniqueLocationLabels(job.location);
+  if (locations.length) {
+    lines.push(`Локация: ${locations.join(', ')}`);
   }
   if (job.work_mode) {
     lines.push(`Формат: ${job.work_mode}`);

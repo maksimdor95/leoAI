@@ -1,3 +1,5 @@
+import type { AppLocale } from '@/types/appSettings';
+
 /** Метаданные воронки подбора (ответ GET /api/jobs/match). */
 export type JobsFunnelMeta = {
   jobsInDb: number;
@@ -10,38 +12,55 @@ export type JobsFunnelMeta = {
   familyCatalogCount?: number;
 };
 
+function formatScannedCount(meta: JobsFunnelMeta, locale: AppLocale): string {
+  if (meta.jobsScanned < meta.jobsInDb) {
+    return locale === 'en'
+      ? `${meta.jobsScanned} of ${meta.jobsInDb}`
+      : `${meta.jobsScanned} из ${meta.jobsInDb}`;
+  }
+  return String(meta.jobsInDb);
+}
+
 /** Краткий текст для tooltip «как считался подбор». */
 export function buildJobsMatchInfoTooltip(
   meta: JobsFunnelMeta,
-  shownRecommended: number,
-  shownWeak: number
+  locale: AppLocale = 'ru'
 ): string {
-  const scanned =
-    meta.jobsScanned < meta.jobsInDb
-      ? `последние ${meta.jobsScanned} из ${meta.jobsInDb}`
-      : `${meta.jobsInDb}`;
+  const scanned = formatScannedCount(meta, locale);
 
-  const parts: string[] = [
-    `Сверили профиль с ${scanned} вакансиями в каталоге.`,
-    `В списке: ${shownRecommended} в «Рекомендуем» и ${shownWeak} со слабым совпадением.`,
-  ];
-
-  const hiddenRec = meta.totalMatched - shownRecommended;
-  const hiddenWeak = meta.weakTierTotal - shownWeak;
-  if (hiddenRec > 0 || hiddenWeak > 0) {
-    const extra: string[] = [];
-    if (hiddenRec > 0) extra.push(`ещё ${hiddenRec} рекомендуемых`);
-    if (hiddenWeak > 0) extra.push(`ещё ${hiddenWeak} слабых`);
-    parts.push(`Не показали: ${extra.join(', ')}.`);
+  if (locale === 'en') {
+    return [
+      `Compared your profile against ${scanned} jobs in the catalog.`,
+      `${meta.totalMatched} in Recommended, ${meta.weakTierTotal} with weak match.`,
+    ].join('\n');
   }
 
-  return parts.join('\n');
+  return [
+    `Сверили профиль с ${scanned} вакансиями в каталоге.`,
+    `${meta.totalMatched} в «Рекомендуем», ${meta.weakTierTotal} со слабым совпадением.`,
+  ].join('\n');
 }
 
 export function jobsRefreshStatusLabel(
   state: 'idle' | 'scraping' | 'matching' | 'success' | 'error',
-  lastUpdatedAt: string | null
+  lastUpdatedAt: string | null,
+  locale: AppLocale = 'ru'
 ): string {
+  if (locale === 'en') {
+    switch (state) {
+      case 'scraping':
+        return 'Fetching fresh jobs for your profile…';
+      case 'matching':
+        return 'Matching profile to catalog…';
+      case 'error':
+        return 'Update failed — please try again.';
+      case 'success':
+        return lastUpdatedAt ? `Match updated at ${lastUpdatedAt}` : 'Match updated';
+      default:
+        return 'Matching has not run yet';
+    }
+  }
+
   switch (state) {
     case 'scraping':
       return 'Собираем свежие вакансии под профиль…';

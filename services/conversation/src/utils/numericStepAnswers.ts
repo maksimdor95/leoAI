@@ -125,8 +125,15 @@ export function parsePositionsCountAnswer(raw: string): number | null {
 export function normalizeScenarioMode(raw: string): string {
   const t = raw.toLowerCase().trim().replace(/ё/g, 'е');
   if (!t) return raw.trim();
-  if (t.includes('быстр') || t === 'quick' || t === '1') return 'быстрый подбор';
-  if (t.includes('детал') || t.includes('развернут') || t.includes('полный')) {
+  if (t.includes('быстр') || t.includes('quick') || t === '1') return 'быстрый подбор';
+  if (
+    t.includes('детал') ||
+    t.includes('развернут') ||
+    t.includes('полный') ||
+    t.includes('detailed') ||
+    t.includes('detail') ||
+    t.includes('analysis')
+  ) {
     return 'детализированный анализ';
   }
   if (
@@ -134,9 +141,35 @@ export function normalizeScenarioMode(raw: string): string {
     t.includes('готовое') ||
     t.includes('pdf') ||
     t.includes('docx') ||
-    t.includes('загруз')
+    t.includes('загруз') ||
+    t.includes('resume') ||
+    t.includes('upload')
   ) {
     return 'готовое резюме';
+  }
+  return raw.trim();
+}
+
+export function normalizeInterviewMode(raw: string): string {
+  const t = raw.toLowerCase().trim().replace(/ё/g, 'е');
+  if (!t) return raw.trim();
+  if (
+    t.includes('пробн') ||
+    t.includes('mock') ||
+    t.includes('trial') ||
+    (t.includes('interview') && !t.includes('vacancy') && !t.includes('breakdown'))
+  ) {
+    return 'пробное собеседование';
+  }
+  if (
+    t.includes('разбор') ||
+    t.includes('ваканс') ||
+    t.includes('vacancy') ||
+    t.includes('breakdown') ||
+    t.includes('analyze') ||
+    t.includes('job posting')
+  ) {
+    return 'разбор вакансии';
   }
   return raw.trim();
 }
@@ -147,6 +180,9 @@ export function resolveCollectValueForStep(
 ): string | number {
   if (collectKey === 'scenarioMode') {
     return normalizeScenarioMode(raw);
+  }
+  if (collectKey === 'interviewMode') {
+    return normalizeInterviewMode(raw);
   }
   if (collectKey === 'positionsCount') {
     const n = parsePositionsCountAnswer(raw);

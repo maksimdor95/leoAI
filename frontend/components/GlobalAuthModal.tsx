@@ -4,7 +4,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AuthModal } from '@/components/landing/AuthModal';
 
 export function GlobalAuthModal() {
-  const { isAuthModalOpen, authMode, closeAuthModal } = useAuth();
+  const { isAuthModalOpen, authMode, authModalSource, closeAuthModal } = useAuth();
 
-  return <AuthModal open={isAuthModalOpen} onClose={closeAuthModal} initialMode={authMode} />;
+  return (
+    <AuthModal
+      open={isAuthModalOpen}
+      onClose={closeAuthModal}
+      initialMode={authMode}
+      source={authModalSource}
+    />
+  );
 }

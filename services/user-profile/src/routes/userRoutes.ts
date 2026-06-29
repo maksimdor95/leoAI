@@ -5,6 +5,7 @@
 
 import { Router } from 'express';
 import { UserController } from '../controllers/userController';
+import { HhIntegrationController } from '../controllers/hhIntegrationController';
 import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
@@ -24,8 +25,13 @@ router.post('/logout', UserController.logout);
 router.post('/forgot-password', UserController.forgotPasswordValidation, UserController.forgotPassword);
 router.post('/reset-password', UserController.resetPasswordValidation, UserController.resetPassword);
 router.get('/reset-password/validate', UserController.validateResetToken);
+router.get('/oauth/hh/start', authenticateToken, HhIntegrationController.oauthStart);
+router.get('/oauth/hh/callback', HhIntegrationController.oauthCallback);
+router.get('/oauth/callback', HhIntegrationController.oauthCallback);
 router.get('/oauth/:provider/start', UserController.oauthStart);
 router.get('/oauth/:provider/callback', UserController.oauthCallback);
+router.get('/integrations/hh', authenticateToken, HhIntegrationController.getStatus);
+router.delete('/integrations/hh', authenticateToken, HhIntegrationController.revoke);
 
 // Protected routes (require authentication)
 router.get('/profile', authenticateToken, UserController.getProfile);

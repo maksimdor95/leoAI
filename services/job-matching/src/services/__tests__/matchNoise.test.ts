@@ -24,6 +24,7 @@ function mkJob(partial: Partial<Job>): Job {
     skills: partial.skills ?? [],
     experience_level: partial.experience_level ?? null,
     work_mode: partial.work_mode ?? null,
+    source_meta: partial.source_meta ?? null,
     source: partial.source ?? 'hh.ru',
     source_url: partial.source_url ?? 'https://example.com/job',
     role_family: partial.role_family ?? null,

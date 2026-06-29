@@ -8,10 +8,19 @@ import { Job, JobInput } from './job';
 import { logger } from '../utils/logger';
 import { JobRow } from './types';
 import { resolvePublicVacancyUrl } from '../utils/vacancyUrl';
+import type { HhVacancyMeta } from '../utils/hhVacancyMeta';
 import { RoleFamily, classifyRoleFamily } from '../services/roleFamily';
 
-/** Сколько вакансий сопоставляем за один матч. */
-export const MATCH_SCAN_LIMIT = 500;
+/** Максимум вакансий за один матч (защита при росте каталога). */
+export const MATCH_SCAN_MAX = 5000;
+
+/** @deprecated Используйте resolveMatchScanLimit(jobsInDb). */
+export const MATCH_SCAN_LIMIT = MATCH_SCAN_MAX;
+
+export function resolveMatchScanLimit(jobsInDb: number): number {
+  if (jobsInDb <= 0) return MATCH_SCAN_MAX;
+  return Math.min(jobsInDb, MATCH_SCAN_MAX);
+}
 
 /** Сколько мест в выборке резервируем под primary + adjacent семейства. */
 export const MATCH_FAMILY_BUDGET = 350;
@@ -28,6 +37,27 @@ function parseRoleFamily(raw: string | null | undefined): RoleFamily | null {
   return raw as RoleFamily;
 }
 
+function parseSourceMeta(raw: unknown): HhVacancyMeta | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const meta = raw as Partial<HhVacancyMeta>;
+  const hasAny =
+    meta.experienceLabel ||
+    meta.experienceId ||
+    meta.employmentLabel ||
+    meta.employmentId ||
+    (Array.isArray(meta.employmentForms) && meta.employmentForms.length > 0) ||
+    (Array.isArray(meta.employmentFormIds) && meta.employmentFormIds.length > 0) ||
+    meta.scheduleLabel ||
+    meta.scheduleId ||
+    meta.workScheduleDays ||
+    (Array.isArray(meta.workScheduleDayIds) && meta.workScheduleDayIds.length > 0) ||
+    meta.workingHours ||
+    (Array.isArray(meta.workingHourIds) && meta.workingHourIds.length > 0) ||
+    meta.workFormatLabel ||
+    (Array.isArray(meta.workFormatIds) && meta.workFormatIds.length > 0);
+  return hasAny ? (meta as HhVacancyMeta) : null;
+}
+
 export class JobRepository {
   /**
    * Create a new job or update if exists (based on source_url)
@@ -38,9 +68,9 @@ export class JobRepository {
       INSERT INTO jobs (
         title, company, location, salary_min, salary_max, currency,
         description, requirements, skills, experience_level, work_mode,
-        source, source_url, posted_at, embedding, role_family
+        source, source_url, posted_at, embedding, role_family, source_meta
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       ON CONFLICT (source_url) 
       DO UPDATE SET
         title = EXCLUDED.title,
@@ -57,6 +87,7 @@ export class JobRepository {
         posted_at = EXCLUDED.posted_at,
         embedding = COALESCE(EXCLUDED.embedding, jobs.embedding),
         role_family = EXCLUDED.role_family,
+        source_meta = COALESCE(EXCLUDED.source_meta, jobs.source_meta),
         updated_at = NOW()
       RETURNING *
     `;
@@ -78,6 +109,7 @@ export class JobRepository {
       jobInput.posted_at || null,
       jobInput.embedding ? `[${jobInput.embedding.join(',')}]` : null,
       roleFamily,
+      jobInput.source_meta ? JSON.stringify(jobInput.source_meta) : null,
     ];
 
     try {
@@ -178,7 +210,7 @@ export class JobRepository {
     limit?: number;
     familyBudget?: number;
   }): Promise<Job[]> {
-    const limit = options.limit ?? MATCH_SCAN_LIMIT;
+    const limit = options.limit ?? MATCH_SCAN_MAX;
     const familyBudget = options.familyBudget ?? MATCH_FAMILY_BUDGET;
     const { primaryFamily, adjacentFamilies } = options;
 
@@ -328,6 +360,9 @@ export class JobRepository {
       skills: typeof row.skills === 'string' ? JSON.parse(row.skills) : row.skills,
       experience_level: row.experience_level,
       work_mode: row.work_mode,
+      source_meta: parseSourceMeta(
+        typeof row.source_meta === 'string' ? JSON.parse(row.source_meta) : row.source_meta
+      ),
       source: row.source,
       source_url: resolvePublicVacancyUrl(row.source, row.source_url) ?? '',
       role_family: parseRoleFamily(row.role_family),

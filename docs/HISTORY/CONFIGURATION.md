@@ -298,6 +298,29 @@ YANDEX_CLIENT_ID=xxxxxxxx
 YANDEX_CLIENT_SECRET=xxxxxxxx
 ```
 
+### HH OAuth (интеграция соискателя, S4)
+
+Endpoints в `user-profile`:
+- `GET /api/users/oauth/hh/start` (auth) → redirect или JSON `{ authorizeUrl }`
+- `GET /api/users/oauth/hh/callback`
+- `GET /api/users/integrations/hh` (auth)
+- `DELETE /api/users/integrations/hh` (auth)
+
+| Переменная | Описание | Обязательно |
+| ---------- | -------- | ----------- |
+| `HH_OAUTH_CLIENT_ID` | Client ID приложения на dev.hh.ru | Да* |
+| `HH_OAUTH_CLIENT_SECRET` | Client Secret | Да* |
+| `HH_OAUTH_REDIRECT_URI` | Callback, напр. `https://leo-ai.ru/api/users/oauth/hh/callback` | Да (prod) |
+| `HH_OAUTH_SCOPES` | Scopes через пробел (по доке HH) | Нет |
+| `HH_USER_AGENT` | User-Agent для token/API запросов | Да |
+| `FRONTEND_HH_INTEGRATION_SUCCESS_URL` | Redirect после успешной привязки HH | Нет (fallback на `FRONTEND_OAUTH_SUCCESS_URL`) |
+
+> \* Можно переиспользовать `HH_CLIENT_ID` / `HH_CLIENT_SECRET`, если OAuth-приложение на dev.hh.ru одно.
+
+Redirect URI в dev.hh.ru:
+- prod: `https://leo-ai.ru/api/users/oauth/hh/callback`
+- local: `http://localhost:3001/api/users/oauth/hh/callback`
+
 ## Job Matching Service
 
 ### Job Scraping

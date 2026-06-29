@@ -73,6 +73,6 @@
 
 - **Resume Agent** — улучшение и генерация резюме
 - **Skills Graph** — траектория обучения
-- **B2B (LEOWORK AI)** — AI-рекрутер для работодателей → [LEOWORK_AI.md](./LEOWORK_AI.md)
+- **B2B (LEOWORK AI)** — AI-рекрутер для работодателей → [LEOWORK_METHODOLOGY.md](./LEOWORK%20AI/LEOWORK_METHODOLOGY.md), [IMPLEMENTATION_PLAN.md](./LEOWORK%20AI/LEOWORK_IMPLEMENTATION_PLAN.md), [техспека](./LEOWORK%20AI/LEOWORK_AI.md)
 - **Mobile App** — React Native
 - **Расширение WannaNew** — роли кроме PM (Designer, Engineer, …)

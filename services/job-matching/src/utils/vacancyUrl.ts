@@ -5,6 +5,18 @@
 
 const HH_VACANCY_ID_RE = /\/vacancy\/(\d+)/i;
 
+/** Извлекает внешний ID вакансии (HH) из source + source_url. */
+export function extractExternalVacancyId(source: string, sourceUrl: string): string | null {
+  const raw = sourceUrl?.trim() || '';
+  if (!raw || isDemoVacancySource(source, raw)) {
+    return null;
+  }
+  if (source === 'hh.ru' || /hh\.ru/i.test(raw)) {
+    return raw.match(HH_VACANCY_ID_RE)?.[1] ?? null;
+  }
+  return null;
+}
+
 export function buildHhVacancyUrl(vacancyId: string | number): string {
   return `https://hh.ru/vacancy/${vacancyId}`;
 }

@@ -43,6 +43,7 @@ import {
   parseTotalExperienceYearsFromText,
   resolveCollectValueForStep,
 } from '../utils/numericStepAnswers';
+import { getSessionUiLocale, resolveQuestionStepCopy } from '../utils/scenarioStepLocale';
 import {
   buildMockBriefingMessage,
   getRescueAttemptLimit,
@@ -621,15 +622,25 @@ async function buildQuestionMessage(
   previousStepId?: string,
   previousStepInstruction?: string
 ): Promise<QuestionMessage> {
-  let questionText = step.fallbackText;
+  const uiLocale = getSessionUiLocale(session.metadata);
 
   // For clarify step, enhance instruction with previous step context
   let enhancedInstruction = step.instruction;
   if (step.id === 'clarify' && previousStepId && previousStepInstruction) {
-    enhancedInstruction = `${step.instruction}\n\nВАЖНО: Предыдущий вопрос был про "${previousStepInstruction}". Нужно уточнить ответ именно на этот предыдущий вопрос, а не задавать новый вопрос на другую тему.`;
+    enhancedInstruction =
+      uiLocale === 'en'
+        ? `${step.instruction}\n\nIMPORTANT: The previous question was about "${previousStepInstruction}". Clarify the answer to that question only — do not ask about a different topic.`
+        : `${step.instruction}\n\nВАЖНО: Предыдущий вопрос был про "${previousStepInstruction}". Нужно уточнить ответ именно на этот предыдущий вопрос, а не задавать новый вопрос на другую тему.`;
     logger.info(`🔧 Enhanced clarify instruction with previous step context: ${previousStepId}`);
   }
 
+  const localized = resolveQuestionStepCopy(session.metadata.scenarioId, step.id, uiLocale, {
+    fallbackText: step.fallbackText,
+    placeholder: step.placeholder,
+    instruction: enhancedInstruction,
+  });
+
+  let questionText = localized.fallbackText;
   const useFallbackOnly = step.id === 'greeting';
 
   if (!useFallbackOnly) {
@@ -637,9 +648,10 @@ async function buildQuestionMessage(
       logger.info(`🤖 Attempting to generate question text via AI for step: ${step.id}`);
       const generated = await generateStepQuestionText({
         stepId: step.id,
-        instruction: enhancedInstruction,
-        fallbackText: step.fallbackText,
+        instruction: localized.instruction,
+        fallbackText: localized.fallbackText,
         collectedData: session.metadata.collectedData,
+        locale: uiLocale,
       });
 
       if (generated && generated.trim().length > 0) {
@@ -651,7 +663,7 @@ async function buildQuestionMessage(
       }
     } catch (error: unknown) {
       logger.warn(`⚠️ Failed to generate question text for step ${step.id}, using fallback.`, error);
-      logger.warn(`   Using fallback text: "${step.fallbackText}"`);
+      logger.warn(`   Using fallback text: "${localized.fallbackText}"`);
     }
   }
 
@@ -662,7 +674,7 @@ async function buildQuestionMessage(
     timestamp: new Date().toISOString(),
     sessionId: session.id,
     question: questionText,
-    placeholder: step.placeholder,
+    placeholder: localized.placeholder ?? step.placeholder,
   };
 }
 

@@ -30,6 +30,7 @@ const generateStepSchema = z.object({
   fallbackText: z.string().min(1),
   tone: z.enum(['default', 'friendly', 'formal']).optional(),
   facts: z.record(z.any()).optional(),
+  locale: z.enum(['ru', 'en']).optional(),
 });
 
 const formatFacts = (facts: Record<string, unknown> | undefined): string => {
@@ -62,6 +63,7 @@ export async function generateStepMessage(req: Request, res: Response) {
 
     const factsText = formatFacts(parsed.facts);
     const tone = parsed.tone ?? 'friendly';
+    const isEnglish = parsed.locale === 'en';
 
     // Check if this is a clarify step and instruction contains context about previous step
     const isClarifyStep = parsed.stepId === 'clarify';
@@ -72,17 +74,30 @@ export async function generateStepMessage(req: Request, res: Response) {
       additionalInstructions = `\n\n⚠️ КРИТИЧЕСКИ ВАЖНО: Это шаг уточнения (clarify). Инструкция выше содержит информацию о предыдущем вопросе. Ты ДОЛЖЕН задать вопрос, который уточняет ответ именно на этот предыдущий вопрос, а НЕ задавать вопрос на совершенно другую тему. Если предыдущий вопрос был про опыт работы в годах, спрашивай про опыт. Если был про должность, спрашивай про должность. НЕ придумывай новые темы!`;
     }
 
-    const messageParts = [
-      `Сформулируй один вопрос или короткую фразу для следующего шага сценария чата.`,
-      `ID шага: ${parsed.stepId}`,
-      `Цель шага: ${parsed.instruction}`,
-      `Известные факты о кандидате:\n${factsText}`,
-      `Требования:`,
-      `- используй тон ${tone === 'friendly' ? 'дружелюбный' : tone === 'formal' ? 'деловой' : 'нейтрально-дружелюбный'}.`,
-      `- результат должен быть одним вопросом или обращением, без списков и без дополнительного текста.`,
-      `- не повторяй ранее заданные вопросы дословно, перефразируй при необходимости.`,
-      `- не добавляй новых тем, которые не связаны с целью шага.`,
-    ];
+    const messageParts = isEnglish
+      ? [
+          `Write one question or short prompt for the next step of a career chat scenario.`,
+          `Step ID: ${parsed.stepId}`,
+          `Step goal: ${parsed.instruction}`,
+          `Known facts about the candidate:\n${factsText}`,
+          `Requirements:`,
+          `- use a ${tone === 'friendly' ? 'friendly' : tone === 'formal' ? 'formal' : 'neutral-friendly'} tone.`,
+          `- output must be a single question or invitation, no lists or extra text.`,
+          `- do not repeat earlier questions verbatim; rephrase if needed.`,
+          `- do not introduce topics unrelated to the step goal.`,
+          `- write in English only.`,
+        ]
+      : [
+          `Сформулируй один вопрос или короткую фразу для следующего шага сценария чата.`,
+          `ID шага: ${parsed.stepId}`,
+          `Цель шага: ${parsed.instruction}`,
+          `Известные факты о кандидате:\n${factsText}`,
+          `Требования:`,
+          `- используй тон ${tone === 'friendly' ? 'дружелюбный' : tone === 'formal' ? 'деловой' : 'нейтрально-дружелюбный'}.`,
+          `- результат должен быть одним вопросом или обращением, без списков и без дополнительного текста.`,
+          `- не повторяй ранее заданные вопросы дословно, перефразируй при необходимости.`,
+          `- не добавляй новых тем, которые не связаны с целью шага.`,
+        ];
 
     // Insert additional instructions after "Цель шага" if it's a clarify step
     if (additionalInstructions) {

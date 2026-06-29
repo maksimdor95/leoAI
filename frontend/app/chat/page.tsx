@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/contexts/AppSettingsContext';
 import Link from 'next/link';
 import {
   Button,
@@ -62,11 +63,18 @@ import type { InterviewReportPreview } from '@/components/chat/InterviewReportCa
 import { TypingMessage } from '@/components/chat/TypingMessage';
 import { ProfileModal } from '@/components/chat/ProfileModal';
 import { MatchedJobCard } from '@/components/chat/MatchedJobCard';
+import { VacancyPreviewDrawer } from '@/components/chat/VacancyPreviewDrawer';
 import {
   VacanciesInsightPanel,
   shouldShowVacanciesInsight,
 } from '@/components/chat/VacanciesInsightPanel';
 import { ProductSelectionScreen, ProductType } from '@/components/chat/ProductSelectionScreen';
+import { AppSettingsMenu } from '@/components/chat/AppSettingsMenu';
+import { chatUi, inRecommendedSummary, newJobsBadgeWord, weakMatchSummary } from '@/lib/chatUiCopy';
+import {
+  catalogFamilyMismatchWarning,
+  vacanciesUi,
+} from '@/lib/vacanciesUiCopy';
 import { SupportWidget } from '@/components/support/SupportWidget';
 import {
   SoundOutlined,
@@ -144,24 +152,6 @@ type JobsMatchMeta = {
 /** Сколько мс показывать бейдж «Новая» на карточке после появления в подборке */
 const NEW_JOB_BADGE_MS = 18_000;
 
-function ruPositionsLabel(count: number): string {
-  const n = Math.abs(count) % 100;
-  const n1 = n % 10;
-  if (n > 10 && n < 20) return `${count} позиций`;
-  if (n1 === 1) return `${count} позиция`;
-  if (n1 >= 2 && n1 <= 4) return `${count} позиции`;
-  return `${count} позиций`;
-}
-
-function ruNewJobsLabel(count: number): string {
-  const n = Math.abs(count) % 100;
-  const n1 = n % 10;
-  if (n > 10 && n < 20) return 'новых';
-  if (n1 === 1) return 'новая';
-  if (n1 >= 2 && n1 <= 4) return 'новые';
-  return 'новых';
-}
-
 function extractLatest<T extends Message>(
   messages: Message[],
   type: MessageTypeValue
@@ -237,6 +227,13 @@ function ChatPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { openAuthModal } = useAuth();
+  const { settings, setSpeechEnabled } = useAppSettings();
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const isHume = settings.theme === 'hume-light';
+  const isMuted = !settings.speechEnabled;
+  const ui = (key: Parameters<typeof chatUi>[1]) => chatUi(settings.locale, key);
+  const v = (key: Parameters<typeof vacanciesUi>[1]) => vacanciesUi(settings.locale, key);
   const [form] = Form.useForm<MessageFormValues>();
   const [profileEditForm] = Form.useForm<ProfileEditFormValues>();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -249,7 +246,6 @@ function ChatPageContent() {
   const chatInitializedRef = useRef(false);
   /** Пропускаем перезапуск init-эффекта, когда мы сами добавили sessionId в URL после подключения. */
   const skipParamsEffectRef = useRef(false);
-  const [isMuted, setIsMuted] = useState(false);
   const [typingMessage, setTypingMessage] = useState<Message | null>(null);
   const [typingOptions, setTypingOptions] = useState<{ speed: number; delay: number }>({
     speed: 50,
@@ -296,6 +292,8 @@ function ChatPageContent() {
   }, [typingMessage]);
 
   const [currentProduct, setCurrentProduct] = useState<ProductType>('jack');
+  const chatProductRef = useRef<ProductType>('jack');
+  const firstUserMessageCapturedRef = useRef(false);
   const [pendingStarterMessage, setPendingStarterMessage] = useState<string | null>(null);
   const [pendingVacancyAnalyze, setPendingVacancyAnalyze] = useState<{
     text: string;
@@ -321,7 +319,13 @@ function ChatPageContent() {
   const [jobsMatchMeta, setJobsMatchMeta] = useState<JobsMatchMeta | null>(null);
   const [sessionCurrentStepId, setSessionCurrentStepId] = useState<string | null>(null);
   const [sessionCompletedSteps, setSessionCompletedSteps] = useState<string[]>([]);
+  const [sessionCollectedData, setSessionCollectedData] = useState<Record<string, unknown>>({});
   const [vacancyPrepJobId, setVacancyPrepJobId] = useState<string | null>(null);
+  const [vacancyPreview, setVacancyPreview] = useState<{
+    item: MatchedJobItem;
+    variant: 'recommended' | 'weak';
+  } | null>(null);
+  const [hhIntegrationRefreshKey, setHhIntegrationRefreshKey] = useState(0);
   const previousJobIdsRef = useRef<Set<string>>(new Set());
   /** Список вакансий уже показывали — фоновый silent-refresh не прячет его под спиннер. */
   const jobsListHydratedRef = useRef(false);
@@ -367,6 +371,12 @@ function ChatPageContent() {
     setSessionCompletedSteps(
       Array.isArray(meta.completedSteps) ? (meta.completedSteps as string[]) : []
     );
+    const rawCollected = meta.collectedData;
+    if (rawCollected && typeof rawCollected === 'object' && !Array.isArray(rawCollected)) {
+      setSessionCollectedData({ ...(rawCollected as Record<string, unknown>) });
+    } else {
+      setSessionCollectedData({});
+    }
   }, []);
 
   const jackDetailedProgressLabel = useMemo(() => {
@@ -851,6 +861,15 @@ function ChatPageContent() {
     setProfileData(null);
   }, []);
 
+  const trackChatFirstUserMessage = useCallback((inputType: string) => {
+    if (firstUserMessageCapturedRef.current) return;
+    firstUserMessageCapturedRef.current = true;
+    captureEvent('chat_first_user_message', {
+      product: chatProductRef.current,
+      input_type: inputType,
+    });
+  }, []);
+
   // Function to initialize chat with a specific product
   const initializeChat = useCallback((
     product: ProductType,
@@ -868,11 +887,16 @@ function ChatPageContent() {
     setConnecting(true);
     setError(null);
     setMessages([]);
+    setSessionCollectedData({});
+    setSessionCurrentStepId(null);
+    setSessionCompletedSteps([]);
     handledSpeechMessageIdsRef.current.clear();
     speechChainRef.current = Promise.resolve();
     setSessionId(null);
     setCurrentProduct(product);
     autoStarterSentRef.current = false;
+    firstUserMessageCapturedRef.current = false;
+    chatProductRef.current = product;
     setPendingStarterMessage(null);
     const vacancyAnalyze = options?.vacancyAnalyze ?? null;
     pendingVacancyAnalyzeRef.current = vacancyAnalyze;
@@ -908,6 +932,11 @@ function ChatPageContent() {
         createNew: isNew ?? true,
         product: isNew ? product : undefined,
         intent: vacancyAnalyze ? 'vacancy_analyze' : undefined,
+        getClientPreferences: () => ({
+          locale: settingsRef.current.locale,
+          lang: settingsRef.current.ttsLang,
+          voice: settingsRef.current.ttsVoice,
+        }),
         onConnected: () => {
           if (chatConnectTimeoutRef.current) {
             clearTimeout(chatConnectTimeoutRef.current);
@@ -916,6 +945,10 @@ function ChatPageContent() {
           setConnected(true);
           setConnecting(false);
           setError(null);
+          captureEvent('chat_session_started', {
+            product,
+            is_new: isNew ?? true,
+          });
         },
         onDisconnected: () => {
           setConnected(false);
@@ -937,6 +970,12 @@ function ChatPageContent() {
                 ? (payload.metadata.completedSteps as string[])
                 : []
             );
+            const rawCollected = payload.metadata.collectedData;
+            if (rawCollected && typeof rawCollected === 'object' && !Array.isArray(rawCollected)) {
+              setSessionCollectedData({ ...(rawCollected as Record<string, unknown>) });
+            } else {
+              setSessionCollectedData({});
+            }
           }
           // Keep sessionId in URL to avoid re-triggering "new chat" mode.
           // Не дёргаем replace повторно, если в URL уже наш sessionId — иначе init-эффект
@@ -1065,7 +1104,7 @@ function ChatPageContent() {
             // Токен протух/невалиден: завершаем сессию и просим войти снова,
             // иначе пользователь видит бесконечное подключение.
             clearClientAuthState();
-            openAuthModal('login');
+            openAuthModal('login', { source: 'chat_auth_required' });
             router.push('/');
           }
           messageApi.error(payload.message);
@@ -1080,10 +1119,23 @@ function ChatPageContent() {
         onAssistantAudio: (payload) => {
           assistantAudioByMessageIdRef.current.set(payload.messageId, payload);
         },
+        onMetadataChange: () => {
+          syncSessionMetadata();
+        },
       });
 
       chatRef.current = chat;
-      chat.connect();
+      void chat.connect().catch((err: unknown) => {
+        if (chatConnectTimeoutRef.current) {
+          clearTimeout(chatConnectTimeoutRef.current);
+          chatConnectTimeoutRef.current = null;
+        }
+        const messageText =
+          err instanceof Error ? err.message : 'Не удалось подключиться к чату';
+        setError(messageText);
+        setConnecting(false);
+        messageApi.error(messageText);
+      });
       chatInitializedRef.current = true;
     } catch (err) {
       if (chatConnectTimeoutRef.current) {
@@ -1133,7 +1185,7 @@ function ChatPageContent() {
 
     if (!isAuthenticated()) {
       messageApi.warning('Авторизуйтесь, чтобы продолжить диалог с LEO.');
-      openAuthModal('login');
+      openAuthModal('login', { source: 'chat_auth_required' });
       router.push('/');
       return;
     }
@@ -1182,6 +1234,10 @@ function ChatPageContent() {
 
   // Handler for product selection
   const handleProductScenarioSelect = useCallback((product: ProductType, starterMessage?: string) => {
+    captureEvent('chat_product_selected', {
+      product,
+      has_starter: Boolean(starterMessage),
+    });
     setIsNewChatMode(false);
     setPendingStarterMessage(starterMessage ?? null);
     initializeChat(product, undefined, true);
@@ -1201,6 +1257,7 @@ function ChatPageContent() {
       return;
     }
 
+    trackChatFirstUserMessage('starter');
     chatRef.current.sendMessage(pendingStarterMessage);
     autoStarterSentRef.current = true;
     setPendingStarterMessage(null);
@@ -1429,6 +1486,56 @@ function ChatPageContent() {
     [getJobMatchingBaseUrl, initializeChat, messageApi]
   );
 
+  const handleOpenVacancyFromJob = useCallback(
+    (item: MatchedJobItem, variant: 'recommended' | 'weak') => {
+      const token = getToken();
+      if (!token) {
+        messageApi.warning('Нужна авторизация для просмотра вакансии');
+        return;
+      }
+      setVacancyPreview({ item, variant });
+    },
+    [messageApi]
+  );
+
+  const handleCloseVacancyPreview = useCallback(() => {
+    setVacancyPreview(null);
+  }, []);
+
+  const handleVacancyPrepFromPreview = useCallback(() => {
+    if (!vacancyPreview) return;
+    setVacancyPreview(null);
+    void handleVacancyPrepFromJob(vacancyPreview.item);
+  }, [handleVacancyPrepFromJob, vacancyPreview]);
+
+  const vacancyPreviewContext = useMemo(
+    () =>
+      vacancyPreview
+        ? {
+            jobId: vacancyPreview.item.job.id,
+            title: vacancyPreview.item.job.title,
+            company: vacancyPreview.item.job.company,
+            score: vacancyPreview.item.score,
+            source: vacancyPreview.item.job.source,
+            sourceUrl: vacancyPreview.item.job.source_url,
+            reasons: vacancyPreview.item.reasons,
+            variant: vacancyPreview.variant,
+          }
+        : null,
+    [vacancyPreview]
+  );
+
+  useEffect(() => {
+    if (searchParams.get('hhConnected') !== '1') {
+      return;
+    }
+    setHhIntegrationRefreshKey((value) => value + 1);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('hhConnected');
+    const query = params.toString();
+    router.replace(query ? `/chat?${query}` : '/chat');
+  }, [router, searchParams]);
+
   const handleGenerateResumeDraft = useCallback(async () => {
     if (!chatRef.current) return;
     try {
@@ -1522,6 +1629,7 @@ function ChatPageContent() {
       return;
     }
 
+    trackChatFirstUserMessage('text');
     chatRef.current.sendMessage(messageText);
     form.resetFields();
     setInputText('');
@@ -1593,6 +1701,7 @@ function ChatPageContent() {
 
     if (command.action === 'resume_start_quick') {
       await chatRef.current.executeCommand(command.id, command.action);
+      syncSessionMetadata();
       return;
     }
 
@@ -1610,16 +1719,11 @@ function ChatPageContent() {
       return;
     }
 
-    chatRef.current.executeCommand(command.id, command.action);
+    await chatRef.current.executeCommand(command.id, command.action);
+    syncSessionMetadata();
   };
 
-  const jackCollectedSnapshot = useMemo((): Record<string, unknown> => {
-    const raw = chatRef.current?.metadata?.collectedData;
-    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-      return { ...(raw as Record<string, unknown>) };
-    }
-    return {};
-  }, [messages.length, sessionId, connected, sidePanelTab]);
+  const jackCollectedSnapshot = sessionCollectedData;
 
   const interviewPrepCollectedSnapshot = useMemo((): Record<string, unknown> => {
     if (currentProduct !== 'interview-prep') {
@@ -1998,8 +2102,10 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
 
   const jackProfileRows = useMemo(
     () =>
-      currentProduct === 'jack' ? getJackProfileSidebarRows(jackCollectedSnapshot) : [],
-    [currentProduct, jackCollectedSnapshot]
+      currentProduct === 'jack'
+        ? getJackProfileSidebarRows(jackCollectedSnapshot, settings.locale)
+        : [],
+    [currentProduct, jackCollectedSnapshot, settings.locale]
   );
 
   const jackProfileVisibleRows = useMemo(() => {
@@ -2102,12 +2208,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
 
   const jobsMatchInfoTooltip = useMemo(() => {
     if (!jobsMatchMeta || jobsLoadState !== 'success') return null;
-    return buildJobsMatchInfoTooltip(
-      jobsMatchMeta,
-      matchedJobs.length,
-      weakMatchedJobs.length
-    );
-  }, [jobsLoadState, jobsMatchMeta, matchedJobs.length, weakMatchedJobs.length]);
+    return buildJobsMatchInfoTooltip(jobsMatchMeta, settings.locale);
+  }, [jobsLoadState, jobsMatchMeta, settings.locale]);
 
   const matchInfoTip = jobsMatchInfoTooltip ? (
     <Tooltip
@@ -2158,6 +2260,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
 
       setProfileEditSaving(true);
       await chatRef.current.mergeCollectedData(payload);
+      syncSessionMetadata();
       messageApi.success('Профиль обновлён');
       handleCloseProfileEdit();
     } catch (error) {
@@ -2168,7 +2271,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     } finally {
       setProfileEditSaving(false);
     }
-  }, [handleCloseProfileEdit, messageApi, profileEditForm, profileEditableRows]);
+  }, [handleCloseProfileEdit, messageApi, profileEditForm, profileEditableRows, syncSessionMetadata]);
 
   const fetchMatchedJobs = useCallback(async (options?: {
     revealPanel?: boolean;
@@ -2299,12 +2402,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
       previousJobIdsRef.current = incomingIds;
 
       if (options?.triggerWeakMatchGate) {
-        const stepId =
-          typeof chatRef.current?.metadata?.currentStepId === 'string'
-            ? chatRef.current.metadata.currentStepId
-            : sessionCurrentStepId;
         const weakMatch =
-          stepId === 'resume_ready' &&
+          sessionCurrentStepId === 'resume_ready' &&
           jobs.length === 0 &&
           (weakJobs.length === 0 ? jobsInDb > 0 : true);
         if (weakMatch && chatRef.current) {
@@ -2336,8 +2435,12 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         }
       }
     } catch (error) {
-      const messageText =
+      const rawMessage =
         error instanceof Error ? error.message : 'Не удалось получить вакансии';
+      const messageText =
+        rawMessage === 'Failed to get user profile'
+          ? 'Сервис профиля временно недоступен. Обновите страницу через минуту.'
+          : rawMessage;
       if (!backgroundRefresh) {
         setJobsError(messageText);
         setJobsLoadState('error');
@@ -2369,10 +2472,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
       return;
     }
 
-    const collected = chatRef.current?.metadata?.collectedData as
-      | Record<string, unknown>
-      | undefined;
-    if (!jackCollectedDataReadyForJobMatch(collected)) {
+    if (!jackProfileReadyForMatch) {
       messageApi.info(
         'Сначала укажите в чате желаемую роль и опыт — тогда подбор и сбор вакансий будут точными.'
       );
@@ -2422,7 +2522,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     } finally {
       setIsJobsLoading(false);
     }
-  }, [fetchMatchedJobs, getJobMatchingBaseUrl, getUserIdFromToken, messageApi]);
+  }, [fetchMatchedJobs, getJobMatchingBaseUrl, getUserIdFromToken, jackProfileReadyForMatch, messageApi]);
 
   useEffect(() => {
     if (!productSelected || currentProduct !== 'jack' || !connected || !latestUserMessageId) {
@@ -2443,10 +2543,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
       if (now - lastJobsFetchAtRef.current < 8000) {
         return;
       }
-      const collected = chatRef.current?.metadata?.collectedData as
-        | Record<string, unknown>
-        | undefined;
-      if (!jackCollectedDataReadyForJobMatch(collected)) {
+      if (!jackProfileReadyForMatch) {
         return;
       }
       void fetchMatchedJobs({ revealPanel: false, silent: true });
@@ -2457,7 +2554,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         clearTimeout(autoRefreshTimeoutRef.current);
       }
     };
-  }, [connected, currentProduct, fetchMatchedJobs, latestUserMessageId, productSelected]);
+  }, [connected, currentProduct, fetchMatchedJobs, jackProfileReadyForMatch, latestUserMessageId, productSelected]);
 
   /** Первая загрузка матча при открытии вкладки — только когда профиль готов для подбора. */
   useEffect(() => {
@@ -2508,10 +2605,6 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
       if (!jackProfileReadyForMatch) return;
       const now = Date.now();
       if (now - lastJobsFetchAtRef.current < 15_000) return;
-      const collected = chatRef.current?.metadata?.collectedData as
-        | Record<string, unknown>
-        | undefined;
-      if (!jackCollectedDataReadyForJobMatch(collected)) return;
       void fetchMatchedJobs({ revealPanel: false, silent: true });
     }, 30_000);
 
@@ -2532,26 +2625,26 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
   const sidePanelTabs = useMemo((): { id: SidePanelTab; label: string }[] => {
     if (currentProduct !== 'jack') {
       return [
-        { id: 'chat', label: 'Чат' },
+        { id: 'chat', label: ui('tabChat') },
         {
           id: 'profile',
-          label: currentProduct === 'interview-prep' ? 'Подготовка' : 'Профиль',
+          label: currentProduct === 'interview-prep' ? ui('prep') : ui('profile'),
         },
       ];
     }
     return [
-      { id: 'chat', label: 'Чат' },
-      { id: 'vacancies', label: 'Вакансии' },
-      { id: 'profile', label: 'Профиль' },
+      { id: 'chat', label: ui('tabChat') },
+      { id: 'vacancies', label: ui('tabVacancies') },
+      { id: 'profile', label: ui('profile') },
     ];
-  }, [currentProduct]);
+  }, [currentProduct, settings.locale]);
 
   const handleLogout = () => {
     Modal.confirm({
-      title: 'Выход из аккаунта',
-      content: 'Вы уверены, что хотите выйти?',
-      okText: 'Выйти',
-      cancelText: 'Отмена',
+      title: ui('logoutConfirmTitle'),
+      content: ui('logoutConfirmContent'),
+      okText: ui('logout'),
+      cancelText: ui('cancel'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
@@ -2565,49 +2658,65 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         chatRef.current?.disconnect();
         // Redirect to home
         router.push('/');
-        messageApi.success('Вы успешно вышли из аккаунта');
+        messageApi.success(ui('logoutSuccess'));
       },
     });
   };
 
   return (
-    <Layout className="min-h-screen bg-[#050913] text-white">
+    <Layout
+      className={`leo-chat-layout min-h-screen ${
+        settings.theme === 'hume-light'
+          ? 'bg-[var(--color-bone)] text-[var(--color-ink)]'
+          : 'bg-[#050913] text-white'
+      }`}
+    >
       {contextHolder}
-      <Content className="flex flex-col h-screen px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-        <div className="flex min-h-0 flex-1 w-full max-w-[1400px] mx-auto flex-col gap-3 overflow-hidden sm:gap-4 lg:gap-5">
+      <Content
+        className={`flex flex-col h-screen px-4 py-4 sm:px-6 sm:py-6 lg:px-8 ${
+          !productSelected && isNewChatMode ? 'lg:py-4' : 'lg:py-8'
+        }`}
+      >
+        <div
+          className={`flex min-h-0 flex-1 w-full max-w-[1400px] mx-auto flex-col overflow-hidden ${
+            !productSelected && isNewChatMode ? 'gap-2 sm:gap-3 lg:gap-3' : 'gap-3 sm:gap-4 lg:gap-5'
+          }`}
+        >
           <header className="flex-shrink-0 flex flex-col gap-2 sm:gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <Title
                 level={2}
-                style={{ color: 'white', marginBottom: 0 }}
-                className="text-lg sm:text-xl lg:text-2xl"
+                style={{
+                  color: settings.theme === 'hume-light' ? 'var(--color-ink)' : 'white',
+                  marginBottom: 0,
+                }}
+                className="leo-chat-title text-lg sm:text-xl lg:text-2xl"
               >
                 {!productSelected && isNewChatMode
-                  ? 'Новый чат'
-                  : currentProduct === 'wannanew'
-                    ? 'Чат с LEO'
-                    : 'Чат с LEO'}
+                  ? ui('newChat')
+                  : ui('chatTitle')}
               </Title>
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
+              <AppSettingsMenu />
               <Link href="/chats">
                 <Button
                   type="text"
                   size="small"
-                  className="!text-slate-200 hover:!text-green-300 hover:!bg-white/[0.06] text-xs sm:text-sm"
+                  className="leo-chat-header-btn !text-slate-200 hover:!bg-white/[0.06] text-xs sm:text-sm"
                 >
-                  <span className="hidden sm:inline">Мои чаты</span>
-                  <span className="sm:hidden">Чаты</span>
+                  <span className="hidden sm:inline">{ui('myChats')}</span>
+                  <span className="sm:hidden">{ui('myChatsShort')}</span>
                 </Button>
               </Link>
-              <Tooltip title="Выйти из аккаунта">
+              <Tooltip title={ui('logoutTip')}>
                 <Button
                   type="text"
                   size="small"
                   onClick={handleLogout}
-                  className="!text-slate-200 hover:!text-red-400 text-xs sm:text-sm"
+                  className="leo-chat-header-btn !text-slate-200 hover:!text-red-400 text-xs sm:text-sm"
                 >
-                  Выйти
+                  {ui('logout')}
                 </Button>
               </Tooltip>
             </div>
@@ -2621,10 +2730,14 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
             }`}
           >
             <section
-              className={`flex min-h-0 flex-col ${
+              className={`leo-chat-panel flex min-h-0 flex-col ${
                 !productSelected && isNewChatMode
-                  ? 'flex-1 overflow-y-auto overscroll-y-contain rounded-2xl border border-white/[0.08] bg-[#050913]/50 sm:rounded-3xl [-webkit-overflow-scrolling:touch]'
-                  : 'gap-3 overflow-auto rounded-2xl border border-white/10 bg-white/[0.04] p-3 backdrop-blur sm:gap-4 sm:p-4 lg:gap-5 lg:p-5'
+                  ? isHume
+                    ? 'flex-1 overflow-y-auto overscroll-y-contain rounded-2xl border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)] sm:rounded-3xl [-webkit-overflow-scrolling:touch] lg:overflow-hidden'
+                    : 'flex-1 overflow-y-auto overscroll-y-contain rounded-2xl border border-white/[0.08] bg-[#050913]/50 sm:rounded-3xl [-webkit-overflow-scrolling:touch] lg:overflow-hidden'
+                  : isHume
+                    ? 'gap-3 overflow-auto rounded-2xl border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)] p-3 sm:gap-4 sm:p-4 lg:gap-5 lg:p-5'
+                    : 'gap-3 overflow-auto rounded-2xl border border-white/10 bg-white/[0.04] p-3 backdrop-blur sm:gap-4 sm:p-4 lg:gap-5 lg:p-5'
               }`}
             >
               {/* Show product selection screen for new chats */}
@@ -2640,6 +2753,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                       ttsBeatAtRef={ttsBeatAtRef}
                       assistantLevelRef={assistantVoiceLevelRef}
                       waveOnly
+                      waveHeroBanner={isHume}
                     />
                   </div>
 
@@ -2647,8 +2761,15 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                     {connecting ? (
                       <div className="flex flex-col items-center justify-center gap-4">
                         <Spin size="large" />
-                        <Text style={{ color: 'rgba(226, 232, 240, 0.85)' }}>
-                          {currentProduct === 'wannanew' ? 'Подключаемся к Leo...' : 'Подключаемся к LEO...'}
+                        <Text
+                          style={{
+                            color:
+                              settings.theme === 'hume-light'
+                                ? 'var(--color-smoke)'
+                                : 'rgba(226, 232, 240, 0.85)',
+                          }}
+                        >
+                          {currentProduct === 'wannanew' ? ui('connectingLeo') : ui('connecting')}
                         </Text>
                       </div>
                     ) : vacancyAnalyzeFlowActive &&
@@ -2656,7 +2777,14 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                       currentProduct === 'interview-prep' ? (
                       <div className="flex flex-col items-center justify-center gap-4 px-4 text-center">
                         <Spin size="large" />
-                        <Text style={{ color: 'rgba(226, 232, 240, 0.85)' }}>
+                        <Text
+                          style={{
+                            color:
+                              settings.theme === 'hume-light'
+                                ? 'var(--color-smoke)'
+                                : 'rgba(226, 232, 240, 0.85)',
+                          }}
+                        >
                           Собираем план подготовки по вакансии…
                         </Text>
                       </div>
@@ -2753,11 +2881,17 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
 
             {/* Hide aside panel when in product selection mode */}
             {productSelected && (
-              <aside className="flex flex-col rounded-2xl sm:rounded-3xl border border-white/10 bg-white/[0.04] p-4 sm:p-5 backdrop-blur w-full overflow-hidden">
+              <aside
+                className={`leo-chat-sidebar flex flex-col w-full overflow-hidden p-4 sm:p-5 rounded-2xl sm:rounded-3xl ${
+                  isHume
+                    ? 'border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)]'
+                    : 'border border-white/10 bg-white/[0.04] backdrop-blur'
+                }`}
+              >
                 <div className="mb-3 sm:mb-4 flex flex-shrink-0 flex-col">
                   <div
                     role="tablist"
-                    aria-label="Разделы боковой панели"
+                    aria-label={ui('sidebarSectionsAria')}
                     className="flex w-full min-w-0 items-stretch gap-1 border-b border-white/10 pb-2.5 sm:pb-3"
                   >
                     {sidePanelTabs.map(({ id, label }) => {
@@ -2772,8 +2906,12 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                           onClick={() => setSidePanelTab(id)}
                           className={
                             selected
-                              ? '!h-8 !min-w-0 !flex-1 !basis-0 !rounded-full !border-none !bg-green-500 !px-2 !text-xs !font-medium !text-white !shadow-lg hover:!bg-green-400'
-                              : '!h-8 !min-w-0 !flex-1 !basis-0 !rounded-full !px-2 !text-xs !font-medium !text-slate-400 hover:!bg-white/[0.06] hover:!text-slate-100'
+                              ? isHume
+                                ? 'leo-sidebar-tab-active !h-8 !min-w-0 !flex-1 !basis-0 !rounded-full !border-none !px-2 !text-xs !font-medium'
+                                : '!h-8 !min-w-0 !flex-1 !basis-0 !rounded-full !border-none !bg-green-500 !px-2 !text-xs !font-medium !text-white !shadow-lg hover:!bg-green-400'
+                              : isHume
+                                ? 'leo-sidebar-tab-inactive !h-8 !min-w-0 !flex-1 !basis-0 !rounded-full !px-2 !text-xs !font-medium'
+                                : '!h-8 !min-w-0 !flex-1 !basis-0 !rounded-full !px-2 !text-xs !font-medium !text-slate-400 hover:!bg-white/[0.06] hover:!text-slate-100'
                           }
                         >
                           {label}
@@ -2785,33 +2923,34 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                     {sidePanelTab === 'vacancies' ? (
                       <>
                         <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-100 leading-snug">
-                          <span>Подобранные вакансии</span>
+                          <span>{v('matchedTitle')}</span>
                           <Tooltip
                             trigger={['click']}
                             placement="topLeft"
-                            title="Мы сопоставляем ваши ответы из чата с вакансиями в каталоге: учитываем роль, стек, уровень, формат и опыт. Чем больше релевантных деталей в профиле, тем точнее рекомендации."
+                            title={v('matchedTooltip')}
                           >
                             <Button
                               type="text"
                               size="small"
                               icon={<QuestionCircleOutlined />}
                               className="!h-5 !w-5 !min-w-0 !p-0 !text-slate-400 hover:!text-slate-200"
-                              aria-label="Как формируется подбор вакансий"
+                              aria-label={v('matchedTooltipAria')}
                             />
                           </Tooltip>
                         </div>
-                        {matchedJobs.length > 0 ||
+                        {jackProfileReadyForMatch &&
+                        (matchedJobs.length > 0 ||
                         weakMatchedJobs.length > 0 ||
-                        newJobBadgeIds.size > 0 ? (
+                        newJobBadgeIds.size > 0) ? (
                           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
                             {matchedJobs.length > 0 || weakMatchedJobs.length > 0 ? (
                               <span>
                                 {[
                                   matchedJobs.length > 0
-                                    ? `${ruPositionsLabel(matchedJobs.length)} в «Рекомендуем»`
+                                    ? inRecommendedSummary(settings.locale, matchedJobs.length)
                                     : null,
                                   weakMatchedJobs.length > 0
-                                    ? `${weakMatchedJobs.length} со слабым совпадением`
+                                    ? weakMatchSummary(settings.locale, weakMatchedJobs.length)
                                     : null,
                                 ]
                                   .filter(Boolean)
@@ -2825,9 +2964,10 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                     ·
                                   </span>
                                 ) : null}
-                                <Tooltip title="Появились при последнем пересчёте — на карточках метка «Новая» (~18 с)">
+                                <Tooltip title={v('newBadgeTooltip')}>
                                   <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-300 cursor-default">
-                                    +{newJobBadgeIds.size} {ruNewJobsLabel(newJobBadgeIds.size)}
+                                    +{newJobBadgeIds.size}{' '}
+                                    {newJobsBadgeWord(settings.locale, newJobBadgeIds.size)}
                                   </span>
                                 </Tooltip>
                               </>
@@ -2838,24 +2978,28 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                     ) : sidePanelTab === 'profile' ? (
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-sm font-semibold text-slate-100 leading-snug">
-                          {currentProduct === 'interview-prep' ? 'Профиль вакансии' : 'Профиль'}
+                          {currentProduct === 'interview-prep' ? ui('prep') : ui('profile')}
                         </div>
                         {currentProduct === 'jack' ? (
                           <Button
                             type="text"
                             size="small"
-                            className="!h-6 !rounded-full !px-2 !text-[11px] !font-medium !text-slate-300 hover:!text-slate-100 hover:!bg-white/[0.06]"
+                            className={`!h-6 !rounded-full !px-2 !text-[11px] !font-medium ${
+                              isHume
+                                ? 'leo-profile-edit-btn'
+                                : '!text-slate-300 hover:!text-slate-100 hover:!bg-white/[0.06]'
+                            }`}
                             onClick={handleOpenProfileEdit}
                             disabled={!connected || profileEditableRows.length === 0}
                           >
-                            Редактировать
+                            {ui('edit')}
                           </Button>
                         ) : null}
                       </div>
                     ) : (
                       <div className="space-y-2">
                         <div className="text-sm font-semibold text-slate-100 leading-snug">
-                          История диалога
+                          {ui('dialogueHistory')}
                         </div>
                         {interviewPrepThreadsEnabled ? (
                           <div
@@ -2875,7 +3019,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                   : '!h-7 !shrink-0 !rounded-full !px-2.5 !text-[11px] !font-medium !text-slate-400 hover:!bg-white/[0.06] hover:!text-slate-100'
                               }
                             >
-                              Общее
+                              {ui('prepHistoryGeneral')}
                             </Button>
                             {INTERVIEW_PREP_MODES.map((mode) => {
                               const selected = prepHistoryFilter === mode;
@@ -2911,20 +3055,19 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                   {sidePanelTab === 'vacancies' ? (
                     currentProduct !== 'jack' ? (
                       <div className="text-sm text-slate-400">
-                        Для продукта wannanew вакансии не подбираются.
+                        {v('wannanewNoJobs')}
                       </div>
                     ) : (
                       <>
+                        {jackProfileReadyForMatch ? (
                         <div className="mb-3 flex flex-col gap-1.5">
                           <div className="flex items-center justify-between gap-3 text-xs text-slate-400">
                             <span className="min-w-0 leading-relaxed">
-                              {jobsRefreshStatusLabel(jobsLoadState, jobsLastUpdatedAt)}
+                              {jobsRefreshStatusLabel(jobsLoadState, jobsLastUpdatedAt, settings.locale)}
                             </span>
                             {currentProduct === 'jack' ? (
                               <div className="flex shrink-0 items-center gap-1">
-                                <Tooltip
-                                  title="Сначала скачиваем свежие вакансии под ваш профиль, затем пересчитываем матч по каталогу. Полный цикл ~20–60 с."
-                                >
+                                <Tooltip title={v('refreshTooltip')}>
                                   <Button
                                     type="text"
                                     size="small"
@@ -2935,7 +3078,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                       void requestFreshJobsForProfile();
                                     }}
                                     className="!shrink-0 !text-slate-400 hover:!text-slate-200 disabled:!text-slate-600"
-                                    aria-label="Обновить каталог и пересчитать матч"
+                                    aria-label={v('refreshAria')}
                                   />
                                 </Tooltip>
                               </div>
@@ -2943,33 +3086,27 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                           </div>
                           {jobsMatchMeta?.catalogWarning === 'catalog_family_mismatch' ? (
                             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] leading-snug text-amber-100">
-                              В текущем каталоге мало вакансий
-                              {jobsMatchMeta.profileFamilyLabel
-                                ? ` из области «${jobsMatchMeta.profileFamilyLabel}»`
-                                : ''}
-                              {typeof jobsMatchMeta.familyRelevanceShare === 'number'
-                                ? ` (релевантных только ${Math.round(
-                                    jobsMatchMeta.familyRelevanceShare * 100
-                                  )}%).`
-                                : '.'}{' '}
-                              Нажмите <span className="font-semibold">кнопку обновления ↻</span>, чтобы скачать свежие объявления именно под ваш профиль.
+                              {catalogFamilyMismatchWarning(
+                                settings.locale,
+                                jobsMatchMeta.profileFamilyLabel,
+                                jobsMatchMeta.familyRelevanceShare
+                              )}
                             </div>
                           ) : null}
                           {jobsMatchMeta?.catalogWarning === 'empty_catalog' ? (
                             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] leading-snug text-amber-100">
-                              Каталог ещё пустой. Нажмите кнопку обновления ↻, чтобы запустить сбор под ваш профиль.
+                              {v('emptyCatalog')}
                             </div>
                           ) : null}
                         </div>
+                        ) : null}
                         {!jackProfileReadyForMatch ? (
                           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
                             <p className="text-sm font-medium text-slate-200">
-                              Подбор откроется после базового профиля
+                              {v('gateTitle')}
                             </p>
                             <p className="text-xs text-slate-400 leading-relaxed">
-                              Укажите в чате желаемую роль и опыт (или пройдите ещё несколько
-                              вопросов детального пути). Тогда LEO сопоставит профиль с каталогом
-                              вакансий и покажет рекомендации.
+                              {v('gateBody')}
                             </p>
                             <Button
                               type="primary"
@@ -2977,7 +3114,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                               onClick={() => setSidePanelTab('chat')}
                               className="!rounded-full !border-0 !bg-green-500 !text-white hover:!bg-green-400"
                             >
-                              Продолжить в чате
+                              {v('continueInChat')}
                             </Button>
                           </div>
                         ) : isJobsLoading || jobsLoadState === 'matching' ? (
@@ -2997,7 +3134,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                           <div className="space-y-3">
                             <div className="flex items-center gap-1.5">
                               <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-400/90">
-                                Возможные варианты (слабое совпадение)
+                                {v('possibleWeakMatch')}
                               </div>
                               {matchedJobs.length === 0 ? matchInfoTip : null}
                             </div>
@@ -3012,6 +3149,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                 sourceUrl={item.job.source_url}
                                 reasons={item.reasons}
                                 isNew={newJobBadgeIds.has(item.job.id)}
+                                onOpenVacancy={() => handleOpenVacancyFromJob(item, 'weak')}
                                 onVacancyPrep={() => void handleVacancyPrepFromJob(item)}
                                 vacancyPrepLoading={vacancyPrepJobId === item.job.id}
                               />
@@ -3025,7 +3163,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                           <div className="space-y-3">
                             <div className="flex items-center gap-1.5">
                               <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-400/90">
-                                Рекомендуем
+                                {v('recommended')}
                               </div>
                               {matchInfoTip}
                             </div>
@@ -3040,6 +3178,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                 sourceUrl={item.job.source_url}
                                 reasons={item.reasons}
                                 isNew={newJobBadgeIds.has(item.job.id)}
+                                onOpenVacancy={() => handleOpenVacancyFromJob(item, 'recommended')}
                                 onVacancyPrep={() => void handleVacancyPrepFromJob(item)}
                                 vacancyPrepLoading={vacancyPrepJobId === item.job.id}
                               />
@@ -3050,7 +3189,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                           <div className="space-y-3">
                             <div className="flex items-center gap-1.5">
                               <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-400/90">
-                                Слабое совпадение
+                                {v('weakMatch')}
                               </div>
                               {matchedJobs.length === 0 ? matchInfoTip : null}
                             </div>
@@ -3065,6 +3204,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                 sourceUrl={item.job.source_url}
                                 reasons={item.reasons}
                                 isNew={newJobBadgeIds.has(item.job.id)}
+                                onOpenVacancy={() => handleOpenVacancyFromJob(item, 'weak')}
                                 onVacancyPrep={() => void handleVacancyPrepFromJob(item)}
                                 vacancyPrepLoading={vacancyPrepJobId === item.job.id}
                               />
@@ -3074,7 +3214,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                       </div>
                     ) : jobsLoadState === 'success' ? (
                       <div className="text-sm text-slate-400 leading-relaxed">
-                        Отвечайте в диалоге — подбор вакансий обновится автоматически.
+                        {v('autoUpdateHint')}
                       </div>
                     ) : null}
                       </>
@@ -3125,7 +3265,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                               >
                                 <div className="text-[11px] uppercase tracking-wide text-slate-500">{key}</div>
                                 <div className="text-sm text-slate-100 mt-0.5 whitespace-pre-wrap break-words">
-                                  {formatCollectedValue(jackCollectedSnapshot[key])}
+                                  {formatCollectedValue(jackCollectedSnapshot[key], settings.locale)}
                                 </div>
                               </div>
                             ))
@@ -3133,8 +3273,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                       </div>
                     ) : !jackProfileVisibleRows.some((r) => r.filled) ? (
                       <div className="text-sm text-slate-400 leading-relaxed">
-                        Пока нет сохранённых ответов — продолжайте диалог слева: поля появятся здесь по мере
-                        заполнения анкеты.
+                        {ui('profileEmptyJack')}
                       </div>
                     ) : (
                       <div className="pb-1">
@@ -3174,7 +3313,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                     ) : (
                       <div className="text-sm text-slate-400 leading-relaxed py-6 text-center px-2">
                         {prepHistoryFilter === 'general' ? (
-                          'Сообщения появятся здесь по мере диалога'
+                          ui('sidebarEmpty')
                         ) : (
                           <>
                             В «{INTERVIEW_PREP_MODE_LABELS[prepHistoryFilter]}» пока пусто.
@@ -3192,7 +3331,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                      <div className="text-slate-500 text-sm">Сообщения появятся здесь по мере диалога</div>
+                      <div className="text-slate-500 text-sm">{ui('sidebarEmpty')}</div>
                     </div>
                   )}
                 </div>
@@ -3206,34 +3345,56 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
               <Form form={form} onFinish={handleSend} className="flex-1">
                 <Form.Item
                   name="message"
-                  rules={[{ required: true, message: 'Введите сообщение LEO' }]}
+                  rules={[{ required: true, message: ui('formMessageRequired') }]}
                   style={{ marginBottom: 0 }}
                 >
-                  <div className="flex items-center gap-2 sm:gap-3 rounded-xl sm:rounded-2xl border border-white/10 bg-white/[0.04] px-2 sm:px-3 lg:px-4 py-2 sm:py-3 backdrop-blur">
+                <div
+                  className={`flex items-center gap-2 sm:gap-3 rounded-xl sm:rounded-2xl px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 leo-chat-footer ${
+                    isHume
+                      ? 'border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)]'
+                      : 'border border-white/10 bg-white/[0.04] backdrop-blur'
+                  }`}
+                >
                     <div className="flex items-center gap-1 sm:gap-2">
                       <div className="lg:hidden">
                         <SupportWidget placement="toolbar" showTeaser={false} />
                       </div>
-                      <Tooltip title={isMuted ? 'Включить звук' : 'Выключить звук'}>
+                      <Tooltip title={isMuted ? ui('muteOn') : ui('muteOff')}>
                         <Button
                           type="text"
                           size="small"
                           icon={isMuted ? <AudioMutedOutlined /> : <SoundOutlined />}
-                          onClick={() => setIsMuted((prev) => !prev)}
-                          className="!text-white !p-1 sm:!p-2"
+                          onClick={() => setSpeechEnabled(isMuted)}
+                          className={
+                            isHume
+                              ? '!text-[var(--color-smoke)] hover:!text-[var(--color-ink)] hover:!bg-[var(--color-bone)] !p-1 sm:!p-2 !rounded-full'
+                              : '!text-white !p-1 sm:!p-2'
+                          }
                         />
                       </Tooltip>
                       <Tooltip title={isListening ? 'Остановить запись' : 'Начать запись голоса'}>
                         <Button
                           type="text"
                           size="small"
-                          icon={<AudioOutlined style={{ color: isListening ? '#22c55e' : 'white' }} />}
+                          icon={<AudioOutlined style={{ color: isListening ? (isHume ? '#c094e4' : '#22c55e') : isHume ? 'var(--color-smoke)' : 'white' }} />}
                           onClick={toggleListening}
-                          className={`!p-1 sm:!p-2 ${isListening ? 'animate-pulse bg-green-500/20 rounded-full' : '!text-white'}`}
+                          className={
+                            isHume
+                              ? `!p-1 sm:!p-2 !rounded-full ${
+                                  isListening
+                                    ? 'animate-pulse bg-[var(--color-rose-mist)]'
+                                    : 'hover:!bg-[var(--color-bone)]'
+                                }`
+                              : `!p-1 sm:!p-2 ${isListening ? 'animate-pulse bg-green-500/20 rounded-full' : '!text-white'}`
+                          }
                         />
                       </Tooltip>
                     </div>
-                    <div className="flex-1 min-w-0 chat-footer-input-wrap">
+                    <div
+                      className={`flex-1 min-w-0 chat-footer-input-wrap ${
+                        isHume ? 'chat-footer-input-wrap--hume' : ''
+                      }`}
+                    >
                       <Input.TextArea
                         value={inputText}
                         onChange={(e) => {
@@ -3243,10 +3404,10 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                         }}
                         placeholder={
                           isSendingMessage
-                            ? 'LEO анализирует ответ…'
+                            ? ui('inputSending')
                             : isListening
-                              ? 'Слушаю...'
-                              : 'Введите ответ…'
+                              ? ui('inputListening')
+                              : ui('inputPlaceholder')
                         }
                         autoSize={{ minRows: 1, maxRows: 4 }}
                         disabled={!connected || isSendingMessage}
@@ -3264,10 +3425,15 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                       type="primary"
                       size="small"
                       htmlType="submit"
-                      icon={<SendOutlined />}
+                      icon={<SendOutlined aria-hidden />}
                       loading={isSendingMessage}
                       disabled={!connected || isSendingMessage}
-                      className="flex items-center justify-center rounded-full border-none bg-green-500 px-2 sm:px-3 lg:px-4 py-1 sm:py-2 text-white shadow-lg hover:bg-green-400"
+                      aria-label={ui('send')}
+                      className={
+                        isHume
+                          ? 'leo-chat-send-btn !inline-flex !h-9 !w-9 !min-w-[2.25rem] !items-center !justify-center !rounded-full !border-none !bg-[var(--color-ink)] !p-0 !text-[var(--color-paper)] hover:!opacity-90'
+                          : 'flex items-center justify-center rounded-full border-none bg-green-500 px-2 sm:px-3 lg:px-4 py-1 sm:py-2 text-white shadow-lg hover:bg-green-400'
+                      }
                     />
                   </div>
                 </Form.Item>
@@ -3282,11 +3448,38 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         onClose={handleCloseProfileModal}
         profileData={profileData}
       />
+      <VacancyPreviewDrawer
+        open={vacancyPreview !== null}
+        onClose={handleCloseVacancyPreview}
+        context={vacancyPreviewContext}
+        onVacancyPrep={handleVacancyPrepFromPreview}
+        vacancyPrepLoading={
+          vacancyPreview ? vacancyPrepJobId === vacancyPreview.item.job.id : false
+        }
+        sessionId={sessionId}
+        hhIntegrationRefreshKey={hhIntegrationRefreshKey}
+      />
       <Modal
         title={
           <div>
-            <div className="text-xs uppercase tracking-[0.4em] text-green-300/70 mb-1">Профиль</div>
-            <h2 className="text-xl font-semibold text-white">Редактировать профиль</h2>
+            <div
+              className={
+                isHume
+                  ? 'hume-label-sm mb-1'
+                  : 'text-xs uppercase tracking-[0.4em] text-green-300/70 mb-1'
+              }
+            >
+              {ui('editProfile')}
+            </div>
+            <h2
+              className={
+                isHume
+                  ? 'hume-heading !text-xl'
+                  : 'text-xl font-semibold text-white'
+              }
+            >
+              {ui('editProfileModal')}
+            </h2>
           </div>
         }
         open={profileEditOpen}
@@ -3294,30 +3487,52 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         onOk={() => {
           void handleSaveProfileEdit();
         }}
-        okText="Сохранить"
-        cancelText="Отмена"
+        okText={ui('save')}
+        cancelText={ui('cancel')}
         okButtonProps={{ loading: profileEditSaving }}
         width={900}
-        className="profile-modal profile-edit-modal"
-        styles={{
-          content: {
-            backgroundColor: '#0a0f1e',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            maxHeight: '90vh',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-          },
-          body: {
-            maxHeight: 'calc(90vh - 100px)',
-            overflowY: 'auto',
-            padding: '24px',
-          },
-          header: {
-            backgroundColor: '#0a0f1e',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-          },
-        }}
+        className={`profile-modal profile-edit-modal ${isHume ? 'profile-edit-modal--hume leo-hume-modal' : ''}`}
+        styles={
+          isHume
+            ? {
+                content: {
+                  backgroundColor: '#ffffff',
+                  border: '1px solid rgba(34, 34, 34, 0.08)',
+                  maxHeight: '90vh',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                },
+                body: {
+                  maxHeight: 'calc(90vh - 100px)',
+                  overflowY: 'auto',
+                  padding: '24px',
+                },
+                header: {
+                  backgroundColor: '#ffffff',
+                  borderBottom: '1px solid rgba(34, 34, 34, 0.08)',
+                },
+              }
+            : {
+                content: {
+                  backgroundColor: '#0a0f1e',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  maxHeight: '90vh',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                },
+                body: {
+                  maxHeight: 'calc(90vh - 100px)',
+                  overflowY: 'auto',
+                  padding: '24px',
+                },
+                header: {
+                  backgroundColor: '#0a0f1e',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                },
+              }
+        }
       >
         <Form form={profileEditForm} layout="vertical">
           <div className="max-h-[55vh] overflow-y-auto pr-1">

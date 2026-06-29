@@ -5,7 +5,7 @@
 
 import pool from './config/database';
 import { logger } from './utils/logger';
-import { JOBS_ROLE_FAMILY_MIGRATION_SQL } from './db/jobsSchemaMigrations';
+import { JOBS_ROLE_FAMILY_MIGRATION_SQL, JOBS_SOURCE_META_MIGRATION_SQL } from './db/jobsSchemaMigrations';
 import jobRepository from './models/jobRepository';
 
 async function initDatabase() {
@@ -58,6 +58,7 @@ async function initDatabase() {
 
     await pool.query(createTableQuery);
     await pool.query(JOBS_ROLE_FAMILY_MIGRATION_SQL);
+    await pool.query(JOBS_SOURCE_META_MIGRATION_SQL);
 
     const backfilled = await jobRepository.backfillAllRoleFamilies();
     if (backfilled > 0) {

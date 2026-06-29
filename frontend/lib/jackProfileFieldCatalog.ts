@@ -3,6 +3,8 @@
  * Соответствует collectKey в services/conversation/src/scenario/jackScenario.ts
  */
 
+import type { AppLocale } from '@/types/appSettings';
+
 export type JackFieldDef = {
   key: string;
   label: string;
@@ -80,6 +82,62 @@ export const JACK_PROFILE_FIELD_ORDER: JackFieldDef[] = [
   { section: 'Завершение', key: 'completionChoice', label: 'Заполнение пробелов' },
 ];
 
+const JACK_PROFILE_FIELD_ORDER_EN: JackFieldDef[] = [
+  { section: 'Start', key: 'readyToStart', label: 'Ready to start' },
+  { section: 'Start', key: 'pauseChoice', label: 'Pause' },
+  { section: 'Start', key: 'privacyConfirmed', label: 'Privacy consent' },
+
+  { section: 'Career', key: 'careerSummary', label: 'Career overview' },
+  { section: 'Career', key: 'totalExperience', label: 'Years of experience' },
+  { section: 'Career', key: 'positionsCount', label: 'Positions to describe' },
+
+  { section: 'Position 1', key: 'position_1_company', label: 'Company and period' },
+  { section: 'Position 1', key: 'position_1_role', label: 'Job title' },
+  { section: 'Position 1', key: 'position_1_industry', label: 'Industry' },
+  { section: 'Position 1', key: 'position_1_team', label: 'Team' },
+  { section: 'Position 1', key: 'position_1_responsibilities', label: 'Responsibilities' },
+  { section: 'Position 1', key: 'position_1_achievements', label: 'Achievements' },
+  { section: 'Position 1', key: 'position_1_projects', label: 'Key projects' },
+
+  { section: 'Position 2', key: 'position_2_company', label: 'Company and period' },
+  { section: 'Position 2', key: 'position_2_role', label: 'Job title' },
+  { section: 'Position 2', key: 'position_2_industry', label: 'Industry' },
+  { section: 'Position 2', key: 'position_2_team', label: 'Team' },
+  { section: 'Position 2', key: 'position_2_achievements', label: 'Achievements' },
+
+  { section: 'Position 3', key: 'position_3_company', label: 'Company and period' },
+  { section: 'Position 3', key: 'position_3_role', label: 'Job title' },
+  { section: 'Position 3', key: 'position_3_achievements', label: 'Achievements' },
+
+  { section: 'Position 4', key: 'position_4_company', label: 'Company and period' },
+  { section: 'Position 4', key: 'position_4_role', label: 'Job title' },
+  { section: 'Position 4', key: 'position_4_achievements', label: 'Achievements' },
+
+  { section: 'Position 5', key: 'position_5_company', label: 'Company and period' },
+  { section: 'Position 5', key: 'position_5_role', label: 'Job title' },
+  { section: 'Position 5', key: 'position_5_achievements', label: 'Achievements' },
+
+  { section: 'Education', key: 'education_main', label: 'Primary education' },
+  { section: 'Education', key: 'education_additional', label: 'Additional education & certs' },
+
+  { section: 'Skills', key: 'skills_hard', label: 'Technical skills' },
+  { section: 'Skills', key: 'skills_soft', label: 'Leadership skills' },
+  { section: 'Skills', key: 'skills_languages', label: 'Languages' },
+
+  { section: 'Job search', key: 'desired_role', label: 'Target role' },
+  { section: 'Job search', key: 'desired_location', label: 'Location & format' },
+  { section: 'Job search', key: 'desired_salary', label: 'Salary expectations' },
+  { section: 'Job search', key: 'desired_culture', label: 'Culture & values' },
+  { section: 'Job search', key: 'desired_start', label: 'Earliest start date' },
+
+  { section: 'Wrap-up', key: 'additional_info', label: 'Additional info' },
+  { section: 'Wrap-up', key: 'completionChoice', label: 'Fill gaps' },
+];
+
+export function getJackProfileFieldOrder(locale: AppLocale): JackFieldDef[] {
+  return locale === 'en' ? JACK_PROFILE_FIELD_ORDER_EN : JACK_PROFILE_FIELD_ORDER;
+}
+
 function pickCollectedValue(collected: Record<string, unknown>, key: string): unknown {
   switch (key) {
     case 'desired_role':
@@ -101,14 +159,17 @@ export function isCollectedFilled(value: unknown): boolean {
   return false;
 }
 
-export function formatCollectedValue(value: unknown): string {
+export function formatCollectedValue(value: unknown, locale: AppLocale = 'ru'): string {
   if (value === undefined || value === null) return '—';
   if (typeof value === 'string') {
     const t = value.trim();
     return t.length > 0 ? t : '—';
   }
   if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '—';
-  if (typeof value === 'boolean') return value ? 'да' : 'нет';
+  if (typeof value === 'boolean') {
+    if (locale === 'en') return value ? 'yes' : 'no';
+    return value ? 'да' : 'нет';
+  }
   if (Array.isArray(value)) {
     if (value.length === 0) return '—';
     return value.map((x) => (typeof x === 'object' ? JSON.stringify(x) : String(x))).join(', ');
@@ -129,17 +190,22 @@ export type ProfileSidebarRow = {
 };
 
 /** Строки для отображения: известные поля по сценарию + прочие ключи из collectedData */
-export function getJackProfileSidebarRows(collected: Record<string, unknown>): ProfileSidebarRow[] {
+export function getJackProfileSidebarRows(
+  collected: Record<string, unknown>,
+  locale: AppLocale = 'ru'
+): ProfileSidebarRow[] {
   const rows: ProfileSidebarRow[] = [];
   const used = new Set<string>();
+  const fieldOrder = getJackProfileFieldOrder(locale);
+  const otherSection = locale === 'en' ? 'Other' : 'Другое';
 
-  for (const def of JACK_PROFILE_FIELD_ORDER) {
+  for (const def of fieldOrder) {
     const raw = pickCollectedValue(collected, def.key);
     rows.push({
       section: def.section,
       label: def.label,
       key: def.key,
-      value: formatCollectedValue(raw),
+      value: formatCollectedValue(raw, locale),
       filled: isCollectedFilled(raw),
     });
     used.add(def.key);
@@ -155,10 +221,10 @@ export function getJackProfileSidebarRows(collected: Record<string, unknown>): P
     if (used.has(key) || shouldOmitProfileKey(key)) continue;
     const raw = collected[key];
     rows.push({
-      section: 'Другое',
+      section: otherSection,
       label: key,
       key,
-      value: formatCollectedValue(raw),
+      value: formatCollectedValue(raw, locale),
       filled: isCollectedFilled(raw),
     });
   }

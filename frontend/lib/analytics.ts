@@ -28,15 +28,29 @@ function normalizePostHogHost(raw: string | undefined): string {
   return match ? match[0].replace(/\/$/, '') : fallback;
 }
 
+function registerRuntimeSuperProperties(): void {
+  if (typeof window === 'undefined') return;
+  const hostname = window.location.hostname;
+  const isInternal =
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname.endsWith('.local');
+  posthog.register({
+    app_env: process.env.NODE_ENV ?? 'production',
+    is_internal: isInternal,
+  });
+}
+
 export function initPostHog(): void {
   if (!isEnabled() || initialized) return;
 
   posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
     api_host: normalizePostHogHost(process.env.NEXT_PUBLIC_POSTHOG_HOST),
-    person_profiles: 'identified_only',
+    person_profiles: 'always',
     capture_pageview: false,
     capture_pageleave: true,
   });
+  registerRuntimeSuperProperties();
   initialized = true;
 }
 

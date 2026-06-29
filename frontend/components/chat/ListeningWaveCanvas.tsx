@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
+import { useAppSettings } from '@/contexts/AppSettingsContext';
 
 export type RibbonDrive = 'microphone' | 'synthetic' | 'external';
 export type SyntheticMood = 'idle' | 'typing' | 'speaking';
@@ -28,10 +29,26 @@ function dprScale(canvas: HTMLCanvasElement): number {
   return canvas.width / rect.width;
 }
 
-function layerRibbonGradient(c: CanvasRenderingContext2D, w: number, layerAlpha: number, strandWeight: number): CanvasGradient {
+function layerRibbonGradient(
+  c: CanvasRenderingContext2D,
+  w: number,
+  layerAlpha: number,
+  strandWeight: number,
+  hume: boolean
+): CanvasGradient {
   const grd = c.createLinearGradient(0, 0, w, 0);
   const a = layerAlpha * (0.35 + 0.65 * strandWeight);
   const peak = Math.min(1, layerAlpha * (0.55 + 1.15 * strandWeight));
+  if (hume) {
+    grd.addColorStop(0, `rgba(252, 224, 238, ${a * 0.75})`);
+    grd.addColorStop(0.18, `rgba(192, 148, 228, ${a * 0.95})`);
+    grd.addColorStop(0.38, `rgba(247, 187, 230, ${peak})`);
+    grd.addColorStop(0.5, `rgba(255, 255, 255, ${Math.min(1, peak * 1.05)})`);
+    grd.addColorStop(0.62, `rgba(255, 183, 96, ${peak * 0.92})`);
+    grd.addColorStop(0.8, `rgba(192, 148, 228, ${a})`);
+    grd.addColorStop(1, `rgba(255, 233, 207, ${a * 0.8})`);
+    return grd;
+  }
   grd.addColorStop(0, `rgba(4, 47, 46, ${a * 0.85})`);
   grd.addColorStop(0.22, `rgba(5, 150, 105, ${a * 1.05})`);
   grd.addColorStop(0.42, `rgba(167, 243, 208, ${peak})`);
@@ -72,17 +89,29 @@ function syntheticLevel(t: number, mood: SyntheticMood, paused: boolean): number
   return 0.26 + 0.26 * Math.sin(t * 0.92) + 0.12 * Math.sin(t * 1.65);
 }
 
+function humeDualPeakEnvelope(u: number): number {
+  const edge = Math.pow(Math.sin(Math.PI * u), 0.82);
+  const left = Math.exp(-Math.pow((u - 0.34) / 0.1, 2));
+  const right = Math.exp(-Math.pow((u - 0.66) / 0.13, 2)) * 1.15;
+  return edge * (0.1 + 0.9 * Math.max(left, right));
+}
+
 function paintRibbon(
   c: CanvasRenderingContext2D,
   cvs: HTMLCanvasElement,
   level: number,
   t: number,
-  opts: { reducedMotion: boolean }
+  opts: { reducedMotion: boolean; hume: boolean }
 ): void {
   const w = cvs.width;
   const h = cvs.height;
   c.clearRect(0, 0, w, h);
   c.setTransform(1, 0, 0, 1, 0, 0);
+
+  if (opts.hume) {
+    c.fillStyle = '#fff9f3';
+    c.fillRect(0, 0, w, h);
+  }
 
   const tUse = opts.reducedMotion ? t * 0.06 : t;
   const mid = h * 0.5;
@@ -90,27 +119,56 @@ function paintRibbon(
   const hNorm = h / 108;
   const dpr = dprScale(cvs);
 
-  const layers = [
-    { alpha: 0.13, amp: 0.88, fMul: 0.9, phase: 0, strandMul: 0.78 },
-    { alpha: 0.18, amp: 0.95, fMul: 1.03, phase: 0.62, strandMul: 0.88 },
-    { alpha: 0.24, amp: 1.02, fMul: 1.15, phase: 1.22, strandMul: 1 },
-    { alpha: 0.32, amp: 1.08, fMul: 1.28, phase: 1.92, strandMul: 1.08 },
-    { alpha: 0.4, amp: 1.12, fMul: 1.4, phase: 2.62, strandMul: 1.14 },
-  ];
+  const layers = opts.hume
+    ? [
+        { alpha: 0.1, amp: 0.72, fMul: 0.88, phase: 0, strandMul: 0.7 },
+        { alpha: 0.14, amp: 0.82, fMul: 1, phase: 0.55, strandMul: 0.82 },
+        { alpha: 0.2, amp: 0.92, fMul: 1.12, phase: 1.1, strandMul: 0.94 },
+        { alpha: 0.26, amp: 1, fMul: 1.22, phase: 1.75, strandMul: 1 },
+        { alpha: 0.32, amp: 1.05, fMul: 1.32, phase: 2.4, strandMul: 1.06 },
+      ]
+    : [
+        { alpha: 0.13, amp: 0.88, fMul: 0.9, phase: 0, strandMul: 0.78 },
+        { alpha: 0.18, amp: 0.95, fMul: 1.03, phase: 0.62, strandMul: 0.88 },
+        { alpha: 0.24, amp: 1.02, fMul: 1.15, phase: 1.22, strandMul: 1 },
+        { alpha: 0.32, amp: 1.08, fMul: 1.28, phase: 1.92, strandMul: 1.08 },
+        { alpha: 0.4, amp: 1.12, fMul: 1.4, phase: 2.62, strandMul: 1.14 },
+      ];
 
-  const micMul = 0.12 + level * 1.28;
-  const strandCount = w > 1200 ? 15 : w > 700 ? 13 : w > 480 ? 11 : 9;
+  const micMul = opts.hume
+    ? 0.08 + level * 0.95
+    : 0.12 + level * 1.28;
+  const strandCount = opts.hume
+    ? w > 1200
+      ? 19
+      : w > 700
+        ? 17
+        : w > 480
+          ? 15
+          : 13
+    : w > 1200
+      ? 15
+      : w > 700
+        ? 13
+        : w > 480
+          ? 11
+          : 9;
   const halfStrands = (strandCount - 1) / 2;
 
   for (let li = 0; li < layers.length; li += 1) {
     const L = layers[li]!;
-    const phase = tUse * (0.52 + li * 0.095) + L.phase;
+    const phase = tUse * (opts.hume ? 0.38 + li * 0.07 : 0.52 + li * 0.095) + L.phase;
     const freq = (0.0175 + li * 0.0032) * L.fMul;
-    const ampBase = (7.5 + li * 6.2) * micMul * hNorm * L.amp * L.strandMul;
+    const ampBase = (opts.hume ? 5 + li * 4.2 : 7.5 + li * 6.2) * micMul * hNorm * L.amp * L.strandMul;
 
     const ys = new Float32Array(steps + 1);
     for (let i = 0; i <= steps; i += 1) {
-      ys[i] = ribbonBaseY(i, steps, w, mid, phase, freq, ampBase, tUse);
+      const u = i / steps;
+      let y = ribbonBaseY(i, steps, w, mid, phase, freq, ampBase, tUse);
+      if (opts.hume) {
+        y = mid + (y - mid) * humeDualPeakEnvelope(u);
+      }
+      ys[i] = y;
     }
 
     for (let s = 0; s < strandCount; s += 1) {
@@ -128,9 +186,9 @@ function paintRibbon(
         else c.lineTo(x, y);
       }
 
-      c.strokeStyle = layerRibbonGradient(c, w, L.alpha, w2);
-      c.globalAlpha = 0.12 + 0.88 * w2;
-      c.lineWidth = (0.34 + 0.92 * w2) * dpr;
+      c.strokeStyle = layerRibbonGradient(c, w, L.alpha, w2, opts.hume);
+      c.globalAlpha = opts.hume ? 0.08 + 0.72 * w2 : 0.12 + 0.88 * w2;
+      c.lineWidth = (opts.hume ? 0.2 + 0.62 * w2 : 0.34 + 0.92 * w2) * dpr;
       c.lineJoin = 'round';
       c.lineCap = 'round';
       c.stroke();
@@ -161,7 +219,7 @@ function paintRibbon(
         if (i === 0) c.moveTo(x, y);
         else c.lineTo(x, y);
       }
-      c.strokeStyle = layerRibbonGradient(c, w, 0.11, w2);
+      c.strokeStyle = layerRibbonGradient(c, w, 0.11, w2, opts.hume);
       c.globalAlpha = 0.07 + 0.24 * w2;
       c.lineWidth = (0.3 + 0.42 * w2) * dpr;
       c.stroke();
@@ -179,6 +237,9 @@ export function ListeningWaveCanvas({
   externalLevelRef,
   onStreamFailed,
 }: ListeningWaveCanvasProps) {
+  const { settings } = useAppSettings();
+  const humeThemeRef = useRef(settings.theme === 'hume-light');
+  humeThemeRef.current = settings.theme === 'hume-light';
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef(0);
@@ -239,7 +300,7 @@ export function ListeningWaveCanvas({
         const raw = syntheticLevel(t, syntheticMood, paused);
         levelEmaRef.current = levelEmaRef.current * 0.88 + raw * 0.12;
         const level = Math.min(1, levelEmaRef.current);
-        paintRibbon(c, cvs, level, t, { reducedMotion });
+        paintRibbon(c, cvs, level, t, { reducedMotion, hume: humeThemeRef.current });
         rafRef.current = requestAnimationFrame(draw);
       };
       rafRef.current = requestAnimationFrame(draw);
@@ -261,7 +322,7 @@ export function ListeningWaveCanvas({
         const t = performance.now() / 1000;
         const raw = Math.max(0, Math.min(1, externalLevelRef?.current ?? 0));
         levelEmaRef.current = levelEmaRef.current * 0.82 + raw * 0.18;
-        paintRibbon(c, cvs, levelEmaRef.current, t, { reducedMotion });
+        paintRibbon(c, cvs, levelEmaRef.current, t, { reducedMotion, hume: humeThemeRef.current });
         rafRef.current = requestAnimationFrame(draw);
       };
       rafRef.current = requestAnimationFrame(draw);
@@ -351,7 +412,7 @@ export function ListeningWaveCanvas({
         const level = Math.min(1, Math.pow(rms * 5.5, 0.78));
 
         const t = performance.now() / 1000;
-        paintRibbon(c, cvs, level, t, { reducedMotion });
+        paintRibbon(c, cvs, level, t, { reducedMotion, hume: humeThemeRef.current });
         rafRef.current = requestAnimationFrame(draw);
       };
 

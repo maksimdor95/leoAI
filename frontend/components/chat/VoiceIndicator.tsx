@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 
+import { HumeHeroWaveCanvas } from '@/components/chat/HumeHeroWaveCanvas';
 import { ListeningWaveCanvas, type SyntheticMood } from '@/components/chat/ListeningWaveCanvas';
+import { useAppSettings } from '@/contexts/AppSettingsContext';
 
 export type VoiceIndicatorMode = 'idle' | 'typing' | 'listening' | 'speaking';
 
@@ -13,6 +15,8 @@ type VoiceIndicatorProps = {
   assistantLevelRef?: RefObject<number>;
   /** Только анимированная волна; центральный шар и кольца скрыты */
   waveOnly?: boolean;
+  /** Полноширинный hero-баннер на разводящей + крупнее волна */
+  waveHeroBanner?: boolean;
 };
 
 const RING_COUNT = 4;
@@ -128,7 +132,10 @@ export function VoiceIndicator({
   ttsBeatAtRef,
   assistantLevelRef,
   waveOnly = false,
+  waveHeroBanner = false,
 }: VoiceIndicatorProps) {
+  const { settings } = useAppSettings();
+  const isHumeTheme = settings.theme === 'hume-light';
   const paused = !isActive || !!isMuted;
   const id = useId().replace(/:/g, '');
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -190,7 +197,9 @@ export function VoiceIndicator({
   const syntheticRibbon =
     waveOnly && !showAssistantRibbon && (mode === 'speaking' || mode === 'typing' || mode === 'idle');
 
-  const canvasRibbon = showMicRibbon || syntheticRibbon;
+  // Hume theme: always canvas ribbon on cream card (hero-style, hume.ai)
+  const canvasRibbon =
+    isHumeTheme || showMicRibbon || (waveOnly && (showAssistantRibbon || syntheticRibbon));
 
   const onListenMicFailed = useCallback(() => {
     setMicListenMode('svg');
@@ -198,6 +207,15 @@ export function VoiceIndicator({
 
   const syntheticMood: SyntheticMood =
     mode === 'typing' ? 'typing' : mode === 'idle' ? 'idle' : 'speaking';
+
+  const humeLevel =
+    mode === 'listening'
+      ? 0.72
+      : mode === 'speaking'
+        ? 0.85
+        : mode === 'typing'
+          ? 0.55
+          : 0.32;
 
   useEffect(() => {
     let raf = 0;
@@ -249,15 +267,27 @@ export function VoiceIndicator({
   ribbonCanvasActiveRef.current = canvasRibbon;
 
   return (
-    <div className="voice-orb-wrap flex w-full justify-center">
+    <div
+      className={`voice-orb-wrap flex w-full justify-center ${isHumeTheme ? 'voice-orb-wrap--hume' : ''}`}
+    >
       <div
         className={`voice-stage ${
           canvasRibbon ? 'voice-stage--listening-canvas' : 'voice-stage--raf'
-        } ${waveOnly ? 'voice-stage--wave-only' : ''} ${paused ? 'voice-orb--paused' : ''}`}
+        } ${waveOnly ? 'voice-stage--wave-only' : ''} ${isHumeTheme ? 'voice-stage--hume' : ''} ${
+          waveHeroBanner ? 'voice-stage--hero-banner' : ''
+        } ${paused ? 'voice-orb--paused' : ''}`}
         aria-hidden="true"
       >
         <div className="voice-stage-wave">
-          {canvasRibbon ? (
+          {isHumeTheme ? (
+            <HumeHeroWaveCanvas
+              level={humeLevel}
+              externalLevelRef={showAssistantRibbon ? assistantLevelRef : undefined}
+              paused={paused}
+              reducedMotion={reduceMotion}
+              heroScale={isHumeTheme ? 2.65 : 1}
+            />
+          ) : canvasRibbon ? (
             <ListeningWaveCanvas
               active
               drive={showMicRibbon ? 'microphone' : showAssistantRibbon ? 'external' : 'synthetic'}
@@ -295,19 +325,19 @@ export function VoiceIndicator({
                   dur="7s"
                   repeatCount="indefinite"
                 />
-                <stop offset="0%" stopColor="#022c22" stopOpacity="1" />
-                <stop offset="14%" stopColor="#047857" stopOpacity="1" />
-                <stop offset="32%" stopColor="#10b981" stopOpacity="1" />
-                <stop offset="48%" stopColor="#d1fae5" stopOpacity="1" />
-                <stop offset="58%" stopColor="#6ee7b7" stopOpacity="1" />
-                <stop offset="76%" stopColor="#34d399" stopOpacity="1" />
-                <stop offset="92%" stopColor="#059669" stopOpacity="1" />
-                <stop offset="100%" stopColor="#064e3b" stopOpacity="1" />
+                <stop offset="0%" stopColor={isHumeTheme ? '#574853' : '#022c22'} stopOpacity="1" />
+                <stop offset="14%" stopColor={isHumeTheme ? '#c094e4' : '#047857'} stopOpacity="1" />
+                <stop offset="32%" stopColor={isHumeTheme ? '#f7bbe6' : '#10b981'} stopOpacity="1" />
+                <stop offset="48%" stopColor={isHumeTheme ? '#fdebf7' : '#d1fae5'} stopOpacity="1" />
+                <stop offset="58%" stopColor={isHumeTheme ? '#ffb760' : '#6ee7b7'} stopOpacity="1" />
+                <stop offset="76%" stopColor={isHumeTheme ? '#f7bbe6' : '#34d399'} stopOpacity="1" />
+                <stop offset="92%" stopColor={isHumeTheme ? '#c094e4' : '#059669'} stopOpacity="1" />
+                <stop offset="100%" stopColor={isHumeTheme ? '#574853' : '#064e3b'} stopOpacity="1" />
               </linearGradient>
               <linearGradient id={gidGlowGrad} x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#34d399" stopOpacity="0.08" />
-                <stop offset="45%" stopColor="#a7f3d0" stopOpacity="0.45" />
-                <stop offset="100%" stopColor="#10b981" stopOpacity="0.1" />
+                <stop offset="0%" stopColor={isHumeTheme ? '#c094e4' : '#34d399'} stopOpacity="0.08" />
+                <stop offset="45%" stopColor={isHumeTheme ? '#f7bbe6' : '#a7f3d0'} stopOpacity="0.45" />
+                <stop offset="100%" stopColor={isHumeTheme ? '#ffb760' : '#10b981'} stopOpacity="0.1" />
               </linearGradient>
               <linearGradient
                 id={gidFade}

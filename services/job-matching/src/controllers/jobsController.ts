@@ -5,14 +5,12 @@
 
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import jobRepository, { MATCH_SCAN_LIMIT } from '../models/jobRepository';
+import jobRepository, { resolveMatchScanLimit } from '../models/jobRepository';
 import { getUserProfile, getCollectedDataWithFallback } from '../services/userService';
 import {
   matchJobs,
   MATCH_SCORE_THRESHOLD,
   WEAK_MATCH_SCORE_FLOOR,
-  WEAK_MATCH_RETURN_LIMIT,
-  RECOMMENDED_RETURN_LIMIT,
   HEALTHY_FAMILY_SHARE,
   filterWeakMatchesForPresentation,
   filterRecommendedMatchesForPresentation,
@@ -28,6 +26,11 @@ import {
   HH_OPENAPI_REDOC,
 } from '../services/hhSalaryService';
 import { logger } from '../utils/logger';
+import {
+  buildJobDetailsPayload,
+  jobNeedsHhMetaRefresh,
+  refreshJobFromHh,
+} from '../services/jobDetailsService';
 
 const CATALOG_MAX_LIMIT = 200;
 
@@ -83,14 +86,16 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
     // Get auth token from request
     const token = req.headers.authorization?.replace('Bearer ', '') || '';
 
-    // Get user profile
-    let userProfile;
+    // Get user profile (preferences optional — matching works from collectedData)
+    let userProfile: Awaited<ReturnType<typeof getUserProfile>>;
     try {
       userProfile = await getUserProfile(token);
     } catch (error: unknown) {
-      logger.error('Failed to get user profile:', error);
-      res.status(500).json({ error: 'Failed to get user profile' });
-      return;
+      logger.warn('Failed to get user profile, continuing with session data only:', error);
+      userProfile = {
+        id: userId,
+        email: user.email,
+      };
     }
 
     // Get collected data from session (explicit sessionId from chat UI, else active session)
@@ -117,14 +122,13 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         })
       : { primary: 'unknown' as const, adjacent: [], detected: [] };
 
-    const [allJobs, jobsInDb] = await Promise.all([
-      jobRepository.findForMatch({
-        primaryFamily: profileRoles.primary,
-        adjacentFamilies: profileRoles.adjacent,
-        limit: MATCH_SCAN_LIMIT,
-      }),
-      jobRepository.count(),
-    ]);
+    const jobsInDb = await jobRepository.count();
+    const scanLimit = resolveMatchScanLimit(jobsInDb);
+    const allJobs = await jobRepository.findForMatch({
+      primaryFamily: profileRoles.primary,
+      adjacentFamilies: profileRoles.adjacent,
+      limit: scanLimit,
+    });
 
     if (allJobs.length === 0) {
       res.json({
@@ -189,13 +193,13 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       catalogWarning
     );
 
-    const topJobs = prioritizedRecommended.slice(0, RECOMMENDED_RETURN_LIMIT);
-    const topWeak = prioritizedWeak.slice(0, WEAK_MATCH_RETURN_LIMIT);
+    const returnedJobs = prioritizedRecommended;
+    const returnedWeak = prioritizedWeak;
 
     logger.info(
-      `[match] userId=${userId} jobsInDb=${jobsInDb} scanned=${allJobs.length} ` +
+      `[match] userId=${userId} jobsInDb=${jobsInDb} scanned=${allJobs.length} scanLimit=${scanLimit} ` +
         `aboveThreshold=${stats.aboveThreshold} weakTierTotal=${stats.weakTierTotal} ` +
-        `weakReturned=${topWeak.length} maxScore=${stats.maxScore} threshold=${MATCH_SCORE_THRESHOLD} ` +
+        `returnedRecommended=${returnedJobs.length} returnedWeak=${returnedWeak.length} maxScore=${stats.maxScore} threshold=${MATCH_SCORE_THRESHOLD} ` +
         `weakFloor=${WEAK_MATCH_SCORE_FLOOR} primaryFamily=${stats.primaryFamily} ` +
         `familyRelevance=${(stats.familyRelevanceShare * 100).toFixed(1)}%`
     );
@@ -218,7 +222,7 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
     }
 
     res.json({
-      jobs: topJobs.map((match) => ({
+      jobs: returnedJobs.map((match) => ({
         job: match.job,
         score: match.score,
         reasons: match.reasons,
@@ -226,9 +230,9 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         familyMatch: match.familyMatch,
         demoteReasons: match.demoteReasons ?? null,
       })),
-      count: topJobs.length,
-      totalMatched: matchedJobs.length,
-      weakJobs: topWeak.map((match) => ({
+      count: returnedJobs.length,
+      totalMatched: returnedJobs.length,
+      weakJobs: returnedWeak.map((match) => ({
         job: match.job,
         score: match.score,
         reasons: match.reasons,
@@ -236,8 +240,8 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         familyMatch: match.familyMatch,
         demoteReasons: match.demoteReasons ?? null,
       })),
-      weakCount: topWeak.length,
-      weakTierTotal: stats.weakTierTotal,
+      weakCount: returnedWeak.length,
+      weakTierTotal: returnedWeak.length,
       weakMatchFloor: WEAK_MATCH_SCORE_FLOOR,
       jobsInDb,
       jobsScanned: allJobs.length,
@@ -264,15 +268,29 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
 export async function getJobDetails(req: AuthRequest, res: Response): Promise<void> {
   try {
     const jobId = req.params.jobId;
+    const refreshRaw = req.query.refresh;
+    const shouldRefresh = refreshRaw === '1' || refreshRaw === 'true';
 
-    const job = await jobRepository.findById(jobId);
+    let job = await jobRepository.findById(jobId);
 
     if (!job) {
       res.status(404).json({ error: 'Job not found' });
       return;
     }
 
-    res.json({ job });
+    if (shouldRefresh && job.source === 'hh.ru') {
+      const refreshed = await refreshJobFromHh(job);
+      if (refreshed) {
+        job = refreshed;
+      }
+    } else if (jobNeedsHhMetaRefresh(job)) {
+      const refreshed = await refreshJobFromHh(job);
+      if (refreshed) {
+        job = refreshed;
+      }
+    }
+
+    res.json(buildJobDetailsPayload(job));
   } catch (error: unknown) {
     logger.error('Error getting job details:', error);
     res.status(500).json({ error: 'Internal server error' });

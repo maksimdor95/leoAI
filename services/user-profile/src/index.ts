@@ -16,6 +16,7 @@ import path from 'path';
 import userRoutes from './routes/userRoutes';
 import careerRoutes from './routes/careerRoutes';
 import { UserRepository } from './models/userRepository';
+import { UserOAuthTokenRepository } from './models/userOAuthTokenRepository';
 import { PasswordResetRepository } from './models/passwordResetRepository';
 import { CareerService } from './services/careerService';
 import { logger } from './utils/logger';
@@ -99,6 +100,10 @@ app.get('/', (_req, res) => {
       logout: 'POST /api/users/logout',
       oauthGoogle: 'GET /api/users/oauth/google/start',
       oauthYandex: 'GET /api/users/oauth/yandex/start',
+      oauthHhStart: 'GET /api/users/oauth/hh/start (auth)',
+      oauthHhCallback: 'GET /api/users/oauth/hh/callback',
+      hhIntegrationStatus: 'GET /api/users/integrations/hh (auth)',
+      hhIntegrationRevoke: 'DELETE /api/users/integrations/hh (auth)',
       profile: 'GET /api/users/profile',
       updateProfile: 'PUT /api/users/profile',
       forgotPassword: 'POST /api/users/forgot-password',
@@ -151,6 +156,7 @@ async function start() {
   try {
     logger.info('Initializing database schema and tables...');
     await UserRepository.createTable();
+    await UserOAuthTokenRepository.createTable();
     await PasswordResetRepository.createTable();
     await CareerService.createTables();
   } catch (err) {

@@ -50,6 +50,16 @@ export interface CollectedData {
   totalExperience?: number;
   location?: string[];
   workMode?: string;
+  /** HH: full | part | project */
+  employmentPreference?: string;
+  /** HH: готовность к договору ГПХ */
+  acceptGph?: boolean;
+  /** HH: id или label графика, напр. FIVE_ON_TWO_OFF или 5/2 */
+  workSchedulePreference?: string;
+  /** HH: id или label рабочих часов */
+  workingHoursPreference?: string;
+  /** HH: принимаемые формы оформления (id через запятую) */
+  employmentFormsAccepted?: string;
   skills?: string[];
   industries?: string[];
   embedding?: number[];

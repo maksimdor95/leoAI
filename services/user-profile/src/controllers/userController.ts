@@ -8,6 +8,8 @@ import { body, validationResult } from 'express-validator';
 import { UserService } from '../services/userService';
 import { PasswordResetService } from '../services/passwordResetService';
 import { OAuthProvider, OAuthService } from '../services/oauthService';
+import { HhIntegrationController } from './hhIntegrationController';
+import { HhIntegrationService } from '../services/hhIntegrationService';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
 
@@ -198,6 +200,10 @@ export class UserController {
   }
 
   static async oauthStart(req: Request, res: Response) {
+    if (req.params.provider === 'hh') {
+      return HhIntegrationController.oauthStart(req as AuthRequest, res);
+    }
+
     let provider: OAuthProvider | null = null;
     try {
       provider = UserController.parseProvider(req.params.provider);
@@ -214,6 +220,13 @@ export class UserController {
   }
 
   static async oauthCallback(req: Request, res: Response) {
+    if (
+      req.params.provider === 'hh' ||
+      HhIntegrationService.isIntegrationCallbackState(req.query.state)
+    ) {
+      return HhIntegrationController.oauthCallback(req, res);
+    }
+
     let provider: OAuthProvider;
     try {
       provider = UserController.parseProvider(req.params.provider);

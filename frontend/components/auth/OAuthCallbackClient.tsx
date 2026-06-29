@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from 'antd';
 import { CheckCircleFilled, LoadingOutlined } from '@ant-design/icons';
 import { saveToken } from '@/lib/auth';
-import { captureEvent } from '@/lib/analytics';
+import { captureEvent, identifyFromToken } from '@/lib/analytics';
+import { resolvePostAuthHref } from '@/lib/pendingAuthRedirect';
 
 function FloatingDots() {
   const dots = [
@@ -39,17 +40,32 @@ export function OAuthCallbackClient() {
   const success = searchParams.get('success') ?? undefined;
   const token = searchParams.get('token') ?? undefined;
   const error = searchParams.get('error') ?? undefined;
+  const kind = searchParams.get('kind') ?? undefined;
+  const provider = searchParams.get('provider') ?? undefined;
+  const returnTo = searchParams.get('returnTo') ?? undefined;
   const isSuccess = success === '1';
+  const isHhIntegration = kind === 'integration' && provider === 'hh';
 
   useEffect(() => {
-    if (isSuccess) {
-      if (token) {
-        saveToken(token);
-        captureEvent('user_logged_in', { method: 'oauth' });
-      }
-      router.replace('/chat');
+    if (!isSuccess) {
+      return;
     }
-  }, [isSuccess, router, token]);
+
+    if (isHhIntegration) {
+      const target = returnTo
+        ? `${returnTo}${returnTo.includes('?') ? '&' : '?'}hhConnected=1`
+        : '/chat?hhConnected=1';
+      router.replace(target);
+      return;
+    }
+
+    if (token) {
+      saveToken(token);
+      identifyFromToken(token);
+      captureEvent('user_logged_in', { method: 'oauth', source: 'oauth_callback' });
+    }
+    router.replace(resolvePostAuthHref());
+  }, [isHhIntegration, isSuccess, returnTo, router, token]);
 
   return (
     <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-[#050913] text-white px-6">
@@ -64,9 +80,13 @@ export function OAuthCallbackClient() {
             <>
               <CheckCircleFilled className="text-5xl text-green-500 mb-5" aria-hidden />
               <h1 className="text-2xl md:text-3xl font-bold text-white mb-3 leading-snug">
-                Авторизация успешно завершена
+                {isHhIntegration ? 'HeadHunter подключён' : 'Авторизация успешно завершена'}
               </h1>
-              <p className="text-slate-300 text-base mb-6">Сейчас откроем ваш чат с LEO.</p>
+              <p className="text-slate-300 text-base mb-6">
+                {isHhIntegration
+                  ? 'Сейчас вернём вас в LEO.'
+                  : 'Сейчас откроем ваш чат с LEO.'}
+              </p>
               <div className="flex items-center justify-center gap-2 text-slate-400 text-sm">
                 <LoadingOutlined className="text-green-500" spin />
                 <span>Перенаправляем...</span>

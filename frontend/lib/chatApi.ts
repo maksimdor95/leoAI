@@ -6,6 +6,7 @@
 import { getToken } from '@/lib/auth';
 import { buildAuthHeaders } from '@/lib/authHeaders';
 import { Message, type ProfileSummary } from '@/types/chat';
+import type { ClientPreferences, TtsPreferences } from '@/lib/ttsVoices';
 import { getPublicConversationBaseUrl } from './publicApiBaseUrl';
 
 const getApiUrl = () => getPublicConversationBaseUrl();
@@ -73,6 +74,8 @@ export type ChatMessageDelivery = {
   skipAnimation?: boolean;
 };
 
+export type { TtsPreferences };
+
 class ChatApiClient {
   private baseUrl: string;
   private token: string | null = null;
@@ -81,6 +84,7 @@ class ChatApiClient {
   private pollingInterval: ReturnType<typeof setInterval> | null = null;
   private lastMessageCount = 0;
   private requestTimeoutMs = Number(process.env.NEXT_PUBLIC_CHAT_REQUEST_TIMEOUT_MS || 20000);
+  private getClientPreferences?: () => ClientPreferences | undefined;
 
   // Event callbacks
   public onSessionJoined?: (sessionId: string, metadata?: SessionMetadata) => void;
@@ -96,9 +100,20 @@ class ChatApiClient {
     mimeType?: string;
     format?: 'mp3' | 'oggopus';
   }) => void;
+  public onMetadataChange?: (metadata: SessionMetadata | null) => void;
 
-  constructor(baseUrl?: string) {
+  constructor(baseUrl?: string, getClientPreferences?: () => ClientPreferences | undefined) {
     this.baseUrl = baseUrl || getApiUrl();
+    this.getClientPreferences = getClientPreferences;
+  }
+
+  private buildClientPreferencesBody(): { locale?: string; ttsPreferences?: TtsPreferences } {
+    const prefs = this.getClientPreferences?.();
+    if (!prefs) return {};
+    return {
+      locale: prefs.locale,
+      ttsPreferences: { lang: prefs.lang, voice: prefs.voice },
+    };
   }
 
   private emitAssistantAudio(
@@ -114,6 +129,12 @@ class ChatApiClient {
       mimeType: audio.mimeType,
       format: audio.format,
     });
+  }
+
+  private applySessionMetadata(metadata: SessionMetadata | null | undefined): void {
+    if (!metadata) return;
+    this.sessionMetadata = metadata;
+    this.onMetadataChange?.(metadata);
   }
 
   private async request<T>(
@@ -141,6 +162,14 @@ class ChatApiClient {
           ...options.headers,
         },
       });
+    } catch (error: unknown) {
+      if (
+        error instanceof DOMException ||
+        (error instanceof Error && error.name === 'AbortError')
+      ) {
+        throw new Error('Превышено время ожидания ответа сервера');
+      }
+      throw error;
     } finally {
       clearTimeout(timeout);
     }
@@ -179,6 +208,7 @@ class ChatApiClient {
           createNew: options.createNew,
           product: options.product,
           intent: options.intent,
+          ...this.buildClientPreferencesBody(),
         }),
       });
 
@@ -204,8 +234,9 @@ class ChatApiClient {
       // Start polling for new messages
       this.startPolling();
     } catch (error) {
-      this.onError?.({ message: error instanceof Error ? error.message : 'Connection failed' });
-      throw error;
+      this.onError?.({
+        message: error instanceof Error ? error.message : 'Connection failed',
+      });
     }
   }
 
@@ -244,13 +275,13 @@ class ChatApiClient {
         `/api/chat/session/${this.sessionId}/message`,
         {
           method: 'POST',
-          body: JSON.stringify({ content: trimmed }),
+          body: JSON.stringify({ content: trimmed, ...this.buildClientPreferencesBody() }),
         },
         timeoutMs
       );
 
       if (response.metadata) {
-        this.sessionMetadata = response.metadata;
+        this.applySessionMetadata(response.metadata);
       }
 
       // Emit user message
@@ -266,7 +297,7 @@ class ChatApiClient {
 
       this.lastMessageCount = response.messages.length;
     } catch (error) {
-      const isAbort = error instanceof Error && error.name === 'AbortError';
+      const isAbort = error instanceof Error && error.message.includes('время ожидания');
       this.onError?.({
         message: isAbort
           ? 'LEO долго обрабатывает ответ. Подождите или попробуйте ещё раз.'
@@ -274,7 +305,6 @@ class ChatApiClient {
             ? error.message
             : 'Failed to send message',
       });
-      throw error;
     } finally {
       this.onSendStateChange?.('idle');
     }
@@ -307,13 +337,14 @@ class ChatApiClient {
           body: JSON.stringify({
             vacancyText: trimmedText,
             displayLabel: trimmedLabel,
+            ...this.buildClientPreferencesBody(),
           }),
         },
         analyzeTimeoutMs
       );
 
       if (response.metadata) {
-        this.sessionMetadata = response.metadata;
+        this.applySessionMetadata(response.metadata);
       }
 
       if (response.userMessage) {
@@ -347,12 +378,12 @@ class ChatApiClient {
         `/api/chat/session/${this.sessionId}/merge-collected`,
         {
           method: 'POST',
-          body: JSON.stringify({ collectedData }),
+          body: JSON.stringify({ collectedData, ...this.buildClientPreferencesBody() }),
         }
       );
 
       if (response.metadata) {
-        this.sessionMetadata = response.metadata;
+        this.applySessionMetadata(response.metadata);
       }
 
       if (response.assistantMessage) {
@@ -382,12 +413,12 @@ class ChatApiClient {
         `/api/chat/session/${this.sessionId}/command`,
         {
           method: 'POST',
-          body: JSON.stringify({ commandId, action }),
+          body: JSON.stringify({ commandId, action, ...this.buildClientPreferencesBody() }),
         }
       );
 
       if (response.metadata) {
-        this.sessionMetadata = response.metadata;
+        this.applySessionMetadata(response.metadata);
       }
 
       // Check for new messages
@@ -440,7 +471,7 @@ class ChatApiClient {
     );
 
     if (response.metadata) {
-      this.sessionMetadata = response.metadata;
+      this.applySessionMetadata(response.metadata);
     }
 
     if (response.assistantMessage) {
@@ -497,7 +528,7 @@ class ChatApiClient {
     }
 
     if (response.metadata) {
-      this.sessionMetadata = response.metadata;
+      this.applySessionMetadata(response.metadata);
     }
 
     if (response.assistantMessage) {
@@ -690,6 +721,7 @@ export function createChatApi(
     createNew?: boolean;
     product?: ProductType;
     intent?: 'vacancy_analyze';
+    getClientPreferences?: () => ClientPreferences | undefined;
     onConnected?: () => void;
     onDisconnected?: () => void;
     onSessionJoined?: (payload: { sessionId: string; metadata?: SessionMetadata }) => void;
@@ -703,9 +735,10 @@ export function createChatApi(
     }) => void;
     onError?: (payload: { message: string }) => void;
     onSendStateChange?: (state: 'sending' | 'idle') => void;
+    onMetadataChange?: (metadata: SessionMetadata | null) => void;
   } = {}
 ) {
-  const client = new ChatApiClient(config.url);
+  const client = new ChatApiClient(config.url, config.getClientPreferences);
 
   // Wrap callbacks to match Socket.io interface
   if (config.onConnected) client.onConnected = config.onConnected;
@@ -724,6 +757,9 @@ export function createChatApi(
   }
   if (config.onError) client.onError = config.onError;
   if (config.onSendStateChange) client.onSendStateChange = config.onSendStateChange;
+  if (config.onMetadataChange) {
+    client.onMetadataChange = (metadata) => config.onMetadataChange?.(metadata);
+  }
 
   return {
     connect: () =>

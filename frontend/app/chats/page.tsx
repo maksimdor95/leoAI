@@ -3,32 +3,49 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button, Card, Empty, Layout, Spin, Typography, message as antdMessage, Modal } from 'antd';
+import { Button, Empty, Layout, Spin, message as antdMessage, Modal } from 'antd';
 import {
   PlusOutlined,
   MessageOutlined,
   CalendarOutlined,
   DeleteOutlined,
+  ArrowLeftOutlined,
 } from '@ant-design/icons';
 import { conversationAPI, ConversationPreview } from '@/lib/api';
 import { isAuthenticated } from '@/lib/auth';
 import Link from 'next/link';
 import { SupportWidget } from '@/components/support/SupportWidget';
+import { AppSettingsMenu } from '@/components/chat/AppSettingsMenu';
+import { useAppSettings } from '@/contexts/AppSettingsContext';
+import {
+  chatUi,
+  chatsDeleteContent,
+  formatChatRelativeTime,
+} from '@/lib/chatUiCopy';
+import { useHumeTheme } from '@/lib/useHumeTheme';
 
-const { Title, Text } = Typography;
 const { Content } = Layout;
+
+function productChipLabel(product: string): string {
+  if (product === 'wannanew') return 'Leo';
+  if (product === 'interview-prep') return 'Prep';
+  return 'LEO';
+}
 
 export default function ChatsPage() {
   const router = useRouter();
   const { openAuthModal } = useAuth();
+  const { settings } = useAppSettings();
+  const isHume = useHumeTheme();
+  const ui = (key: Parameters<typeof chatUi>[1]) => chatUi(settings.locale, key);
   const [conversations, setConversations] = useState<ConversationPreview[]>([]);
   const [loading, setLoading] = useState(true);
   const [messageApi, contextHolder] = antdMessage.useMessage();
 
   useEffect(() => {
     if (!isAuthenticated()) {
-      messageApi.warning('Авторизуйтесь, чтобы просмотреть свои чаты.');
-      openAuthModal('login');
+      messageApi.warning(ui('chatsAuthRequired'));
+      openAuthModal('login', { source: 'chats_auth_required' });
       router.push('/');
       return;
     }
@@ -42,7 +59,7 @@ export default function ChatsPage() {
       const data = await conversationAPI.getConversations();
       setConversations(data.conversations);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Не удалось загрузить чаты';
+      const errorMessage = error instanceof Error ? error.message : ui('chatsLoadError');
       messageApi.error(errorMessage);
     } finally {
       setLoading(false);
@@ -51,71 +68,78 @@ export default function ChatsPage() {
 
   const handleDeleteConversation = async (conversationId: string, conversationTitle: string) => {
     Modal.confirm({
-      title: 'Удалить чат?',
-      content: `Вы уверены, что хотите удалить чат "${conversationTitle}"? Это действие нельзя отменить.`,
-      okText: 'Удалить',
-      cancelText: 'Отмена',
+      title: ui('chatsDeleteTitle'),
+      content: chatsDeleteContent(settings.locale, conversationTitle),
+      okText: ui('chatsDeleteOk'),
+      cancelText: ui('chatsDeleteCancel'),
       okType: 'danger',
+      className: isHume ? 'leo-hume-modal' : undefined,
       onOk: async () => {
         try {
           await conversationAPI.deleteConversation(conversationId);
-          messageApi.success('Чат успешно удален');
-          // Reload conversations
+          messageApi.success(ui('chatsDeleted'));
           await loadConversations();
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Не удалось удалить чат';
+          const errorMessage = error instanceof Error ? error.message : ui('chatsDeleteError');
           messageApi.error(errorMessage);
         }
       },
     });
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Только что';
-    if (diffMins < 60) return `${diffMins} мин назад`;
-    if (diffHours < 24) return `${diffHours} ч назад`;
-    if (diffDays < 7) return `${diffDays} дн назад`;
-    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
-  };
+  const formatDate = (dateString: string) => formatChatRelativeTime(settings.locale, dateString);
 
   const getJobTitle = (collectedData: Record<string, unknown>): string => {
     if (collectedData.desiredRole) {
       return String(collectedData.desiredRole);
     }
-    return 'Новый диалог';
+    return ui('chatsNewDialog');
   };
 
+  const newChatButtonClass = isHume
+    ? 'hume-btn-pill !h-11 !px-6 !text-sm !border-none'
+    : 'h-12 rounded-full border-none bg-gradient-to-r from-green-500 to-purple-500 px-6 text-base font-semibold text-white shadow-xl hover:from-green-400 hover:to-purple-400';
+
   return (
-    <Layout className="min-h-screen bg-[#050913] text-white">
+    <Layout
+      className={`leo-chats-page min-h-screen ${
+        isHume ? 'bg-[var(--color-bone)] text-[var(--color-ink)]' : 'bg-[#050913] text-white'
+      }`}
+    >
       {contextHolder}
-      <Content className="px-6 py-10 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
-        <div className="mx-auto max-w-7xl">
-          <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <Title level={2} style={{ color: 'white', marginBottom: 0 }}>
-                Мои чаты
-              </Title>
-              <Text type="secondary" style={{ color: 'rgba(148, 163, 184, 0.8)' }}>
-                Выберите чат для продолжения или создайте новый
-              </Text>
+      <Content className="px-4 py-8 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[var(--page-max-width)]">
+          <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Link href="/">
+                  <Button
+                    type="text"
+                    icon={<ArrowLeftOutlined />}
+                    className={
+                      isHume
+                        ? 'leo-chats-back !text-[var(--color-smoke)] hover:!text-[var(--color-ink)] hover:!bg-[rgba(34,34,34,0.04)]'
+                        : '!text-slate-400 hover:!text-white hover:!bg-white/[0.06]'
+                    }
+                    aria-label={ui('chatsBackHome')}
+                  />
+                </Link>
+                <h1 className={isHume ? 'hume-heading !text-[var(--text-heading)]' : 'text-2xl font-bold text-white m-0'}>
+                  {ui('myChats')}
+                </h1>
+              </div>
+              <p className={isHume ? 'hume-body !m-0 max-w-xl' : 'text-slate-400 m-0'}>
+                {ui('chatsSubtitle')}
+              </p>
             </div>
-            <Link href="/chat?new=true">
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                size="large"
-                className="h-12 rounded-full border-none bg-gradient-to-r from-green-500 to-purple-500 px-6 text-base font-semibold text-white shadow-xl hover:from-green-400 hover:to-purple-400"
-              >
-                Новый чат
-              </Button>
-            </Link>
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              <AppSettingsMenu />
+              <Link href="/chat?new=true">
+                <Button type="primary" icon={<PlusOutlined />} size="large" className={newChatButtonClass}>
+                  {ui('newChat')}
+                </Button>
+              </Link>
+            </div>
           </header>
 
           {loading ? (
@@ -123,90 +147,118 @@ export default function ChatsPage() {
               <Spin size="large" />
             </div>
           ) : conversations.length === 0 ? (
-            <Card className="border-white/10 bg-white/[0.04] backdrop-blur">
+            <div
+              className={
+                isHume
+                  ? 'hume-card rounded-2xl p-8 sm:p-10 text-center'
+                  : 'rounded-2xl border border-white/10 bg-white/[0.04] p-8 backdrop-blur'
+              }
+            >
               <Empty
                 description={
-                  <span className="text-slate-300">
-                    У вас пока нет чатов. Создайте новый, чтобы начать диалог.
+                  <span className={isHume ? 'hume-body-sm' : 'text-slate-300'}>
+                    {ui('chatsEmpty')}
                   </span>
                 }
               >
                 <div className="mt-4">
                   <Link href="/chat?new=true">
-                    <Button
-                      type="primary"
-                      icon={<PlusOutlined />}
-                      size="large"
-                      className="rounded-full border-none bg-gradient-to-r from-green-500 to-purple-500 px-8 text-base font-semibold text-white shadow-xl hover:from-green-400 hover:to-purple-400"
-                    >
-                      Начать новый чат
+                    <Button type="primary" icon={<PlusOutlined />} size="large" className={newChatButtonClass}>
+                      {ui('chatsStartNew')}
                     </Button>
                   </Link>
                 </div>
               </Empty>
-            </Card>
+            </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {conversations.map((conversation) => (
-                <div key={conversation.id} className="relative group">
-                  <Link href={`/chat?sessionId=${conversation.id}`}>
-                    <Card
-                      hoverable
-                      className="h-full border-white/10 bg-white/[0.04] backdrop-blur transition-all hover:bg-white/[0.08] hover:shadow-lg"
+                <div key={conversation.id} className="group relative">
+                  <Link href={`/chat?sessionId=${conversation.id}`} className="block h-full">
+                    <article
+                      className={
+                        isHume
+                          ? 'hume-card leo-chat-card h-full p-5 transition-colors hover:bg-[var(--color-bone)]'
+                          : 'h-full rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur transition-all hover:bg-white/[0.08] hover:shadow-lg'
+                      }
                     >
                       <div className="flex flex-col gap-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span
-                                className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                                  conversation.product === 'wannanew'
-                                    ? 'bg-purple-500/30 text-purple-300'
-                                    : 'bg-green-500/30 text-green-300'
-                                }`}
-                              >
-                                {conversation.product === 'wannanew' ? 'Leo' : 'LEO'}
-                              </span>
-                            </div>
-                            <Title
-                              level={4}
-                              style={{ color: 'white', marginBottom: 8, fontSize: 18 }}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <span
+                              className={
+                                isHume
+                                  ? `hume-chip !text-[10px] ${
+                                      conversation.product === 'interview-prep'
+                                        ? '!bg-[var(--color-meringue)] !border-transparent'
+                                        : conversation.product === 'wannanew'
+                                          ? '!bg-[var(--color-blush)] !border-transparent'
+                                          : '!bg-[var(--color-mint)] !border-transparent'
+                                    }`
+                                  : `text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                                      conversation.product === 'wannanew'
+                                        ? 'bg-purple-500/30 text-purple-300'
+                                        : 'bg-green-500/30 text-green-300'
+                                    }`
+                              }
+                            >
+                              {productChipLabel(conversation.product)}
+                            </span>
+                            <h2
+                              className={
+                                isHume
+                                  ? 'mt-2 hume-heading !text-base sm:!text-lg line-clamp-2'
+                                  : 'mt-2 text-lg font-semibold text-white line-clamp-2'
+                              }
                             >
                               {getJobTitle(conversation.collectedData)}
-                            </Title>
-                            <Text
-                              type="secondary"
-                              className="line-clamp-2 text-sm"
-                              style={{ color: 'rgba(148, 163, 184, 0.8)' }}
+                            </h2>
+                            <p
+                              className={
+                                isHume
+                                  ? 'mt-2 hume-body-sm line-clamp-2'
+                                  : 'mt-2 line-clamp-2 text-sm text-slate-400'
+                              }
                             >
                               {conversation.preview}
-                            </Text>
+                            </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-4 text-xs text-slate-400">
-                          <div className="flex items-center gap-1">
-                            <MessageOutlined />
+                        <div
+                          className={
+                            isHume
+                              ? 'flex items-center gap-4 hume-label-sm !normal-case !tracking-normal !text-[11px] !text-[var(--color-smoke)]'
+                              : 'flex items-center gap-4 text-xs text-slate-400'
+                          }
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <MessageOutlined aria-hidden />
                             <span>{conversation.messageCount} сообщений</span>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <CalendarOutlined />
+                          <div className="flex items-center gap-1.5">
+                            <CalendarOutlined aria-hidden />
                             <span>{formatDate(conversation.updatedAt)}</span>
                           </div>
                         </div>
                       </div>
-                    </Card>
+                    </article>
                   </Link>
                   <Button
                     type="text"
                     icon={<DeleteOutlined />}
                     size="small"
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500/20 hover:bg-red-500/40 border-red-500/50 text-red-400 hover:text-red-300"
+                    aria-label="Удалить чат"
+                    className={
+                      isHume
+                        ? 'absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity !text-[var(--color-smoke)] hover:!text-[var(--color-ink)] hover:!bg-[var(--color-bone)] !rounded-full'
+                        : 'absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500/20 hover:bg-red-500/40 border-red-500/50 text-red-400 hover:text-red-300'
+                    }
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       handleDeleteConversation(
                         conversation.id,
-                        getJobTitle(conversation.collectedData)
+                        getJobTitle(conversation.collectedData),
                       );
                     }}
                   />

@@ -10,6 +10,8 @@ import { logger } from '../utils/logger';
 import { retry, isRetryableError } from '../utils/retry';
 import { getHHApplicationToken, getHHUserAgent, hasHHAuthConfig } from './hhAuthService';
 import { buildHhVacancyUrl } from '../utils/vacancyUrl';
+import { extractHhVacancyMeta, mapHhWorkMode } from '../utils/hhVacancyMeta';
+import { uniqueLocationLabels } from '../utils/locationLabels';
 import { enrichJobWithLLM } from './enrichment';
 import { classifyRoleFamily } from './roleFamily';
 
@@ -369,7 +371,7 @@ async function scrapeHHViaAPI(keywords: string[], locationId: number): Promise<J
           }
 
           try {
-            const vacancyDetail = await fetchVacancyDetails(vacancy.id);
+            const vacancyDetail = await fetchHhVacancyDetails(vacancy.id);
             if (vacancyDetail) {
               jobs.push(vacancyDetail);
               collectedForKeyword += 1;
@@ -577,7 +579,7 @@ function parseSuperJobVacancy(vacancy: Record<string, unknown>, keyword: string)
 /**
  * Fetch detailed vacancy information from HH.ru
  */
-async function fetchVacancyDetails(vacancyId: string): Promise<JobInput | null> {
+export async function fetchHhVacancyDetails(vacancyId: string): Promise<JobInput | null> {
   try {
     const response = await retry(
       () =>
@@ -597,34 +599,35 @@ async function fetchVacancyDetails(vacancyId: string): Promise<JobInput | null> 
       }
     );
 
-    const vacancy = response.data;
+    const vacancy = response.data as Record<string, unknown>;
+    const sourceMeta = extractHhVacancyMeta(vacancy);
 
-    // Extract location
-    const location: string[] = [];
-    if (vacancy.area) {
-      location.push(vacancy.area.name);
-    }
-    if (vacancy.address) {
-      location.push(vacancy.address.city || '');
-    }
+    const area = vacancy.area as { name?: string } | undefined;
+    const address = vacancy.address as { city?: string } | undefined;
+    const location = uniqueLocationLabels([area?.name, address?.city]);
 
     // Extract salary
     let salary_min: number | null = null;
     let salary_max: number | null = null;
     let currency: string | null = null;
-    if (vacancy.salary) {
-      salary_min = vacancy.salary.from || null;
-      salary_max = vacancy.salary.to || null;
-      currency = vacancy.salary.currency || null;
+    const salary = vacancy.salary as
+      | { from?: number | null; to?: number | null; currency?: string | null }
+      | undefined;
+    if (salary) {
+      salary_min = salary.from || null;
+      salary_max = salary.to || null;
+      currency = salary.currency || null;
     }
 
     // Extract skills
-    const skills: string[] = vacancy.key_skills?.map((skill: { name: string }) => skill.name) || [];
+    const keySkills = vacancy.key_skills as { name: string }[] | undefined;
+    const skills: string[] = keySkills?.map((skill) => skill.name) || [];
 
     // Determine experience level
     let experience_level: string | null = null;
-    if (vacancy.experience) {
-      const expId = vacancy.experience.id;
+    const experience = vacancy.experience as { id?: string } | undefined;
+    if (experience?.id) {
+      const expId = experience.id;
       if (expId === 'noExperience' || expId === 'between1And3') {
         experience_level = 'junior';
       } else if (expId === 'between3And6') {
@@ -634,35 +637,27 @@ async function fetchVacancyDetails(vacancyId: string): Promise<JobInput | null> 
       }
     }
 
-    // Determine work mode
-    let work_mode: string | null = null;
-    if (vacancy.schedule) {
-      const scheduleId = vacancy.schedule.id;
-      if (scheduleId === 'remote') {
-        work_mode = 'remote';
-      } else if (scheduleId === 'flexible') {
-        work_mode = 'hybrid';
-      } else {
-        work_mode = 'office';
-      }
-    }
+    // Determine work mode from HH work_format (not schedule)
+    const work_mode = mapHhWorkMode(vacancy);
+    const snippet = vacancy.snippet as { requirement?: string } | undefined;
 
     return {
-      title: vacancy.name || '',
-      company: vacancy.employer?.name || '',
-      location: location.filter((l) => l),
+      title: (vacancy.name as string) || '',
+      company: ((vacancy.employer as { name?: string })?.name) || '',
+      location,
       salary_min,
       salary_max,
       currency,
-      description: vacancy.description || '',
-      requirements: vacancy.snippet?.requirement || '',
+      description: (vacancy.description as string) || '',
+      requirements: snippet?.requirement || '',
       skills,
       experience_level,
       work_mode,
+      source_meta: sourceMeta,
       source: 'hh.ru',
       source_url: buildHhVacancyUrl(vacancyId),
-      role_family: classifyRoleFamily(vacancy.name || ''),
-      posted_at: vacancy.published_at ? new Date(vacancy.published_at) : null,
+      role_family: classifyRoleFamily(((vacancy.name as string) || '')),
+      posted_at: vacancy.published_at ? new Date(vacancy.published_at as string) : null,
     };
   } catch (error: unknown) {
     logger.error(`Error fetching vacancy ${vacancyId}:`, error);

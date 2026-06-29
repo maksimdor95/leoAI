@@ -11,6 +11,7 @@ import { ProfileCompletionCards } from '@/components/chat/ProfileCompletionCards
 import { InterviewPrepInfoOverview } from '@/components/chat/InterviewPrepInfoOverview';
 import { PrepPackStageCard } from '@/components/chat/PrepPackStageCard';
 import type { PrepPackType } from '@/types/chat';
+import { useHumeTheme } from '@/lib/useHumeTheme';
 
 const VACANCY_PROFILE_CARD_TITLE = 'Профиль вакансии и план подготовки';
 
@@ -80,6 +81,7 @@ export function StagePanel({
   onQuickReply,
   detailedProgressLabel,
 }: StagePanelProps) {
+  const isHume = useHumeTheme();
   const hasQuestion = Boolean(question);
   const hasPrepModeContent = Boolean(prepModeContent?.content);
   const hasInfoCard = Boolean(infoCard);
@@ -102,7 +104,7 @@ export function StagePanel({
     infoCard?.title === '✅ Профиль успешно собран!';
 
   return (
-    <div className="flex flex-col items-start gap-4 sm:gap-6 w-full overflow-visible">
+    <div className="leo-chat-stage flex flex-col items-start gap-4 sm:gap-6 w-full overflow-visible">
       {/* Show infoCard only if it's newer than question, or if there's no question */}
       {/* Profile snapshot is now shown in modal from history, not here */}
       {showInterviewReport && infoCard && interviewReport ? (
@@ -137,16 +139,42 @@ export function StagePanel({
         <Fragment>
           <div className="space-y-2 text-left w-full">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <div className="text-xs uppercase tracking-[0.4em] text-green-300/70">Вопрос</div>
+              <div
+                className={
+                  isHume
+                    ? 'hume-stage-label hume-label-sm'
+                    : 'text-xs uppercase tracking-[0.4em] text-green-300/70'
+                }
+              >
+                Вопрос
+              </div>
               {detailedProgressLabel ? (
-                <span className="text-[11px] font-medium text-slate-400">{detailedProgressLabel}</span>
+                <span
+                  className={
+                    isHume ? 'hume-body-sm !text-xs' : 'text-[11px] font-medium text-slate-400'
+                  }
+                >
+                  {detailedProgressLabel}
+                </span>
               ) : null}
             </div>
-            <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-white leading-tight break-words w-full text-left">
+            <h2
+              className={
+                isHume
+                  ? 'hume-stage-heading text-left w-full break-words leading-tight'
+                  : 'text-base sm:text-lg lg:text-xl font-semibold text-white leading-tight break-words w-full text-left'
+              }
+            >
               {question.question}
             </h2>
             {question.placeholder && (
-              <p className="text-xs sm:text-sm text-slate-300 w-full break-words text-left">
+              <p
+                className={
+                  isHume
+                    ? 'hume-body-sm w-full break-words text-left'
+                    : 'text-xs sm:text-sm text-slate-300 w-full break-words text-left'
+                }
+              >
                 {question.placeholder}
               </p>
             )}
@@ -158,13 +186,25 @@ export function StagePanel({
                     type="button"
                     onClick={() => onQuickReply(reply.value)}
                     className={[
-                      'group/qr inline-flex flex-col items-start rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-left transition-all hover:border-green-500/40 hover:bg-white/[0.08] active:scale-[0.98]',
+                      isHume
+                        ? 'group/qr inline-flex flex-col items-start rounded-2xl border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)] px-4 py-2.5 text-left transition-colors hover:border-[rgba(34,34,34,0.18)] hover:bg-[var(--color-bone)] active:scale-[0.98]'
+                        : 'group/qr inline-flex flex-col items-start rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-left transition-all hover:border-green-500/40 hover:bg-white/[0.08] active:scale-[0.98]',
                       reply.fullWidth ? 'w-full basis-full' : '',
                     ].join(' ')}
                   >
-                    <span className="text-sm font-semibold text-white">{reply.label}</span>
+                    <span
+                      className={
+                        isHume
+                          ? 'text-sm font-medium text-[var(--color-ink)]'
+                          : 'text-sm font-semibold text-white'
+                      }
+                    >
+                      {reply.label}
+                    </span>
                     {reply.hint ? (
-                      <span className="mt-0.5 text-xs text-slate-400">{reply.hint}</span>
+                      <span className={isHume ? 'mt-0.5 hume-body-sm !text-xs' : 'mt-0.5 text-xs text-slate-400'}>
+                        {reply.hint}
+                      </span>
                     ) : null}
                   </button>
                 ))}
@@ -203,7 +243,13 @@ export function StagePanel({
             ) : (
               <>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="text-xs uppercase tracking-[0.4em] text-green-300/70">
+              <div
+                className={
+                  isHume
+                    ? 'hume-stage-label hume-label-sm'
+                    : 'text-xs uppercase tracking-[0.4em] text-green-300/70'
+                }
+              >
                 {prepModeContent.modeLabel}
               </div>
               {prepModeContent.mockQuestionLabel ? (
@@ -221,7 +267,13 @@ export function StagePanel({
                 </span>
               ) : null}
             </div>
-            <div className="text-sm sm:text-base text-slate-100 leading-relaxed whitespace-pre-line break-words">
+            <div
+              className={
+                isHume
+                  ? 'hume-stage-body text-sm sm:text-base leading-relaxed whitespace-pre-line break-words'
+                  : 'text-sm sm:text-base text-slate-100 leading-relaxed whitespace-pre-line break-words'
+              }
+            >
               {prepModeContent.content}
             </div>
               </>
@@ -232,7 +284,11 @@ export function StagePanel({
                   type="primary"
                   size="middle"
                   onClick={prepModeContent.onTheoryReady}
-                  className="!rounded-full !border-none !bg-gradient-to-r !from-violet-500 !to-violet-600 !text-sm !font-semibold !shadow-lg hover:!from-violet-400 hover:!to-violet-500"
+                  className={
+                    isHume
+                      ? 'hume-btn-pill !h-9 !px-5 !text-sm !border-none'
+                      : '!rounded-full !border-none !bg-gradient-to-r !from-violet-500 !to-violet-600 !text-sm !font-semibold !shadow-lg hover:!from-violet-400 hover:!to-violet-500'
+                  }
                 >
                   Готов к проверке
                 </Button>
@@ -244,7 +300,11 @@ export function StagePanel({
                   type="primary"
                   size="middle"
                   onClick={prepModeContent.onMockStart}
-                  className="!rounded-full !border-none !bg-gradient-to-r !from-green-500 !to-green-600 !text-sm !font-semibold !shadow-lg hover:!from-green-400 hover:!to-green-500"
+                  className={
+                    isHume
+                      ? 'hume-btn-pill !h-9 !px-5 !text-sm !border-none'
+                      : '!rounded-full !border-none !bg-gradient-to-r !from-green-500 !to-green-600 !text-sm !font-semibold !shadow-lg hover:!from-green-400 hover:!to-green-500'
+                  }
                 >
                   Начать мок
                 </Button>

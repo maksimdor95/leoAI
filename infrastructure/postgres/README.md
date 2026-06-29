@@ -33,4 +33,23 @@ docker-compose exec postgres psql -U postgres -d jack_ai
 
 ## Миграции
 
-Миграции базы данных будут добавляться в каждом сервисе отдельно.
+Миграции лежат в `migrations/` и применяются вручную:
+
+```bash
+# из корня репозитория, контейнер postgres из docker compose
+docker exec -i leoai-postgres-1 psql -U postgres -d jack_ai \
+  < infrastructure/postgres/migrations/002_leowork_employer_schema.sql
+```
+
+Проверка:
+
+```sql
+\dn employer
+\dt employer.*
+```
+
+| Файл | Описание |
+|------|----------|
+| `migrations/002_leowork_employer_schema.sql` | LEOWORK B2B: schema `employer` (companies, briefs, shortlist, intros, pipeline, invoices, consent) |
+
+Сервисные миграции (jack, jobs) по-прежнему в `services/*/src` (`npm run init:db`).

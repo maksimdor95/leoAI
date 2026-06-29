@@ -8,6 +8,7 @@ import {
 } from '@/types/chat';
 import { Button } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
+import { useHumeTheme } from '@/lib/useHumeTheme';
 
 function getMessageContent(message: Message): string {
   if (message.type === MessageType.TEXT || message.type === MessageType.SYSTEM) {
@@ -36,8 +37,10 @@ type MessageListProps = {
 };
 
 export function MessageList({ messages, onShowProfile, onCommandSelect }: MessageListProps) {
+  const isHume = useHumeTheme();
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="leo-chat-history flex flex-col gap-4">
       {messages.map((message) => {
         const content = getMessageContent(message);
         if (!content) {
@@ -51,21 +54,39 @@ export function MessageList({ messages, onShowProfile, onCommandSelect }: Messag
           message.type === MessageType.INFO_CARD &&
           (message as InfoCardMessage).title === 'Ваш профиль';
 
+        const bubbleBodyClass = isHume
+          ? `whitespace-pre-line break-words hyphens-auto hume-body-sm !text-[11px] !leading-relaxed ${
+              isAssistant ? '!text-[var(--color-ink)]' : '!text-[var(--color-paper)]'
+            }`
+          : 'whitespace-pre-line text-[11px] leading-relaxed break-words hyphens-auto text-slate-100';
+
         return (
           <div
             key={message.id}
             className={`flex gap-2 ${isAssistant ? 'justify-start' : 'justify-end'}`}
           >
             <div
-              className={`max-w-[240px] rounded-2xl px-3 py-2 shadow-sm backdrop-blur break-words overflow-wrap-anywhere ${
-                isAssistant
-                  ? 'bg-white/10 text-slate-100 border border-white/10 rounded-tl-sm'
-                  : 'bg-blue-500/20 text-slate-100 border border-blue-400/30 rounded-tr-sm'
+              className={`max-w-[240px] break-words overflow-wrap-anywhere rounded-2xl px-3 py-2 ${
+                isHume
+                  ? isAssistant
+                    ? 'hume-assistant-bubble border border-[rgba(34,34,34,0.08)] bg-[var(--color-bone)] rounded-tl-sm'
+                    : 'hume-user-bubble rounded-tr-sm'
+                  : isAssistant
+                    ? 'bg-white/10 text-slate-100 border border-white/10 rounded-tl-sm shadow-sm backdrop-blur'
+                    : 'bg-blue-500/20 text-slate-100 border border-blue-400/30 rounded-tr-sm shadow-sm backdrop-blur'
               }`}
             >
-              <div className="mb-1 text-[8px] uppercase tracking-[0.3em] text-slate-400 opacity-70">
-                {isAssistant ? 'LEO' : ''}
-              </div>
+              {isAssistant ? (
+                <div
+                  className={
+                    isHume
+                      ? 'mb-1 hume-label-sm text-left'
+                      : 'mb-1 text-[8px] uppercase tracking-[0.3em] text-slate-400 opacity-70'
+                  }
+                >
+                  LEO
+                </div>
+              ) : null}
               {message.type === MessageType.COMMAND ? (
                 <div className="mt-1 flex flex-wrap gap-2">
                   {(message as CommandMessage).commands.map((command) => (
@@ -74,25 +95,37 @@ export function MessageList({ messages, onShowProfile, onCommandSelect }: Messag
                       type="default"
                       size="small"
                       onClick={() => onCommandSelect?.(command)}
-                      className="!h-7 !rounded-full !border-white/20 !bg-white/5 !px-3 !text-[11px] !text-slate-100 hover:!border-green-400/60 hover:!text-green-200"
+                      className={
+                        isHume
+                          ? '!h-7 !rounded-full !border-[rgba(34,34,34,0.12)] !bg-[var(--color-paper)] !px-3 !text-[11px] !text-[var(--color-ink)] hover:!bg-[var(--color-bone)] !shadow-none'
+                          : '!h-7 !rounded-full !border-white/20 !bg-white/5 !px-3 !text-[11px] !text-slate-100 hover:!border-green-400/60 hover:!text-green-200'
+                      }
                     >
                       {command.label}
                     </Button>
                   ))}
                 </div>
               ) : (
-                <div className="whitespace-pre-line text-[11px] leading-relaxed break-words hyphens-auto">
-                  {content}
-                </div>
+                <div className={bubbleBodyClass}>{content}</div>
               )}
               {isProfileCard && onShowProfile && (
-                <div className="mt-2 pt-2 border-t border-white/10">
+                <div
+                  className={
+                    isHume
+                      ? 'mt-2 border-t border-[rgba(34,34,34,0.08)] pt-2'
+                      : 'mt-2 border-t border-white/10 pt-2'
+                  }
+                >
                   <Button
                     type="text"
                     size="small"
                     icon={<EyeOutlined />}
                     onClick={() => onShowProfile(message as InfoCardMessage)}
-                    className="!text-green-300 !text-[10px] !h-6 !px-2 hover:!bg-green-500/20 !border-0"
+                    className={
+                      isHume
+                        ? '!text-[var(--color-ink)] !text-[10px] !h-6 !px-2 hover:!bg-[var(--color-bone)] !border-0 !rounded-full'
+                        : '!text-green-300 !text-[10px] !h-6 !px-2 hover:!bg-green-500/20 !border-0'
+                    }
                   >
                     Показать профиль
                   </Button>

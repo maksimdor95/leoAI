@@ -37,7 +37,9 @@ npm run lint                # ESLint (корень)
 
 Тесты по сервису: `cd services/<name> && npm test`
 
-**CI gate** (`.github/workflows/ci.yml`): перед merge должны проходить Jest в `conversation`, `ai-nlp`, `job-matching` (145 тестов) и light smoke (`npm run smoke:mvp0` с TOKEN). `user-profile` tests пока не в CI (устарели).
+**CI gate** (`.github/workflows/ci.yml`): перед merge должны проходить Jest в `conversation`, `ai-nlp`, `job-matching`, `user-profile` и light smoke (`mvp0-smoke.sh` с TOKEN).
+
+**Eval harness** (`services/conversation/src/evals/`): автопрогон Jack personas. Новый шаг сценария → обновить fixture в `evals/fixtures/`.
 
 ## Hard rules
 

@@ -1,63 +1,102 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/contexts/AppSettingsContext';
 import { getBoostyUrl } from '@/lib/boostyLink';
+import { landingUi } from '@/lib/landingUiCopy';
+import { useHumeTheme } from '@/lib/useHumeTheme';
 import { buildTelegramSupportUrl, getTelegramSupportUrl } from '@/lib/supportLink';
+import { AppSettingsMenu } from '@/components/chat/AppSettingsMenu';
 
 const boostyUrl = getBoostyUrl();
-
-const linkClass = 'text-slate-300 hover:text-green-200 transition-colors';
 const defaultSupportUrl = buildTelegramSupportUrl();
 
 export function Footer() {
+  const { openAuthModal } = useAuth();
+  const { settings } = useAppSettings();
+  const isHume = useHumeTheme();
+  const copy = landingUi(settings.locale);
   const [supportBotUrl, setSupportBotUrl] = useState(defaultSupportUrl);
 
   useEffect(() => {
     setSupportBotUrl(getTelegramSupportUrl());
   }, []);
 
+  const linkClass = isHume
+    ? 'text-[var(--color-smoke)] transition-colors hover:text-[var(--color-ink)]'
+    : 'text-slate-300 transition-colors hover:text-green-200';
+
+  const footerNavLinkClass = `${linkClass} underline underline-offset-2 decoration-current/70 hover:decoration-current`;
+
+  const footerNavButtonClass = `${footerNavLinkClass} appearance-none border-0 bg-transparent p-0 font-inherit cursor-pointer outline-none shadow-none focus:outline-none focus-visible:outline-none focus-visible:ring-0`;
+
   return (
-    <footer className="bg-gradient-to-b from-[#07111f] to-[#050913] border-t border-white/10 py-14">
-      <div className="max-w-7xl mx-auto px-6">
+    <footer
+      className={`border-t py-14 ${
+        isHume
+          ? 'border-[rgba(34,34,34,0.08)] bg-[var(--color-paper)]'
+          : 'border-white/10 bg-gradient-to-b from-[#07111f] to-[#050913]'
+      }`}
+    >
+      <div className="mx-auto max-w-7xl px-6">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-[1.25fr_0.85fr_1fr]">
           <div className="max-w-sm">
-            <h3 className="text-white text-xl font-semibold tracking-tight">LEO AI</h3>
-            <p className="mt-4 text-sm leading-7 text-slate-300">
-              Находим идеальные вакансии, которые подходят именно вам, и помогаем с подготовкой.
+            <h3
+              className={`text-xl font-semibold tracking-tight ${
+                isHume ? 'text-[var(--color-ink)]' : 'text-white'
+              }`}
+            >
+              LEO AI
+            </h3>
+            <p
+              className={`mt-4 text-sm leading-7 ${
+                isHume ? 'text-[var(--color-smoke)]' : 'text-slate-300'
+              }`}
+            >
+              {copy.footerTagline}
             </p>
           </div>
 
           <div>
-            <h4 className="text-white text-base font-semibold">Навигация</h4>
+            <h4 className={`text-base font-semibold ${isHume ? 'text-[var(--color-ink)]' : 'text-white'}`}>
+              {copy.footerNav}
+            </h4>
             <ul className="mt-4 space-y-3 text-sm">
               <li>
-                <a href="#features" className={linkClass}>
-                  Возможности
+                <a href="#features" className={footerNavLinkClass}>
+                  {copy.footerFeatures}
                 </a>
               </li>
               <li>
-                <a href="#auth" className={linkClass}>
-                  Регистрация
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('register', { source: 'footer_register' })}
+                  className={footerNavButtonClass}
+                >
+                  {copy.footerRegister}
+                </button>
+              </li>
+              <li>
+                <a href="/privacy" className={footerNavLinkClass}>
+                  {copy.footerPrivacy}
                 </a>
               </li>
               <li>
-                <a href="/privacy" className={linkClass}>
-                  Политика конфиденциальности
-                </a>
-              </li>
-              <li>
-                <a href="/terms" className={linkClass}>
-                  Условия использования
+                <a href="/terms" className={footerNavLinkClass}>
+                  {copy.footerTerms}
                 </a>
               </li>
             </ul>
           </div>
 
           <div>
-            <h4 className="text-white text-base font-semibold">Контакты</h4>
+            <h4 className={`text-base font-semibold ${isHume ? 'text-[var(--color-ink)]' : 'text-white'}`}>
+              {copy.footerContacts}
+            </h4>
             <div className="mt-4 space-y-3 text-sm">
               <p>
-                <span className="text-slate-400">Email: </span>
+                <span className={isHume ? 'text-[var(--color-smoke)]' : 'text-slate-400'}>Email: </span>
                 <a href="mailto:hello@leo-ai.ru" className={linkClass}>
                   hello@leo-ai.ru
                 </a>
@@ -69,71 +108,80 @@ export function Footer() {
                   rel="noopener noreferrer"
                   className={linkClass}
                 >
-                  Обратная связь в Telegram
+                  {copy.footerTelegram}
                 </a>
               </p>
               <p>
-                <a
-                  href={boostyUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={linkClass}
-                >
-                  Поддержать на Boosty
+                <a href={boostyUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                  {copy.footerBoosty}
                 </a>
               </p>
-              <p className="max-w-xs text-xs leading-6 text-slate-500">
-                Для поддержки не передавайте пароли, токены и банковские данные.
+              <p
+                className={`max-w-xs text-xs leading-6 ${
+                  isHume ? 'text-[var(--color-smoke)]' : 'text-slate-500'
+                }`}
+              >
+                {copy.footerSecurityNote}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-10 rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/20 sm:p-6">
+        <div
+          className={`mt-10 rounded-3xl border p-5 shadow-2xl sm:p-6 ${
+            isHume
+              ? 'border-[rgba(34,34,34,0.08)] bg-[var(--color-bone)] shadow-[rgba(34,34,34,0.06)]'
+              : 'border-white/10 bg-white/[0.04] shadow-black/20'
+          }`}
+        >
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm font-medium text-white">Нужна помощь?</p>
-              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-300">
-                Напишите в Telegram-бота поддержки по вопросам аккаунта, подбора вакансий или
-                подготовки к интервью. Команда LEO AI ответит в чате.
+              <p className={`text-sm font-medium ${isHume ? 'text-[var(--color-ink)]' : 'text-white'}`}>
+                {copy.footerHelpTitle}
+              </p>
+              <p
+                className={`mt-2 max-w-3xl text-sm leading-7 ${
+                  isHume ? 'text-[var(--color-smoke)]' : 'text-slate-300'
+                }`}
+              >
+                {copy.footerHelpBody}
               </p>
             </div>
             <a
               href={supportBotUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex shrink-0 items-center justify-center rounded-full border border-green-300/30 bg-green-400/10 px-5 py-2.5 text-sm font-semibold text-green-100 shadow-lg shadow-green-950/20 transition-colors hover:bg-green-400/20 hover:text-white"
+              className={
+                isHume
+                  ? 'inline-flex shrink-0 items-center justify-center rounded-full border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)] px-5 py-2.5 text-sm font-semibold text-[var(--color-ink)] transition-colors hover:bg-[var(--color-bone)]'
+                  : 'inline-flex shrink-0 items-center justify-center rounded-full border border-green-300/30 bg-green-400/10 px-5 py-2.5 text-sm font-semibold text-green-100 shadow-lg shadow-green-950/20 transition-colors hover:bg-green-400/20 hover:text-white'
+              }
             >
-              Написать в поддержку
+              {copy.footerHelpCta}
             </a>
           </div>
         </div>
 
-        <div className="mt-10 border-t border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-500">
-          <p>© 2025 LEO AI. Все права защищены.</p>
-          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-            <a href="/privacy" className="text-slate-400 hover:text-green-200 transition-colors">
-              Политика конфиденциальности
+        <div
+          className={`mt-10 flex flex-col items-center justify-between gap-4 border-t pt-8 text-sm md:flex-row ${
+            isHume ? 'border-[rgba(34,34,34,0.08)] text-[var(--color-smoke)]' : 'border-white/10 text-slate-500'
+          }`}
+        >
+          <p>{copy.footerCopyright}</p>
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 md:justify-end">
+            <a href="/privacy" className={linkClass}>
+              {copy.footerPrivacy}
             </a>
-            <a href="/terms" className="text-slate-400 hover:text-green-200 transition-colors">
-              Условия использования
+            <a href="/terms" className={linkClass}>
+              {copy.footerTerms}
             </a>
-            <a
-              href={supportBotUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-slate-400 hover:text-green-200 transition-colors"
-            >
-              Обратная связь
+            <a href={supportBotUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
+              {copy.footerFeedback}
             </a>
-            <a
-              href={boostyUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-slate-400 hover:text-green-200 transition-colors"
-            >
+            <a href={boostyUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
               Boosty
             </a>
+            <AppSettingsMenu scope="landing" />
           </div>
         </div>
       </div>

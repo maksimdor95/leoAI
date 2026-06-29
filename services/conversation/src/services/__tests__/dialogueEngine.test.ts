@@ -1,4 +1,5 @@
 import {
+  applyImportedCollectedData,
   detectInterviewModeCommandFromUserText,
   evaluateCondition,
   getScenarioIdByProduct,
@@ -201,6 +202,32 @@ describe('dialogueEngine', () => {
       );
       expect(pickResumeClarifyStepId({ careerSummary: '5 лет в продукте' })).toBe('quick_role');
       expect(hasDesiredRoleInCollected({ desired_role: 'Analyst' })).toBe(true);
+    });
+
+    it('merges imported resume fields into session collectedData on resume path', async () => {
+      const session = {
+        id: 's-resume',
+        userId: 'u1',
+        metadata: {
+          product: 'jack',
+          scenarioId: 'jack-profile-v2',
+          currentStepId: 'resume_upload',
+          collectedData: { scenarioMode: 'готовое резюме' },
+          completedSteps: [],
+        },
+        messages: [],
+      } as unknown as ConversationSession;
+
+      await applyImportedCollectedData(session, {
+        desired_role: 'Product Manager',
+        careerSummary: '5 лет в продуктовых командах',
+        skills_hard: 'SQL, Jira',
+        totalExperience: 5,
+      });
+
+      expect(session.metadata.collectedData?.desired_role).toBe('Product Manager');
+      expect(session.metadata.currentStepId).toBe('resume_ready');
+      expect(session.metadata.completedSteps).toContain('resume_upload');
     });
   });
 

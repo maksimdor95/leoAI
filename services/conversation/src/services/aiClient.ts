@@ -100,6 +100,7 @@ interface GenerateStepRequest {
   fallbackText: string;
   collectedData?: Record<string, unknown>;
   tone?: 'default' | 'friendly' | 'formal';
+  locale?: 'ru' | 'en';
 }
 
 interface GenerateStepResponse {
@@ -117,6 +118,7 @@ export async function generateStepQuestionText(params: GenerateStepRequest): Pro
         fallbackText: params.fallbackText,
         facts: params.collectedData ?? {},
         tone: params.tone ?? 'friendly',
+        locale: params.locale,
       },
       {
         timeout: 10000,
@@ -834,4 +836,69 @@ export async function synthesizeAssistantAudio(params: {
     logger.warn('TTS source=fallback reason=request_failed', error);
     return null;
   }
+}
+
+export type ApplicationDraftTone =
+  | 'neutral'
+  | 'formal'
+  | 'concise'
+  | 'casual'
+  | 'human'
+  | 'warm'
+  | 'metrics'
+  | 'detailed'
+  | 'job_fit';
+
+interface GenerateApplicationDraftRequest {
+  collectedData: Record<string, unknown>;
+  job: {
+    title: string;
+    company: string;
+    description?: string;
+    requirements?: string;
+    skills?: string[];
+    location?: string[];
+    workMode?: string | null;
+    conditions?: Record<string, unknown> | null;
+  };
+  tone?: ApplicationDraftTone;
+  matchHighlights?: string[];
+  authToken?: string;
+}
+
+interface GenerateApplicationDraftResponse {
+  status: 'success';
+  draft: {
+    headline: string;
+    coverLetter: string;
+    bullets: string[];
+  };
+  promptVersion: string;
+}
+
+export async function generateApplicationDraft(
+  params: GenerateApplicationDraftRequest
+): Promise<{ headline: string; coverLetter: string; bullets: string[]; promptVersion: string }> {
+  const response = await axios.post<GenerateApplicationDraftResponse>(
+    `${AI_SERVICE_URL}/api/ai/application-draft`,
+    {
+      collectedData: params.collectedData,
+      job: params.job,
+      tone: params.tone ?? 'neutral',
+      matchHighlights: params.matchHighlights,
+    },
+    {
+      timeout: 25000,
+      headers: buildAuthHeaders(params.authToken),
+    }
+  );
+
+  if (response.data.status !== 'success') {
+    throw new Error('AI application-draft returned non-success status');
+  }
+
+  return {
+    ...response.data.draft,
+    promptVersion: response.data.promptVersion,
+  };
 }

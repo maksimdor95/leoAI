@@ -1,5 +1,6 @@
 import {
   buildHhVacancyUrl,
+  extractExternalVacancyId,
   isDemoVacancySource,
   resolvePublicVacancyUrl,
 } from '../vacancyUrl';
@@ -25,6 +26,11 @@ describe('vacancyUrl', () => {
   it('rejects mock and listing urls', () => {
     expect(resolvePublicVacancyUrl('hh.ru', 'https://hh.ru/vacancy/mock-1')).toBeNull();
     expect(resolvePublicVacancyUrl('hh.ru', 'https://hh.ru/vacancies')).toBeNull();
+  });
+
+  it('extracts hh vacancy id', () => {
+    expect(extractExternalVacancyId('hh.ru', 'https://hh.ru/vacancy/99887766')).toBe('99887766');
+    expect(extractExternalVacancyId('hh.ru', 'https://hh.ru/vacancy/mock-1')).toBeNull();
   });
 
   it('allows superjob https links', () => {

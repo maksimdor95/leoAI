@@ -1,33 +1,41 @@
 import request from 'supertest';
 import express from 'express';
-import { userRoutes } from '../../src/routes/userRoutes';
+import userRoutes from '../../src/routes/userRoutes';
 import { errorHandler } from '../../src/middleware/errorHandler';
-import { connectDatabase } from '../../src/config/database';
-
-// Mock database connection for tests
-jest.mock('../../src/config/database');
+import { UserRepository } from '../../src/models/userRepository';
+import { testConnection } from '../../src/config/database';
 
 describe('User Registration and Login Flow', () => {
   let app: express.Application;
+  let dbAvailable = false;
 
   beforeAll(async () => {
-    // Create test app
+    dbAvailable = await testConnection();
+    if (!dbAvailable) {
+      if (process.env.CI) {
+        throw new Error('PostgreSQL is required for user-profile integration tests in CI');
+      }
+      return;
+    }
+
+    await UserRepository.createTable();
+
     app = express();
     app.use(express.json());
     app.use('/api/users', userRoutes);
     app.use(errorHandler);
-
-    // Mock database connection
-    (connectDatabase as jest.Mock).mockResolvedValue(undefined);
   });
 
-  beforeEach(async () => {
-    // Clean up test data - in a real scenario, this would truncate tables
-    // For now, we'll rely on unique test data
-  });
+  const itDb = (name: string, fn: () => Promise<void>) => {
+    it(name, async () => {
+      if (!dbAvailable) return;
+      await fn();
+    });
+  };
 
   describe('POST /api/users/register', () => {
-    it('should register a new user successfully', async () => {
+    itDb('should register a new user successfully', async () => {
+
       const userData = {
         email: `test-${Date.now()}@example.com`,
         password: 'testpassword123',
@@ -49,49 +57,43 @@ describe('User Registration and Login Flow', () => {
       expect(response.body.user.last_name).toBe(userData.last_name);
     });
 
-    it('should return 400 for invalid email', async () => {
-      const invalidUserData = {
-        email: 'invalid-email',
-        password: 'testpassword123',
-      };
+    itDb('should return 400 for invalid email', async () => {
 
       const response = await request(app)
         .post('/api/users/register')
-        .send(invalidUserData)
+        .send({
+          email: 'invalid-email',
+          password: 'testpassword123',
+        })
         .expect(400);
 
       expect(response.body).toHaveProperty('errors');
       expect(Array.isArray(response.body.errors)).toBe(true);
     });
 
-    it('should return 400 for short password', async () => {
-      const invalidUserData = {
-        email: 'test@example.com',
-        password: '123', // Too short
-      };
+    itDb('should return 400 for short password', async () => {
 
       const response = await request(app)
         .post('/api/users/register')
-        .send(invalidUserData)
+        .send({
+          email: 'test@example.com',
+          password: '123',
+        })
         .expect(400);
 
       expect(response.body).toHaveProperty('errors');
       expect(Array.isArray(response.body.errors)).toBe(true);
     });
 
-    it('should return 409 for existing user', async () => {
+    itDb('should return 409 for existing user', async () => {
+
       const userData = {
         email: `existing-${Date.now()}@example.com`,
         password: 'testpassword123',
       };
 
-      // Register user first
-      await request(app)
-        .post('/api/users/register')
-        .send(userData)
-        .expect(201);
+      await request(app).post('/api/users/register').send(userData).expect(201);
 
-      // Try to register again
       const response = await request(app)
         .post('/api/users/register')
         .send(userData)
@@ -105,7 +107,8 @@ describe('User Registration and Login Flow', () => {
     let testUser: { email: string; password: string; token?: string };
 
     beforeEach(async () => {
-      // Create a test user for login tests
+      if (!dbAvailable) return;
+
       testUser = {
         email: `login-test-${Date.now()}@example.com`,
         password: 'testpassword123',
@@ -119,7 +122,8 @@ describe('User Registration and Login Flow', () => {
       testUser.token = registerResponse.body.token;
     });
 
-    it('should login user successfully', async () => {
+    itDb('should login user successfully', async () => {
+
       const response = await request(app)
         .post('/api/users/login')
         .send({
@@ -134,7 +138,8 @@ describe('User Registration and Login Flow', () => {
       expect(response.body.user.email).toBe(testUser.email);
     });
 
-    it('should return 401 for invalid credentials', async () => {
+    itDb('should return 401 for invalid credentials', async () => {
+
       const response = await request(app)
         .post('/api/users/login')
         .send({
@@ -146,7 +151,8 @@ describe('User Registration and Login Flow', () => {
       expect(response.body).toHaveProperty('error', 'Invalid email or password');
     });
 
-    it('should return 400 for invalid email format', async () => {
+    itDb('should return 400 for invalid email format', async () => {
+
       const response = await request(app)
         .post('/api/users/login')
         .send({
@@ -163,7 +169,8 @@ describe('User Registration and Login Flow', () => {
     let testUser: { email: string; password: string; token?: string; id?: string };
 
     beforeEach(async () => {
-      // Create and login test user
+      if (!dbAvailable) return;
+
       testUser = {
         email: `profile-test-${Date.now()}@example.com`,
         password: 'testpassword123',
@@ -178,7 +185,8 @@ describe('User Registration and Login Flow', () => {
       testUser.id = registerResponse.body.user.id;
     });
 
-    it('should return user profile with valid token', async () => {
+    itDb('should return user profile with valid token', async () => {
+
       const response = await request(app)
         .get('/api/users/profile')
         .set('Authorization', `Bearer ${testUser.token}`)
@@ -190,21 +198,21 @@ describe('User Registration and Login Flow', () => {
       expect(response.body).toHaveProperty('updated_at');
     });
 
-    it('should return 401 without token', async () => {
-      const response = await request(app)
-        .get('/api/users/profile')
-        .expect(401);
+    itDb('should return 401 without token', async () => {
 
-      expect(response.body).toHaveProperty('error', 'Unauthorized: No token provided');
+      const response = await request(app).get('/api/users/profile').expect(401);
+
+      expect(response.body).toHaveProperty('error', 'Access token required');
     });
 
-    it('should return 401 with invalid token', async () => {
+    itDb('should return 403 with invalid token', async () => {
+
       const response = await request(app)
         .get('/api/users/profile')
         .set('Authorization', 'Bearer invalid-token')
-        .expect(401);
+        .expect(403);
 
-      expect(response.body).toHaveProperty('error', 'Unauthorized: Invalid token');
+      expect(response.body).toHaveProperty('error', 'Invalid or expired token');
     });
   });
 
@@ -212,7 +220,8 @@ describe('User Registration and Login Flow', () => {
     let testUser: { email: string; password: string; token?: string; id?: string };
 
     beforeEach(async () => {
-      // Create and login test user
+      if (!dbAvailable) return;
+
       testUser = {
         email: `update-test-${Date.now()}@example.com`,
         password: 'testpassword123',
@@ -227,7 +236,8 @@ describe('User Registration and Login Flow', () => {
       testUser.id = registerResponse.body.user.id;
     });
 
-    it('should update user profile successfully', async () => {
+    itDb('should update user profile successfully', async () => {
+
       const updateData = {
         first_name: 'Updated',
         last_name: 'Name',
@@ -245,14 +255,14 @@ describe('User Registration and Login Flow', () => {
       expect(response.body.user.last_name).toBe(updateData.last_name);
     });
 
-    it('should return 401 without token', async () => {
+    itDb('should return 401 without token', async () => {
+
       const response = await request(app)
         .put('/api/users/profile')
         .send({ first_name: 'Test' })
         .expect(401);
 
-      expect(response.body).toHaveProperty('error', 'Unauthorized');
+      expect(response.body).toHaveProperty('error', 'Access token required');
     });
   });
 });
-

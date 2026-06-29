@@ -10,6 +10,7 @@ env:
   NODE_ENV: test
   DB_HOST: localhost
   DB_PORT: 5432
+  DB_NAME: jack_ai_test
   DB_USER: postgres
   DB_PASSWORD: postgres
   REDIS_HOST: localhost
@@ -59,12 +60,15 @@ jobs:
           cd frontend && npm install && npm run lint
           cd .. && npm run lint
 
-      - name: Run unit tests (conversation, ai-nlp, job-matching)
+      - name: Run unit tests (conversation, ai-nlp, job-matching, user-profile)
         run: |
-          for service in conversation ai-nlp job-matching; do
+          for service in conversation ai-nlp job-matching user-profile; do
             echo "== Testing services/$service =="
             cd "services/$service"
             npm install
+            if [ "$service" = "user-profile" ]; then
+              npm run init:db
+            fi
             npm test
             cd ../..
           done

@@ -4,6 +4,12 @@
 *Ветка разработки: `feature/leowork-b2b`*
 *Статус: PRE-DEVELOPMENT*
 
+> **Документы продукта (как у Interview Prep):**
+> - **Методология** — [`LEOWORK_METHODOLOGY.md`](./LEOWORK_METHODOLOGY.md) (CJM, consent, цикл Brief→Hire, gap analysis)
+> - **План реализации** — [`LEOWORK_IMPLEMENTATION_PLAN.md`](./LEOWORK_IMPLEMENTATION_PLAN.md) (фазы 0–4, epics, DoD)
+> - **Фаза 0 (ручная валидация)** — [`PHASE_0_CHECKLIST.md`](./PHASE_0_CHECKLIST.md) (SQL, intro templates)
+> - **Этот файл** — техническая спека: архитектура, БД, API, wireframes
+
 ---
 
 ## Содержание
@@ -980,6 +986,9 @@ ORDER BY
 ---
 
 ## 11. Дорожная карта разработки
+
+> **Актуальный план с epics и DoD:** [`LEOWORK_IMPLEMENTATION_PLAN.md`](./LEOWORK_IMPLEMENTATION_PLAN.md)  
+> **Продуктовая методология (CJM, consent):** [`LEOWORK_METHODOLOGY.md`](./LEOWORK_METHODOLOGY.md)
 
 ### Фаза 0: Ручная валидация (0 кода, 2-4 недели)
 

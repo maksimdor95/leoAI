@@ -1,7 +1,6 @@
 import { UserService } from '../../src/services/userService';
 import { UserRepository } from '../../src/models/userRepository';
 import { User } from '../../src/models/User';
-import { User } from '../../src/models/User';
 
 // Mock dependencies
 jest.mock('../../src/models/userRepository');
@@ -45,9 +44,10 @@ describe('UserService', () => {
       mockHashPassword.mockResolvedValue('hashed_password');
 
       // Mock user creation
-      const mockUser = {
+      const mockUser: User = {
         id: 'user-123',
         email: userData.email,
+        password_hash: 'hashed_password',
         first_name: userData.first_name,
         last_name: userData.last_name,
         created_at: new Date(),

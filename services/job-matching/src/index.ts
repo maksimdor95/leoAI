@@ -20,7 +20,7 @@ import { scheduleRegularScraping, closeQueue } from './services/scrapingQueue';
 import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { getHealthStatus } from './utils/healthCheck';
-import { JOBS_ROLE_FAMILY_MIGRATION_SQL } from './db/jobsSchemaMigrations';
+import { JOBS_ROLE_FAMILY_MIGRATION_SQL, JOBS_SOURCE_META_MIGRATION_SQL } from './db/jobsSchemaMigrations';
 import jobRepository from './models/jobRepository';
 
 const app = express();
@@ -182,6 +182,7 @@ async function start() {
       `;
       await pool.query(createTableQuery);
       await pool.query(JOBS_ROLE_FAMILY_MIGRATION_SQL);
+      await pool.query(JOBS_SOURCE_META_MIGRATION_SQL);
 
       const backfilled = await jobRepository.backfillAllRoleFamilies();
       if (backfilled > 0) {

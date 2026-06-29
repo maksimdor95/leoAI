@@ -10,8 +10,10 @@
  *   - роль (фразы + токены desiredRole/позиций):  до 30
  *   - навыки (жёсткие и софт):                     до 25
  *   - локация (совпадение или remote-friendly):    до 20
- *   - опыт (сопоставление с experience_level):     до 15
- *   - режим работы (office/remote/hybrid):         до 10
+ *   - опыт (HH experience или experience_level):     до 15
+ *   - режим работы (HH work_format / work_mode):   до 10
+ *   - занятость / оформление / график / часы (HH):  до 19*
+ *     * только если поле есть в вакансии; без профиля — нейтрально
  *
  * После суммирования применяется множитель от family-совпадения:
  *   - совпадающее семейство         × 1.00
@@ -31,6 +33,11 @@ import {
 } from './roleFamily';
 import { enrichQuickPathCollectedData } from './quickPathEnrichment';
 import {
+  matchHhExperienceFromMeta,
+  matchHhVacancyConditions,
+  resolveJobWorkMode,
+} from './hhConditionsMatcher';
+import {
   matchSalaryExpectation,
   salesChannelMismatchReason,
   seniorityMismatchReason,
@@ -44,12 +51,6 @@ export const MATCH_SCORE_THRESHOLD = 45;
 
 /** Нижняя граница яруса «Слабое совпадение». */
 export const WEAK_MATCH_SCORE_FLOOR = 25;
-
-/** Сколько вакансий отдаём в первом ярусе (рекомендуем). */
-export const RECOMMENDED_RETURN_LIMIT = 30;
-
-/** Сколько вакансий отдаём во втором ярусе. */
-export const WEAK_MATCH_RETURN_LIMIT = 15;
 
 /** Минимальная доля вакансий совпадающего/смежного семейства, чтобы каталог считался «здоровым». */
 export const HEALTHY_FAMILY_SHARE = 0.15;
@@ -438,6 +439,10 @@ function calculateRawScore(
   score += experienceScore.points;
   if (experienceScore.reason) reasons.push(experienceScore.reason);
 
+  const hhConditions = matchHhVacancyConditions(job, collectedData);
+  score += hhConditions.points;
+  reasons.push(...hhConditions.reasons);
+
   const skillsScore = matchSkills(job, collectedData);
   score += skillsScore.points;
   if (skillsScore.reason) reasons.push(skillsScore.reason);
@@ -540,6 +545,11 @@ function matchExperience(
       : typeof rawExp === 'string'
         ? parseFloat(rawExp.replace(/,/g, '.')) || 0
         : 0;
+
+  const hhExperience = matchHhExperienceFromMeta(job, userExperience);
+  if (hhExperience) {
+    return hhExperience;
+  }
 
   // Determine job seniority from experience_level or title
   const jobLevel = job.experience_level || inferLevelFromTitle(job.title);
@@ -820,15 +830,17 @@ function matchWorkMode(
   userPreferences?: { workMode?: string }
 ): { points: number; reason?: string } {
   const userWorkMode = userPreferences?.workMode || collectedData.workMode;
-  if (!userWorkMode || !job.work_mode) {
+  const jobWorkMode = resolveJobWorkMode(job);
+  if (!userWorkMode || !jobWorkMode) {
     return { points: 4, reason: 'Режим работы не указан' };
   }
 
   const userModeLower = String(userWorkMode).toLowerCase();
-  const jobModeLower = String(job.work_mode).toLowerCase();
+  const jobModeLower = String(jobWorkMode).toLowerCase();
 
   if (userModeLower === jobModeLower) {
-    return { points: 10, reason: `Совпадение режима работы: ${job.work_mode}` };
+    const label = job.source_meta?.workFormatLabel || jobWorkMode;
+    return { points: 10, reason: `Совпадение формата работы: ${label}` };
   }
 
   if (

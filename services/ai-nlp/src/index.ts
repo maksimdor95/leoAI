@@ -28,6 +28,7 @@ import {
   respondToInterviewMode,
 } from './controllers/interviewPrepController';
 import { enrichJob } from './controllers/enrichJobController';
+import { generateApplicationDraft } from './controllers/applicationDraftController';
 import { generateEmbedding } from './controllers/embeddingController';
 import { generateAiReadiness } from './controllers/aiReadinessController';
 import { logger } from './utils/logger';
@@ -121,6 +122,7 @@ app.post('/api/ai/interview/generate-mock-summary', generateMockSummary);
 app.post('/api/ai/generate-summary', generateProfileSummary);
 app.post('/api/ai/generate-resume', generateResume);
 app.post('/api/ai/enrich-job', enrichJob);
+app.post('/api/ai/application-draft', generateApplicationDraft);
 app.post('/api/ai/embedding', generateEmbedding);
 app.post('/api/ai/readiness', generateAiReadiness);
 

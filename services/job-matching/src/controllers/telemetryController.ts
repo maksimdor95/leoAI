@@ -17,7 +17,7 @@ export async function recordInteraction(req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const validTypes = ['view', 'like', 'dislike', 'apply'];
+    const validTypes = ['view', 'like', 'dislike', 'apply', 'apply_intent', 'draft_generated'];
     if (!validTypes.includes(interactionType)) {
       res.status(400).json({ error: 'Invalid interactionType' });
       return;

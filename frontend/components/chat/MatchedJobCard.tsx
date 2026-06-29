@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { humanizeMatchReasons } from '@/lib/humanizeMatchReasons';
+import { useHumeTheme } from '@/lib/useHumeTheme';
 
 type MatchedJobCardProps = {
   title: string;
@@ -12,6 +13,7 @@ type MatchedJobCardProps = {
   reasons?: string[];
   isNew?: boolean;
   variant?: 'recommended' | 'weak';
+  onOpenVacancy?: () => void;
   onVacancyPrep?: () => void;
   vacancyPrepLoading?: boolean;
 };
@@ -21,56 +23,94 @@ export function MatchedJobCard({
   company,
   score,
   source,
-  sourceUrl,
   reasons,
   isNew,
   variant = 'recommended',
+  onOpenVacancy,
   onVacancyPrep,
   vacancyPrepLoading = false,
 }: MatchedJobCardProps) {
+  const isHume = useHumeTheme();
   const [reasonsOpen, setReasonsOpen] = useState(false);
   const isWeak = variant === 'weak';
   const humanized = humanizeMatchReasons(reasons);
   const hasReasons = humanized.length > 0;
-  const linkClass = isWeak
-    ? 'text-amber-400/90 hover:text-amber-300'
-    : 'text-green-400 hover:text-green-300';
+
+  const linkClass = isHume
+    ? 'text-[var(--color-ink)] underline-offset-2 hover:underline'
+    : isWeak
+      ? 'text-amber-400/90 hover:text-amber-300'
+      : 'text-green-400 hover:text-green-300';
 
   const toggleReasons = () => setReasonsOpen((open) => !open);
 
   return (
     <div
-      className={`rounded-xl border p-3 ${
-        isWeak
-          ? isNew
-            ? 'border-amber-400/45 ring-1 ring-amber-400/20 bg-white/[0.02]'
-            : 'border-amber-900/40 bg-white/[0.02]'
-          : isNew
-            ? 'border-emerald-400/55 ring-1 ring-emerald-400/25 bg-white/[0.03] shadow-[0_0_20px_rgba(52,211,153,0.12)]'
-            : 'border-white/10 bg-white/[0.03]'
-      }`}
+      className={
+        isHume
+          ? `rounded-2xl border p-3 ${
+              isWeak
+                ? isNew
+                  ? 'border-[rgba(255,183,96,0.35)] bg-[var(--color-meringue)]'
+                  : 'border-[rgba(34,34,34,0.08)] bg-[var(--color-bone)]'
+                : isNew
+                  ? 'border-[rgba(192,148,228,0.35)] bg-[var(--color-rose-mist)]'
+                  : 'border-[rgba(34,34,34,0.08)] bg-[var(--color-paper)]'
+            }`
+          : `rounded-xl border p-3 ${
+              isWeak
+                ? isNew
+                  ? 'border-amber-400/45 ring-1 ring-amber-400/20 bg-white/[0.02]'
+                  : 'border-amber-900/40 bg-white/[0.02]'
+                : isNew
+                  ? 'border-emerald-400/55 ring-1 ring-emerald-400/25 bg-white/[0.03] shadow-[0_0_20px_rgba(52,211,153,0.12)]'
+                  : 'border-white/10 bg-white/[0.03]'
+            }`
+      }
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="text-sm font-semibold text-white leading-snug">{title}</div>
+        <div
+          className={
+            isHume
+              ? 'text-sm font-medium text-[var(--color-ink)] leading-snug'
+              : 'text-sm font-semibold text-white leading-snug'
+          }
+        >
+          {title}
+        </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5">
           {isNew ? (
             <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                isWeak ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
-              }`}
+              className={
+                isHume
+                  ? `hume-chip !text-[10px] ${
+                      isWeak ? '!bg-[var(--color-meringue)]' : '!bg-[var(--color-mint)]'
+                    } !border-transparent`
+                  : `rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      isWeak ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
+                    }`
+              }
             >
               Новая
             </span>
           ) : null}
           {isWeak ? (
-            <span className="text-[10px] font-medium text-amber-500/80">слабее</span>
+            <span
+              className={
+                isHume ? 'hume-label-sm !text-[9px]' : 'text-[10px] font-medium text-amber-500/80'
+              }
+            >
+              слабее
+            </span>
           ) : null}
         </div>
       </div>
 
-      <div className="mt-1 text-xs text-slate-300">{company}</div>
+      <div className={isHume ? 'mt-1 hume-body-sm !text-xs' : 'mt-1 text-xs text-slate-300'}>
+        {company}
+      </div>
 
-      <div className="mt-2 text-xs text-slate-400">
+      <div className={isHume ? 'mt-2 hume-body-sm !text-xs' : 'mt-2 text-xs text-slate-400'}>
         {source ? `Источник: ${source} · ` : ''}
         Match:{' '}
         {hasReasons ? (
@@ -95,16 +135,28 @@ export function MatchedJobCard({
       </div>
 
       {hasReasons && reasonsOpen ? (
-        <ul className="mt-2 space-y-1 rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-2">
+        <ul
+          className={
+            isHume
+              ? 'mt-2 space-y-1 rounded-xl border border-[rgba(34,34,34,0.08)] bg-[var(--color-bone)] px-2.5 py-2'
+              : 'mt-2 space-y-1 rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-2'
+          }
+        >
           {humanized.map((item) => (
             <li key={item.text} className="flex items-start gap-1.5 text-[11px] leading-snug">
               <span
                 className={`mt-0.5 shrink-0 ${
-                  item.tone === 'positive'
-                    ? 'text-emerald-400/90'
-                    : item.tone === 'negative'
-                      ? 'text-rose-400/80'
-                      : 'text-slate-500'
+                  isHume
+                    ? item.tone === 'positive'
+                      ? 'text-[var(--color-iris)]'
+                      : item.tone === 'negative'
+                        ? 'text-rose-500'
+                        : 'text-[var(--color-smoke)]'
+                    : item.tone === 'positive'
+                      ? 'text-emerald-400/90'
+                      : item.tone === 'negative'
+                        ? 'text-rose-400/80'
+                        : 'text-slate-500'
                 }`}
                 aria-hidden
               >
@@ -112,11 +164,13 @@ export function MatchedJobCard({
               </span>
               <span
                 className={
-                  item.tone === 'positive'
-                    ? 'text-slate-300'
-                    : item.tone === 'negative'
-                      ? 'text-rose-300/90'
-                      : 'text-slate-500'
+                  isHume
+                    ? 'text-[var(--color-slate-plum)]'
+                    : item.tone === 'positive'
+                      ? 'text-slate-300'
+                      : item.tone === 'negative'
+                        ? 'text-rose-300/90'
+                        : 'text-slate-500'
                 }
               >
                 {item.text}
@@ -126,37 +180,38 @@ export function MatchedJobCard({
         </ul>
       ) : null}
 
-      {(sourceUrl || onVacancyPrep) && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-          {sourceUrl ? (
-            <a
-              href={sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-              className={`inline-block text-xs font-medium ${linkClass}`}
+      {(onOpenVacancy || onVacancyPrep) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {onOpenVacancy ? (
+            <button
+              type="button"
+              onClick={onOpenVacancy}
+              className={
+                isHume
+                  ? 'hume-btn-ghost !px-0 !py-0 !text-xs'
+                  : `cursor-pointer text-xs font-medium ${linkClass} bg-transparent border-0 p-0`
+              }
             >
               Открыть вакансию
-            </a>
+            </button>
           ) : null}
           {onVacancyPrep ? (
-            <span
-              role="button"
-              tabIndex={vacancyPrepLoading ? -1 : 0}
+            <button
+              type="button"
+              disabled={vacancyPrepLoading}
               onClick={vacancyPrepLoading ? undefined : onVacancyPrep}
-              onKeyDown={(event) => {
-                if (vacancyPrepLoading) return;
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onVacancyPrep();
-                }
-              }}
-              aria-disabled={vacancyPrepLoading}
-              className={`cursor-pointer text-xs font-medium text-green-400 hover:text-green-300 ${
-                vacancyPrepLoading ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
+              className={
+                isHume
+                  ? `hume-btn-pill !h-7 !px-3 !text-[11px] !border-none ${
+                      vacancyPrepLoading ? 'opacity-50 cursor-not-allowed' : ''
+                    }`
+                  : `cursor-pointer text-xs font-medium text-green-400 hover:text-green-300 bg-transparent border-0 p-0 ${
+                      vacancyPrepLoading ? 'opacity-50 cursor-not-allowed' : ''
+                    }`
+              }
             >
               {vacancyPrepLoading ? 'Готовим разбор…' : 'Разбор вакансии'}
-            </span>
+            </button>
           ) : null}
         </div>
       )}

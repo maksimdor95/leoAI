@@ -58,8 +58,15 @@ import {
   type ProfileSummaryExport,
 } from './services/summaryExport';
 import { handleConversationCompletion, triggerProfileDrivenScrape } from './services/integrationService';
+import { createApplicationDraft } from './controllers/applicationDraftController';
 import { validateAndLogConfig } from './utils/configValidator';
 import { getHealthStatus } from './utils/healthCheck';
+import {
+  mergeClientMetadataUpdate,
+  parseClientPreferences,
+  parseTtsPreferences,
+  resolveTtsSynthesisOptions,
+} from './utils/ttsPreferences';
 
 const app = express();
 const httpServer = createServer(app);
@@ -254,6 +261,31 @@ function getSpeakableTextFromAssistantMessage(message: Message | null): string {
 
 type AssistantAudioResult = Awaited<ReturnType<typeof synthesizeAssistantAudio>>;
 
+async function persistClientPreferencesIfPresent(sessionId: string, raw: unknown): Promise<void> {
+  const update = mergeClientMetadataUpdate(parseClientPreferences(raw));
+  if (update) {
+    await updateSessionMetadata(sessionId, update);
+  }
+}
+
+async function synthesizeAssistantMessageAudio(
+  message: Message,
+  session: ConversationSession,
+  requestPrefs: ReturnType<typeof parseTtsPreferences>,
+  authToken?: string
+): Promise<AssistantAudioResult> {
+  const ttsText = getSpeakableTextFromAssistantMessage(message);
+  if (!ttsText) return null;
+
+  const { lang, voice } = resolveTtsSynthesisOptions(session, requestPrefs);
+  return synthesizeAssistantAudio({
+    text: ttsText,
+    lang,
+    voice,
+    authToken,
+  });
+}
+
 /** Привязывает TTS к id сообщения, для которого синтезировали аудио (важно при нескольких новых сообщениях в одном ответе). */
 function withAssistantAudioMessageId(
   message: Message | null | undefined,
@@ -333,7 +365,8 @@ app.delete('/api/conversations/:id', authenticateRequest, async (req, res) => {
 app.post('/api/chat/session', authenticateRequest, async (req, res) => {
   try {
     const user = (req as express.Request & { user: { userId: string; email: string } }).user;
-    const { createNew, sessionId: requestedSessionId, product, intent } = req.body;
+    const { createNew, sessionId: requestedSessionId, product, intent, ttsPreferences, locale } =
+      req.body;
 
     let session;
 
@@ -358,7 +391,7 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
     }
 
     // Prepare entry step if needed
-    const hydratedSession = await getSession(session.id);
+    let hydratedSession = await getSession(session.id);
     let assistantAudio: AssistantAudioResult = null;
     let entryAssistantMessage: Message | null = null;
     const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
@@ -368,6 +401,10 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
         : undefined
     );
     if (hydratedSession) {
+      await persistClientPreferencesIfPresent(hydratedSession.id, { locale, ttsPreferences });
+      hydratedSession = (await getSession(hydratedSession.id)) ?? hydratedSession;
+
+      const requestTtsPrefs = parseTtsPreferences(ttsPreferences);
       if (intent === 'vacancy_analyze') {
         await updateSessionMetadata(
           hydratedSession.id,
@@ -381,14 +418,12 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
         if (entryStepResult.message) {
           entryAssistantMessage = entryStepResult.message;
           await addMessageToSession(hydratedSession.id, entryStepResult.message);
-          const ttsText = getSpeakableTextFromAssistantMessage(entryStepResult.message);
-          if (ttsText) {
-            assistantAudio = await synthesizeAssistantAudio({
-              text: ttsText,
-              lang: 'ru-RU',
-              authToken: token || undefined,
-            });
-          }
+          assistantAudio = await synthesizeAssistantMessageAudio(
+            entryStepResult.message,
+            hydratedSession,
+            requestTtsPrefs,
+            token || undefined
+          );
         }
       }
     }
@@ -435,7 +470,7 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
   try {
     const user = (req as express.Request & { user: { userId: string; email: string } }).user;
     const sessionId = req.params.id;
-    const { content } = req.body;
+    const { content, ttsPreferences, locale } = req.body;
 
     if (!content || !content.trim()) {
       res.status(400).json({ error: 'Message content is required' });
@@ -448,18 +483,22 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
       return;
     }
 
+    await persistClientPreferencesIfPresent(session.id, { locale, ttsPreferences });
+    const sessionForReply = (await getSession(session.id)) ?? session;
+    const requestTtsPrefs = parseTtsPreferences(ttsPreferences);
+
     // Create user message
-    const userMessage = tagUserMessageWithInterviewMode(session, {
+    const userMessage = tagUserMessageWithInterviewMode(sessionForReply, {
       id: uuidv4(),
       type: MessageType.TEXT,
       role: MessageRole.USER,
       timestamp: new Date().toISOString(),
-      sessionId: session.id,
+      sessionId: sessionForReply.id,
       content: content.trim(),
     });
 
     // Save user message
-    await addMessageToSession(session.id, userMessage);
+    await addMessageToSession(sessionForReply.id, userMessage);
 
     // Process reply
     const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
@@ -468,25 +507,24 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
         ? rawAuthHeader
         : undefined
     );
-    const replyResult = await handleUserReply(session, content.trim(), token || undefined);
+    const replyResult = await handleUserReply(sessionForReply, content.trim(), token || undefined);
 
     if (replyResult.metadataUpdates) {
-      await updateSessionMetadata(session.id, replyResult.metadataUpdates);
+      await updateSessionMetadata(sessionForReply.id, replyResult.metadataUpdates);
     }
 
     let assistantMessage = null;
     let assistantAudio: AssistantAudioResult = null;
     if (replyResult.message) {
-      await addMessageToSession(session.id, replyResult.message);
+      await addMessageToSession(sessionForReply.id, replyResult.message);
       assistantMessage = replyResult.message;
-      const ttsText = getSpeakableTextFromAssistantMessage(replyResult.message);
-      if (ttsText) {
-        assistantAudio = await synthesizeAssistantAudio({
-          text: ttsText,
-          lang: 'ru-RU',
-          authToken: token || undefined,
-        });
-      }
+      const sessionForTts = (await getSession(sessionForReply.id)) ?? sessionForReply;
+      assistantAudio = await synthesizeAssistantMessageAudio(
+        replyResult.message,
+        sessionForTts,
+        requestTtsPrefs,
+        token || undefined
+      );
     }
 
     // Mirror WebSocket behavior: trigger completion integration on REST path too.
@@ -539,9 +577,11 @@ app.post('/api/chat/session/:id/analyze-vacancy', authenticateRequest, async (re
   try {
     const user = (req as express.Request & { user: { userId: string; email: string } }).user;
     const sessionId = req.params.id;
-    const { vacancyText, displayLabel } = req.body as {
+    const { vacancyText, displayLabel, ttsPreferences, locale } = req.body as {
       vacancyText?: string;
       displayLabel?: string;
+      ttsPreferences?: unknown;
+      locale?: unknown;
     };
 
     if (!vacancyText || !vacancyText.trim()) {
@@ -563,16 +603,20 @@ app.post('/api/chat/session/:id/analyze-vacancy', authenticateRequest, async (re
       return;
     }
 
+    await persistClientPreferencesIfPresent(session.id, { locale, ttsPreferences });
+    const sessionForReply = (await getSession(session.id)) ?? session;
+    const requestTtsPrefs = parseTtsPreferences(ttsPreferences);
+
     const label = (displayLabel || 'Разбор вакансии').trim();
-    const userMessage = tagUserMessageWithInterviewMode(session, {
+    const userMessage = tagUserMessageWithInterviewMode(sessionForReply, {
       id: uuidv4(),
       type: MessageType.TEXT,
       role: MessageRole.USER,
       timestamp: new Date().toISOString(),
-      sessionId: session.id,
+      sessionId: sessionForReply.id,
       content: label,
     });
-    await addMessageToSession(session.id, userMessage);
+    await addMessageToSession(sessionForReply.id, userMessage);
 
     const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
     const token = extractBearerToken(
@@ -582,29 +626,28 @@ app.post('/api/chat/session/:id/analyze-vacancy', authenticateRequest, async (re
     );
 
     const replyResult = await analyzeVacancyFromText(
-      session,
+      sessionForReply,
       vacancyText.trim(),
       label,
       token || undefined
     );
 
     if (replyResult.metadataUpdates) {
-      await updateSessionMetadata(session.id, replyResult.metadataUpdates);
+      await updateSessionMetadata(sessionForReply.id, replyResult.metadataUpdates);
     }
 
     let assistantMessage = null;
     let assistantAudio: AssistantAudioResult = null;
     if (replyResult.message) {
-      await addMessageToSession(session.id, replyResult.message);
+      await addMessageToSession(sessionForReply.id, replyResult.message);
       assistantMessage = replyResult.message;
-      const ttsText = getSpeakableTextFromAssistantMessage(replyResult.message);
-      if (ttsText) {
-        assistantAudio = await synthesizeAssistantAudio({
-          text: ttsText,
-          lang: 'ru-RU',
-          authToken: token || undefined,
-        });
-      }
+      const sessionForTts = (await getSession(sessionForReply.id)) ?? sessionForReply;
+      assistantAudio = await synthesizeAssistantMessageAudio(
+        replyResult.message,
+        sessionForTts,
+        requestTtsPrefs,
+        token || undefined
+      );
     }
 
     const updatedSession = await getSession(session.id);
@@ -630,7 +673,11 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
   try {
     const user = (req as express.Request & { user: { userId: string; email: string } }).user;
     const sessionId = req.params.id;
-    const { collectedData } = req.body as { collectedData?: Record<string, unknown> };
+    const { collectedData, ttsPreferences, locale } = req.body as {
+      collectedData?: Record<string, unknown>;
+      ttsPreferences?: unknown;
+      locale?: unknown;
+    };
 
     if (!collectedData || typeof collectedData !== 'object' || Array.isArray(collectedData)) {
       res.status(400).json({ error: 'collectedData (object) is required' });
@@ -643,8 +690,12 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
       return;
     }
 
-    const result = await applyImportedCollectedData(session, collectedData);
-    await updateSession(session);
+    await persistClientPreferencesIfPresent(session.id, { locale, ttsPreferences });
+    const sessionForReply = (await getSession(session.id)) ?? session;
+    const requestTtsPrefs = parseTtsPreferences(ttsPreferences);
+
+    const result = await applyImportedCollectedData(sessionForReply, collectedData);
+    await updateSession(sessionForReply);
     const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
     const token = extractBearerToken(
       typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
@@ -654,9 +705,9 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
 
     const mergedRole =
       (result.metadataUpdates?.collectedData?.desired_role as string | undefined) ||
-      (session.metadata.collectedData?.desired_role as string | undefined);
-    if (mergedRole && token && session.userId) {
-      triggerProfileDrivenScrape(session.userId, token).catch((err) => {
+      (sessionForReply.metadata.collectedData?.desired_role as string | undefined);
+    if (mergedRole && token && sessionForReply.userId) {
+      triggerProfileDrivenScrape(sessionForReply.userId, token).catch((err) => {
         logger.warn(`Profile-driven scrape after resume import failed: ${String(err)}`);
       });
     }
@@ -664,16 +715,15 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
     let assistantMessage = null;
     let assistantAudio: AssistantAudioResult = null;
     if (result.message) {
-      await addMessageToSession(session.id, result.message);
+      await addMessageToSession(sessionForReply.id, result.message);
       assistantMessage = result.message;
-      const ttsText = getSpeakableTextFromAssistantMessage(result.message);
-      if (ttsText) {
-        assistantAudio = await synthesizeAssistantAudio({
-          text: ttsText,
-          lang: 'ru-RU',
-          authToken: token || undefined,
-        });
-      }
+      const sessionForTts = (await getSession(sessionForReply.id)) ?? sessionForReply;
+      assistantAudio = await synthesizeAssistantMessageAudio(
+        result.message,
+        sessionForTts,
+        requestTtsPrefs,
+        token || undefined
+      );
     }
 
     const updatedSession = await getSession(session.id);
@@ -915,6 +965,8 @@ app.get('/api/chat/session/:id/resume-file', authenticateRequest, async (req, re
   }
 });
 
+app.post('/api/jobs/:jobId/application-draft', authenticateRequest, createApplicationDraft);
+
 app.post('/api/chat/session/:id/resume-email', authenticateRequest, async (req, res) => {
   try {
     const user = (req as express.Request & { user: { userId: string; email: string } }).user;
@@ -982,14 +1034,13 @@ app.post('/api/chat/session/:id/resume-email', authenticateRequest, async (req, 
 
     await addMessageToSession(session.id, assistantMessage);
     let assistantAudio: AssistantAudioResult = null;
-    const ttsText = getSpeakableTextFromAssistantMessage(assistantMessage);
-    if (ttsText) {
-      assistantAudio = await synthesizeAssistantAudio({
-        text: ttsText,
-        lang: 'ru-RU',
-        authToken: token || undefined,
-      });
-    }
+    const sessionForTts = (await getSession(session.id)) ?? session;
+    assistantAudio = await synthesizeAssistantMessageAudio(
+      assistantMessage,
+      sessionForTts,
+      null,
+      token || undefined
+    );
 
     const updatedSession = await getSession(session.id);
     res.json({
@@ -1154,7 +1205,7 @@ app.post('/api/chat/session/:id/command', authenticateRequest, async (req, res) 
   try {
     const user = (req as express.Request & { user: { userId: string; email: string } }).user;
     const sessionId = req.params.id;
-    const { commandId, action } = req.body;
+    const { commandId, action, ttsPreferences, locale } = req.body;
 
     if (!commandId || !action) {
       res.status(400).json({ error: 'commandId and action are required' });
@@ -1167,6 +1218,10 @@ app.post('/api/chat/session/:id/command', authenticateRequest, async (req, res) 
       return;
     }
 
+    await persistClientPreferencesIfPresent(session.id, { locale, ttsPreferences });
+    const sessionForCommand = (await getSession(session.id)) ?? session;
+    const requestTtsPrefs = parseTtsPreferences(ttsPreferences);
+
     const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
     const token = extractBearerToken(
       typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
@@ -1174,7 +1229,12 @@ app.post('/api/chat/session/:id/command', authenticateRequest, async (req, res) 
         : undefined
     );
 
-    const commandResult = await handleCommand(session, commandId, action, token || undefined);
+    const commandResult = await handleCommand(
+      sessionForCommand,
+      commandId,
+      action,
+      token || undefined
+    );
 
     if (commandResult.metadataUpdates) {
       await updateSessionMetadata(session.id, commandResult.metadataUpdates);
@@ -1183,15 +1243,14 @@ app.post('/api/chat/session/:id/command', authenticateRequest, async (req, res) 
     let assistantAudio: AssistantAudioResult = null;
     const commandAssistantMessage = commandResult.message ?? null;
     if (commandAssistantMessage) {
-      await addMessageToSession(session.id, commandAssistantMessage);
-      const ttsText = getSpeakableTextFromAssistantMessage(commandAssistantMessage);
-      if (ttsText) {
-        assistantAudio = await synthesizeAssistantAudio({
-          text: ttsText,
-          lang: 'ru-RU',
-          authToken: token || undefined,
-        });
-      }
+      await addMessageToSession(sessionForCommand.id, commandAssistantMessage);
+      const sessionForTts = (await getSession(sessionForCommand.id)) ?? sessionForCommand;
+      assistantAudio = await synthesizeAssistantMessageAudio(
+        commandAssistantMessage,
+        sessionForTts,
+        requestTtsPrefs,
+        token || undefined
+      );
     }
 
     // If next step changed, prepare it

@@ -15,6 +15,7 @@ export interface JobRow {
   skills: string | string[]; // Can be JSON string or array
   experience_level: string | null;
   work_mode: string | null;
+  source_meta?: Record<string, unknown> | null;
   source: string;
   source_url: string;
   role_family?: string | null;

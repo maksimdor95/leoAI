@@ -112,6 +112,12 @@ export interface ConversationSessionMetadata {
   currentStepId?: string;
   completedSteps: string[];
   flags: Record<string, boolean | string | undefined>;
+  /** Язык синтеза SpeechKit (ru-RU / en-US), задаётся из настроек клиента. */
+  ttsLang?: 'ru-RU' | 'en-US';
+  /** ID голоса SpeechKit (ermil, filipp, jane, …). */
+  ttsVoice?: string;
+  /** Язык UI клиента (ru / en) — влияет на тексты ассистента в диалоге. */
+  uiLocale?: 'ru' | 'en';
 }
 
 export interface ConversationSession {

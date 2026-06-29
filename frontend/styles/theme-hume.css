@@ -1,0 +1,1433 @@
+/* Hume AI — full design system (DESIGN-2 / Refero) */
+
+:root {
+  --color-ink: #222222;
+  --color-paper: #ffffff;
+  --color-bone: #fff9f3;
+  --color-smoke: #7a7876;
+  --color-carbon: #000000;
+  --color-iris: #c094e4;
+  --gradient-iris: linear-gradient(90deg, #c094e4 0%, #f7bbe6 50%, #ffb760 100%);
+  --color-blush: #fce0ee;
+  --color-rose-mist: #fdebf7;
+  --color-meringue: #ffe9cf;
+  --color-mint: #daf7ee;
+  --color-seafoam: #cef1e1;
+  --color-slate-plum: #574853;
+  --color-border-hairline: rgba(34, 34, 34, 0.08);
+
+  --font-weight-regular: 400;
+  --font-weight-w520: 500;
+
+  --text-caption: 10px;
+  --leading-caption: 1.5;
+  --tracking-caption: 0.025em;
+  --text-body: 16px;
+  --leading-body: 1.5;
+  --tracking-body: -0.025em;
+  --text-subheading: 18px;
+  --leading-subheading: 1.43;
+  --tracking-subheading: -0.025em;
+  --text-heading-sm: 20px;
+  --leading-heading-sm: 1.33;
+  --tracking-heading-sm: -0.025em;
+  --text-heading: 24px;
+  --leading-heading: 1.25;
+  --tracking-heading: -0.025em;
+  --text-heading-lg: 30px;
+  --leading-heading-lg: 1.2;
+  --tracking-heading-lg: -0.025em;
+  --text-heading-xl: 36px;
+  --leading-heading-xl: 1.11;
+  --tracking-heading-xl: -0.025em;
+  --text-display: 48px;
+  --leading-display: 1.11;
+  --tracking-display: -0.025em;
+
+  --radius-input: 8px;
+  --radius-card: 16px;
+  --radius-hero: 24px;
+  --radius-pill: 9999px;
+
+  --page-max-width: 1200px;
+}
+
+/* ── Typography utilities (Hume theme) ── */
+
+[data-theme='hume'] .hume-sans {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.025em;
+}
+
+[data-theme='hume'] .hume-mono {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+[data-theme='hume'] .hume-display {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: var(--font-weight-w520);
+  font-size: clamp(1.75rem, 4vw, var(--text-heading-xl));
+  line-height: var(--leading-heading-xl);
+  letter-spacing: var(--tracking-heading-xl);
+  color: var(--color-ink);
+}
+
+[data-theme='hume'] .hume-heading {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: var(--font-weight-w520);
+  font-size: var(--text-heading-sm);
+  line-height: var(--leading-heading-sm);
+  letter-spacing: var(--tracking-heading-sm);
+  color: var(--color-ink);
+}
+
+[data-theme='hume'] .hume-body {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: var(--font-weight-regular);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  letter-spacing: var(--tracking-body);
+  color: var(--color-smoke);
+}
+
+[data-theme='hume'] .hume-body-sm {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: var(--font-weight-regular);
+  font-size: 14px;
+  line-height: 1.43;
+  letter-spacing: -0.025em;
+  color: var(--color-smoke);
+}
+
+[data-theme='hume'] .hume-label {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.33;
+  font-weight: 400;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+  color: var(--color-smoke);
+}
+
+[data-theme='hume'] .hume-label-sm {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+  color: var(--color-smoke);
+}
+
+[data-theme='hume'] .hume-gradient-text {
+  background: var(--gradient-iris);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme='hume'] .hume-chip {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+  color: var(--color-slate-plum);
+  border: 1px solid var(--color-border-hairline);
+  border-radius: var(--radius-pill);
+  background: var(--color-bone);
+  padding: 0.2rem 0.65rem;
+}
+
+[data-theme='hume'] .hume-btn-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: var(--font-weight-w520);
+  font-size: 14px;
+  letter-spacing: -0.025em;
+  color: var(--color-paper);
+  background: var(--color-ink);
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 0.65rem 1.25rem;
+  box-shadow: none;
+  transition: opacity 0.15s ease;
+}
+
+[data-theme='hume'] .hume-btn-pill:hover {
+  opacity: 0.88;
+}
+
+[data-theme='hume'] .hume-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  letter-spacing: -0.025em;
+  color: var(--color-ink);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 0.35rem 0.75rem;
+  box-shadow: none;
+  transition: opacity 0.15s ease;
+  cursor: pointer;
+}
+
+[data-theme='hume'] .hume-btn-ghost:hover {
+  opacity: 0.72;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+[data-theme='hume'] .hume-btn-pill-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-ink);
+  color: var(--color-paper);
+  border: none;
+  box-shadow: none;
+  transition: opacity 0.15s ease;
+}
+
+[data-theme='hume'] .hume-btn-pill-icon:hover {
+  opacity: 0.88;
+}
+
+[data-theme='hume'] .hume-card {
+  background: var(--color-paper);
+  border: 1px solid var(--color-border-hairline);
+  border-radius: var(--radius-card);
+  box-shadow: none;
+}
+
+[data-theme='hume'] .hume-card-active {
+  background: var(--color-bone);
+}
+
+/* ── Global shell ── */
+
+[data-theme='hume'] {
+  color-scheme: light;
+}
+
+[data-theme='hume'] body {
+  background: var(--color-bone);
+  color: var(--color-ink);
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: var(--font-weight-regular);
+  letter-spacing: -0.025em;
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-theme='hume'] .leo-chat-layout.ant-layout {
+  background: var(--color-bone) !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-title {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  font-weight: var(--font-weight-w520) !important;
+  letter-spacing: -0.025em !important;
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-header-btn {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  font-weight: var(--font-weight-w520) !important;
+  letter-spacing: -0.025em !important;
+  color: var(--color-ink) !important;
+  border-radius: var(--radius-pill) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-header-btn:hover {
+  color: var(--color-ink) !important;
+  background: rgba(34, 34, 34, 0.04) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-panel,
+[data-theme='hume'] .leo-chat-layout .leo-chat-sidebar {
+  background: var(--color-paper) !important;
+  border: 1px solid rgba(34, 34, 34, 0.12) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-sidebar .text-slate-100,
+[data-theme='hume'] .leo-chat-layout .leo-chat-sidebar .text-slate-200,
+[data-theme='hume'] .leo-chat-layout .leo-chat-sidebar .font-semibold {
+  color: var(--color-ink) !important;
+  font-weight: var(--font-weight-w520) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-sidebar .text-slate-400,
+[data-theme='hume'] .leo-chat-layout .leo-chat-sidebar .text-slate-300 {
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-footer {
+  background: var(--color-paper) !important;
+  border: 1px solid rgba(34, 34, 34, 0.12) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  border-radius: 12px !important;
+}
+
+[data-theme='hume'] .chat-footer-input-wrap--hume {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-bone);
+  border: none;
+  border-radius: 8px;
+  padding: 0.4rem 0.75rem;
+  min-height: 2.25rem;
+  display: flex;
+  align-items: center;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-footer .ant-input,
+[data-theme='hume'] .leo-chat-layout .leo-chat-footer textarea,
+[data-theme='hume'] .chat-footer-input-wrap--hume textarea.ant-input,
+[data-theme='hume'] .chat-footer-input-wrap--hume textarea {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  letter-spacing: -0.025em !important;
+  color: var(--color-ink) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  resize: none !important;
+}
+
+[data-theme='hume'] .chat-footer-input-wrap--hume textarea.ant-input::placeholder,
+[data-theme='hume'] .chat-footer-input-wrap--hume textarea::placeholder {
+  color: var(--color-smoke) !important;
+  opacity: 1 !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-footer .ant-btn {
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-footer button[class*='bg-green-500'] {
+  background: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  box-shadow: none !important;
+  border-radius: var(--radius-pill) !important;
+}
+
+[data-theme='hume'] .profile-edit-modal--hume .ant-form-item-label > label {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace !important;
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.025em !important;
+  text-transform: uppercase !important;
+  font-feature-settings: 'liga' 0, 'calt' 0 !important;
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .profile-edit-modal--hume .ant-input,
+[data-theme='hume'] .profile-edit-modal--hume textarea.ant-input {
+  background: var(--color-bone) !important;
+  border: 1px solid rgba(34, 34, 34, 0.12) !important;
+  border-radius: 8px !important;
+  color: var(--color-ink) !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  letter-spacing: -0.025em !important;
+  box-shadow: none !important;
+  padding: 0.5rem 0.75rem !important;
+}
+
+[data-theme='hume'] .profile-edit-modal--hume .ant-input:focus,
+[data-theme='hume'] .profile-edit-modal--hume textarea.ant-input:focus {
+  border-color: rgba(34, 34, 34, 0.22) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .profile-edit-modal--hume .ant-form-item {
+  margin-bottom: 1rem !important;
+}
+
+[data-theme='hume'] .leo-hume-modal .ant-btn-primary {
+  background: var(--color-ink) !important;
+  border-color: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  border-radius: var(--radius-pill) !important;
+  box-shadow: none !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  font-weight: 500 !important;
+}
+
+[data-theme='hume'] .leo-hume-modal .ant-btn-default {
+  border-radius: var(--radius-pill) !important;
+  border-color: rgba(34, 34, 34, 0.12) !important;
+  background: var(--color-paper) !important;
+  color: var(--color-ink) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .leo-hume-modal .ant-btn-default:hover {
+  background: var(--color-bone) !important;
+  color: var(--color-ink) !important;
+  border-color: rgba(34, 34, 34, 0.18) !important;
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .draft-tone-select .ant-select-selector {
+  background: var(--color-paper) !important;
+  border-color: var(--color-border-hairline) !important;
+  color: var(--color-ink) !important;
+  border-radius: var(--radius-pill) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-muted-text {
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-accent {
+  color: var(--color-iris) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .text-green-300,
+[data-theme='hume'] .leo-chat-layout .text-green-300\/70,
+[data-theme='hume'] .leo-chat-layout .text-green-400 {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace !important;
+  font-size: 10px !important;
+  letter-spacing: 0.025em !important;
+  text-transform: uppercase !important;
+  font-feature-settings: 'liga' 0, 'calt' 0 !important;
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-send-btn {
+  background: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  box-shadow: none !important;
+  border-radius: var(--radius-pill) !important;
+  border: none !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-send-btn .anticon,
+[data-theme='hume'] .leo-chat-layout .leo-chat-send-btn .ant-btn-icon,
+[data-theme='hume'] .leo-chat-layout .leo-chat-send-btn svg {
+  color: var(--color-paper) !important;
+  fill: currentColor !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .leo-chat-send-btn:hover {
+  opacity: 0.88;
+  background: var(--color-ink) !important;
+}
+
+/* Green CTAs → ink pill (Hume primary) */
+[data-theme='hume'] .leo-chat-layout .bg-green-500,
+[data-theme='hume'] .leo-chat-layout .bg-green-500\/90,
+[data-theme='hume'] .leo-chat-layout .bg-green-500\/20,
+[data-theme='hume'] .leo-chat-layout [class*='bg-green-500'] {
+  background: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .hover\:bg-green-400:hover,
+[data-theme='hume'] .leo-chat-layout .hover\:\!bg-green-400:hover {
+  background: var(--color-ink) !important;
+  opacity: 0.88;
+}
+
+[data-theme='hume'] .leo-chat-layout .shadow-lg {
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .backdrop-blur {
+  backdrop-filter: none !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .border-white\/10,
+[data-theme='hume'] .leo-chat-layout .border-white\/\[0\.08\] {
+  border-color: var(--color-border-hairline) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .bg-white\/\[0\.04\],
+[data-theme='hume'] .leo-chat-layout .bg-white\/10,
+[data-theme='hume'] .leo-chat-layout .bg-white\/\[0\.06\] {
+  background: var(--color-bone) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .text-slate-100,
+[data-theme='hume'] .leo-chat-layout .text-slate-200 {
+  color: var(--color-ink) !important;
+}
+
+/* Не трогаем text-white глобально — ломает pill-кнопки и тёмные пузыри */
+[data-theme='hume'] .leo-chat-layout .leo-chat-sidebar .text-white,
+[data-theme='hume'] .leo-chat-layout header .text-white {
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .text-slate-300,
+[data-theme='hume'] .leo-chat-layout .text-slate-400,
+[data-theme='hume'] .leo-chat-layout .text-slate-500 {
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .text-green-300,
+[data-theme='hume'] .leo-chat-layout .text-emerald-300 {
+  color: var(--color-slate-plum) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .bg-emerald-500\/15 {
+  background: var(--color-mint) !important;
+  color: var(--color-slate-plum) !important;
+}
+
+/* Message bubbles in chat history */
+[data-theme='hume'] .leo-chat-layout .rounded-2xl.border.border-white\/10.bg-white\/10 {
+  background: var(--color-bone) !important;
+  border-color: var(--color-border-hairline) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .rounded-2xl.border.border-white\/10.bg-white\/10 .text-slate-100 {
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .rounded-2xl.border.border-white\/10.bg-white\/10 .text-slate-400 {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace !important;
+  font-size: 10px !important;
+  letter-spacing: 0.025em !important;
+  color: var(--color-smoke) !important;
+}
+
+/* User messages — ink pill style */
+[data-theme='hume'] .leo-chat-layout .bg-green-500.text-white.rounded-2xl,
+[data-theme='hume'] .leo-chat-layout .bg-green-500.text-white.rounded-3xl {
+  background: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+}
+
+/* Ant Design in Hume chat */
+[data-theme='hume'] .leo-chat-layout .ant-btn-primary {
+  background: var(--color-ink) !important;
+  border-color: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  border-radius: var(--radius-pill) !important;
+  box-shadow: none !important;
+  font-weight: var(--font-weight-w520) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .ant-btn-default,
+[data-theme='hume'] .leo-chat-layout .ant-btn-text {
+  border-radius: var(--radius-pill) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .ant-segmented {
+  background: var(--color-bone) !important;
+  border-radius: var(--radius-pill) !important;
+}
+
+[data-theme='hume'] .leo-chat-layout .ant-segmented-item-selected {
+  background: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  border-radius: var(--radius-pill) !important;
+}
+
+/* ── Active chat: main stage + history ── */
+[data-theme='hume'] .leo-chat-stage h2,
+[data-theme='hume'] .leo-chat-stage .hume-stage-heading {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  font-weight: 500 !important;
+  font-size: clamp(1.125rem, 2.2vw, var(--text-heading-sm)) !important;
+  line-height: var(--leading-heading-sm) !important;
+  letter-spacing: -0.025em !important;
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chat-stage .hume-stage-body,
+[data-theme='hume'] .leo-chat-stage .hume-stage-heading {
+  font-weight: 400;
+}
+
+[data-theme='hume'] .leo-chat-stage .hume-stage-heading {
+  font-weight: 500 !important;
+}
+
+[data-theme='hume'] .leo-chat-stage .hume-stage-body {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  font-size: var(--text-body) !important;
+  line-height: var(--leading-body) !important;
+  letter-spacing: -0.025em !important;
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chat-stage .hume-stage-label,
+[data-theme='hume'] .leo-chat-stage .hume-label-sm,
+[data-theme='hume'] .leo-chat-stage .text-green-300\/70,
+[data-theme='hume'] .leo-chat-stage .text-green-300,
+[data-theme='hume'] .leo-chat-stage .text-green-400,
+[data-theme='hume'] .leo-chat-stage .text-green-400\/80 {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace !important;
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.025em !important;
+  text-transform: uppercase !important;
+  font-feature-settings: 'liga' 0, 'calt' 0 !important;
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .leo-chat-stage .hume-stage-body,
+[data-theme='hume'] .leo-chat-stage .text-slate-100,
+[data-theme='hume'] .leo-chat-stage .text-white,
+[data-theme='hume'] .leo-chat-stage h2:not(.hume-stage-heading) {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.025em !important;
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chat-stage h2:not(.hume-stage-heading) {
+  font-weight: 500 !important;
+}
+
+[data-theme='hume'] .leo-chat-stage .text-slate-300,
+[data-theme='hume'] .leo-chat-stage .text-slate-400 {
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .leo-chat-stage button[class*='border-white'],
+[data-theme='hume'] .leo-chat-stage .rounded-2xl.border.border-white\/10 {
+  background: var(--color-bone) !important;
+  border-color: var(--color-border-hairline) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .leo-chat-stage button[class*='border-white']:hover {
+  background: var(--color-rose-mist) !important;
+  border-color: rgba(34, 34, 34, 0.12) !important;
+}
+
+[data-theme='hume'] .leo-chat-stage button[class*='border-white'] .text-white,
+[data-theme='hume'] .leo-chat-stage button[class*='border-white'] span.font-semibold {
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chat-stage .CommandBar button,
+[data-theme='hume'] .leo-chat-stage .flex.flex-wrap.gap-2 > button[class*='green'] {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.025em !important;
+  text-transform: none !important;
+  background: var(--color-bone) !important;
+  border: 1px solid var(--color-border-hairline) !important;
+  color: var(--color-ink) !important;
+  border-radius: var(--radius-pill) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .leo-chat-stage .flex.flex-wrap.gap-2 > button[class*='green']:hover {
+  background: var(--color-rose-mist) !important;
+}
+
+[data-theme='hume'] .leo-chat-stage .ant-btn-primary,
+[data-theme='hume'] .leo-chat-stage button[class*='from-green'],
+[data-theme='hume'] .leo-chat-stage button[class*='from-violet'] {
+  background: var(--color-ink) !important;
+  background-image: none !important;
+  border: none !important;
+  color: var(--color-paper) !important;
+  border-radius: var(--radius-pill) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .leo-chat-stage .ant-btn-link,
+[data-theme='hume'] .leo-chat-stage button[class*='text-amber'] {
+  color: var(--color-slate-plum) !important;
+}
+
+[data-theme='hume'] .leo-chat-stage .rounded-full.bg-white\/10,
+[data-theme='hume'] .leo-chat-stage .rounded-full.bg-amber-500 {
+  background: var(--color-bone) !important;
+  color: var(--color-slate-plum) !important;
+  border: 1px solid var(--color-border-hairline);
+}
+
+/* Sidebar message history */
+[data-theme='hume'] .leo-chat-history .bg-white\/10 {
+  background: var(--color-bone) !important;
+  border-color: var(--color-border-hairline) !important;
+  color: var(--color-ink) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+[data-theme='hume'] .leo-chat-history .bg-blue-500\/20 {
+  background: var(--color-ink) !important;
+  border-color: transparent !important;
+  color: var(--color-paper) !important;
+}
+
+[data-theme='hume'] .leo-chat-history .text-slate-100,
+[data-theme='hume'] .leo-chat-history .text-slate-400 {
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chat-history .bg-blue-500\/20 .text-slate-100,
+[data-theme='hume'] .leo-chat-history .bg-blue-500\/20 .whitespace-pre-line {
+  color: var(--color-paper) !important;
+}
+
+[data-theme='hume'] .leo-chat-history .text-\[8px\] {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace !important;
+  font-size: 10px !important;
+  letter-spacing: 0.025em !important;
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .leo-chat-history .ant-btn {
+  background: var(--color-bone) !important;
+  border-color: var(--color-border-hairline) !important;
+  color: var(--color-ink) !important;
+  border-radius: var(--radius-pill) !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  letter-spacing: -0.025em !important;
+  text-transform: none !important;
+}
+
+[data-theme='hume'] .leo-chat-history .hume-user-bubble,
+[data-theme='hume'] .leo-chat-history .hume-assistant-bubble,
+[data-theme='hume'] .leo-chat-history .hume-user-bubble .hume-body-sm,
+[data-theme='hume'] .leo-chat-history .hume-assistant-bubble .hume-body-sm {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  letter-spacing: -0.025em !important;
+  text-transform: none !important;
+  font-feature-settings: normal !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar [role='tablist'] {
+  border-color: var(--color-border-hairline) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar [role='tab'][aria-selected='true'] {
+  background: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar [role='tab']:not([aria-selected='true']) {
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar [role='tab']:not([aria-selected='true']):hover {
+  background: var(--color-bone) !important;
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-product-selection--hume .hume-display {
+  font-size: clamp(1.5rem, 3.2vw, 2.25rem);
+  line-height: 1.15;
+}
+
+@media (min-width: 1024px) {
+  [data-theme='hume'] .leo-product-selection--hume .hume-display {
+    font-size: clamp(1.625rem, 2.8vw, 2.125rem);
+  }
+}
+
+/* Product selection — Hume layout */
+[data-theme='hume'] .leo-product-selection--hume {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-theme='hume'] .leo-product-selection--hume .voice-stage--hume .voice-stage-wave {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+[data-theme='hume'] .leo-product-selection--hume .hume-scenario-card {
+  border-radius: var(--radius-card);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+[data-theme='hume'] .leo-product-selection--hume .hume-scenario-card:focus-visible {
+  outline: 2px solid rgba(192, 148, 228, 0.35);
+  outline-offset: 2px;
+}
+
+/* Preview chat bubbles */
+[data-theme='hume'] .hume-user-bubble {
+  background: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.025em;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .hume-assistant-bubble {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.025em;
+  box-shadow: none !important;
+}
+
+/* Support widget — Hume light panel */
+[data-theme='hume'] .support-widget-panel {
+  background: var(--color-paper) !important;
+  border-color: var(--color-border-hairline) !important;
+  box-shadow: none !important;
+  ring: none !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-theme='hume'] .support-widget-panel .support-widget-title {
+  color: var(--color-ink) !important;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+[data-theme='hume'] .support-widget-panel .support-widget-subtitle {
+  color: var(--color-smoke) !important;
+  letter-spacing: -0.025em;
+}
+
+[data-theme='hume'] .support-widget-panel .support-widget-divider {
+  border-color: var(--color-border-hairline) !important;
+}
+
+[data-theme='hume'] .support-widget-primary-btn {
+  background: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  box-shadow: none !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+[data-theme='hume'] .support-widget-primary-btn:hover {
+  opacity: 0.88;
+}
+
+[data-theme='hume'] .support-widget-secondary-btn {
+  background: var(--color-bone) !important;
+  border-color: var(--color-border-hairline) !important;
+  color: var(--color-ink) !important;
+  box-shadow: none !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+[data-theme='hume'] .support-widget-secondary-btn:hover {
+  background: var(--color-rose-mist) !important;
+  border-color: rgba(34, 34, 34, 0.12) !important;
+}
+
+[data-theme='hume'] .support-widget-fab {
+  background: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  border-color: var(--color-border-hairline) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .support-widget-fab:hover {
+  opacity: 0.88;
+}
+
+[data-theme='hume'] .support-widget-teaser {
+  background: var(--color-paper) !important;
+  border-color: var(--color-border-hairline) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+[data-theme='hume'] .support-widget-teaser .support-widget-title {
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .support-widget-teaser .support-widget-subtitle {
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .support-widget-toolbar-btn {
+  background: var(--color-bone) !important;
+  border-color: var(--color-border-hairline) !important;
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .support-widget-toolbar-btn:hover {
+  background: var(--color-rose-mist) !important;
+}
+
+[data-theme='hume'] .support-widget-overlay {
+  background: rgba(34, 34, 34, 0.24) !important;
+  backdrop-filter: none !important;
+}
+
+[data-theme='hume'] .leo-product-selection--hume .hume-preview-panel {
+  border-radius: var(--radius-card);
+  box-shadow: none;
+}
+
+[data-theme='hume'] .leo-product-selection--hume .hume-preview-badge {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+}
+
+/* Settings popover */
+.app-settings-popover .ant-popover-inner {
+  border-radius: var(--radius-card) !important;
+  padding: 12px !important;
+}
+
+[data-theme='leo-dark'] .app-settings-popover .ant-popover-inner {
+  background: #0a0f1e !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+[data-theme='hume'] .app-settings-popover .ant-popover-inner {
+  background: var(--color-paper) !important;
+  border: 1px solid var(--color-border-hairline) !important;
+  box-shadow: none !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-theme='hume'] .app-settings-label {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+  color: var(--color-smoke);
+}
+
+[data-theme='hume'] .app-settings-hint {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: -0.025em;
+  color: var(--color-smoke);
+}
+
+[data-theme='leo-dark'] .app-settings-label {
+  color: rgba(148, 163, 184, 0.95);
+}
+
+[data-theme='leo-dark'] .app-settings-hint {
+  color: rgba(148, 163, 184, 0.75);
+}
+
+[data-theme='leo-dark'] .app-settings-segmented.ant-segmented {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-theme='leo-dark'] .app-settings-segmented.ant-segmented .ant-segmented-thumb {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-radius: 6px !important;
+}
+
+[data-theme='leo-dark'] .app-settings-segmented .ant-segmented-item-label {
+  color: #cbd5e1 !important;
+}
+
+[data-theme='leo-dark'] .app-settings-segmented .ant-segmented-item-selected .ant-segmented-item-label {
+  color: #0a0f1e !important;
+}
+
+[data-theme='hume'] .app-settings-segmented.ant-segmented {
+  background: var(--color-bone) !important;
+  border-radius: var(--radius-pill) !important;
+}
+
+[data-theme='hume'] .app-settings-segmented .ant-segmented-item-label {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  letter-spacing: -0.025em !important;
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .app-settings-segmented .ant-segmented-item-selected {
+  background: var(--color-ink) !important;
+  border-radius: var(--radius-pill) !important;
+}
+
+[data-theme='hume'] .app-settings-segmented .ant-segmented-item-selected .ant-segmented-item-label {
+  color: var(--color-paper) !important;
+}
+
+[data-theme='hume'] .app-settings-trigger {
+  color: var(--color-ink) !important;
+  border-radius: var(--radius-pill) !important;
+}
+
+[data-theme='hume'] .app-settings-trigger:hover {
+  color: var(--color-ink) !important;
+  background: rgba(34, 34, 34, 0.04) !important;
+}
+
+[data-theme='hume'] .app-settings-select.ant-select .ant-select-selector {
+  background: var(--color-bone) !important;
+  border: 1px solid var(--color-border-hairline) !important;
+  border-radius: var(--radius-pill) !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  letter-spacing: -0.025em !important;
+}
+
+[data-theme='hume'] .app-settings-select.ant-select .ant-select-selection-item {
+  color: var(--color-ink) !important;
+}
+
+[data-theme='leo-dark'] .app-settings-select.ant-select .ant-select-selector {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+}
+
+[data-theme='leo-dark'] .app-settings-select.ant-select .ant-select-selection-item {
+  color: #e2e8f0 !important;
+}
+
+[data-theme='leo-dark'] .app-settings-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── My chats page ── */
+
+[data-theme='hume'] .leo-chats-page.ant-layout {
+  background: var(--color-bone) !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-theme='hume'] .leo-chats-page .ant-btn-primary {
+  background: var(--color-ink) !important;
+  border-color: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  border-radius: var(--radius-pill) !important;
+  box-shadow: none !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.025em !important;
+}
+
+[data-theme='hume'] .leo-chats-page .ant-btn-primary:hover {
+  opacity: 0.88;
+  background: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chats-page .ant-empty-image svg {
+  opacity: 0.35;
+}
+
+[data-theme='hume'] .leo-chats-page .leo-chat-card {
+  border-radius: var(--radius-card);
+  box-shadow: none;
+}
+
+[data-theme='hume'] .leo-chats-back {
+  border-radius: var(--radius-pill) !important;
+}
+
+[data-theme='hume'] .leo-hume-modal .ant-modal-content {
+  background: var(--color-paper) !important;
+  border: 1px solid var(--color-border-hairline) !important;
+  border-radius: var(--radius-card) !important;
+  box-shadow: none !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-theme='hume'] .leo-hume-modal .ant-modal-title,
+[data-theme='hume'] .leo-hume-modal .ant-modal-confirm-title {
+  color: var(--color-ink) !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.025em !important;
+}
+
+[data-theme='hume'] .leo-hume-modal .ant-modal-confirm-content {
+  color: var(--color-smoke) !important;
+  letter-spacing: -0.025em !important;
+}
+
+[data-theme='hume'] .leo-hume-modal .ant-btn-default {
+  border-radius: var(--radius-pill) !important;
+  border-color: var(--color-border-hairline) !important;
+  color: var(--color-ink) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .leo-hume-modal .ant-btn-primary {
+  border-radius: var(--radius-pill) !important;
+  box-shadow: none !important;
+}
+
+/* Auth modal — Hume light */
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-typography,
+[data-theme='hume'] .auth-modal.leo-hume-modal p {
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-typography.ant-typography-h3,
+[data-theme='hume'] .auth-modal.leo-hume-modal h3.ant-typography {
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-modal-close {
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-modal-close:hover {
+  color: var(--color-ink) !important;
+  background: rgba(34, 34, 34, 0.04) !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-affix-wrapper,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-password.ant-input-affix-wrapper {
+  color: var(--color-ink) !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(34, 34, 34, 0.12) !important;
+  border-radius: 0.75rem !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-affix-wrapper .ant-input,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-password.ant-input-affix-wrapper .ant-input {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-affix-wrapper .ant-input:focus,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-password.ant-input-affix-wrapper .ant-input:focus {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-prefix {
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-password-icon {
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-password-icon:hover,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-affix-wrapper-focused .ant-input-password-icon {
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input::placeholder,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-affix-wrapper .ant-input::placeholder,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-password input::placeholder {
+  color: var(--color-smoke) !important;
+  opacity: 1 !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-affix-wrapper:hover,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-password.ant-input-affix-wrapper:hover {
+  border-color: rgba(34, 34, 34, 0.2) !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-affix-wrapper-focused,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-affix-wrapper:focus-within,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-password.ant-input-affix-wrapper-focused {
+  border-color: var(--color-iris) !important;
+  box-shadow: 0 0 0 2px rgba(192, 148, 228, 0.22) !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-affix-wrapper .ant-input:-webkit-autofill,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-affix-wrapper .ant-input:-webkit-autofill:hover,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-affix-wrapper .ant-input:-webkit-autofill:focus,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-password.ant-input-affix-wrapper .ant-input:-webkit-autofill,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-password.ant-input-affix-wrapper .ant-input:-webkit-autofill:hover,
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-input-password.ant-input-affix-wrapper .ant-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-ink) !important;
+  caret-color: var(--color-ink) !important;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+  transition: background-color 9999s ease-out 0s;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-btn-primary {
+  height: 3rem !important;
+  border: none !important;
+  background: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.025em !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-btn-primary:not(:disabled):hover {
+  background: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  opacity: 0.88;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-btn-default {
+  height: 3rem !important;
+  border-radius: 0.75rem !important;
+  border-color: rgba(34, 34, 34, 0.12) !important;
+  background: var(--color-paper) !important;
+  color: var(--color-ink) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-btn-default:not(:disabled):hover {
+  background: var(--color-bone) !important;
+  border-color: rgba(34, 34, 34, 0.18) !important;
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal button.auth-tab-btn:focus-visible {
+  outline: 2px solid rgba(124, 92, 255, 0.35);
+  outline-offset: 2px;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal button.auth-text-btn:focus-visible {
+  outline: 2px solid rgba(124, 92, 255, 0.35);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .ant-form-item-explain-error {
+  color: #c2410c !important;
+}
+
+/* Sidebar: profile fields, vacancy sections, ghost actions */
+[data-theme='hume'] .leo-chat-sidebar .text-emerald-400\/90,
+[data-theme='hume'] .leo-chat-sidebar .text-amber-400\/90 {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace !important;
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.025em !important;
+  text-transform: uppercase !important;
+  font-feature-settings: 'liga' 0, 'calt' 0 !important;
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .rounded-lg.border.border-white\/10,
+[data-theme='hume'] .leo-chat-sidebar .rounded-lg.border.border-white\/\[0\.06\] {
+  background: var(--color-bone) !important;
+  border-color: var(--color-border-hairline) !important;
+  border-radius: 12px !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .text-\[11px\].font-semibold.uppercase,
+[data-theme='hume'] .leo-chat-sidebar .text-\[11px\].uppercase.tracking-wide {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace !important;
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.025em !important;
+  text-transform: uppercase !important;
+  font-feature-settings: 'liga' 0, 'calt' 0 !important;
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .leo-profile-edit-btn {
+  color: var(--color-ink) !important;
+  background: var(--color-bone) !important;
+  border: 1px solid var(--color-border-hairline) !important;
+  border-radius: var(--radius-pill) !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.025em !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .leo-profile-edit-btn:hover {
+  background: var(--color-rose-mist) !important;
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .leo-sidebar-tab-active {
+  background: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .leo-sidebar-tab-inactive {
+  color: var(--color-smoke) !important;
+  background: transparent !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .leo-sidebar-tab-inactive:hover {
+  background: var(--color-bone) !important;
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .rounded-full.bg-emerald-500\/15 {
+  background: var(--color-mint) !important;
+  color: var(--color-slate-plum) !important;
+  border: 1px solid var(--color-border-hairline);
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.025em;
+}
+
+/* Vacancy drawer — Hume light */
+[data-theme='hume'] .vacancy-preview-modal-wrap--hume .ant-modal-close {
+  color: var(--color-smoke) !important;
+}
+
+[data-theme='hume'] .vacancy-preview-modal-wrap--hume .ant-modal-close:hover {
+  color: var(--color-ink) !important;
+  background: var(--color-bone) !important;
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-section-label {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  font-feature-settings: 'liga' 0, 'calt' 0;
+  color: var(--color-smoke);
+  margin-bottom: 0.5rem;
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-chip {
+  border-radius: 8px;
+  border: 1px solid var(--color-border-hairline);
+  background: var(--color-bone);
+  color: var(--color-ink);
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: -0.025em;
+  padding: 0.25rem 0.65rem;
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-panel-box {
+  border-radius: 12px;
+  border: 1px solid var(--color-border-hairline);
+  background: var(--color-bone);
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-skill-chip {
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-hairline);
+  background: var(--color-paper);
+  color: var(--color-slate-plum);
+  font-size: 11px;
+  padding: 0.125rem 0.625rem;
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-body-text {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.025em;
+  color: var(--color-ink);
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-muted-text {
+  color: var(--color-smoke);
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.025em;
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-accent-badge {
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  color: var(--color-smoke);
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-title {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  color: var(--color-ink);
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-match-score {
+  color: var(--color-iris);
+  font-weight: 500;
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-secondary-btn {
+  border-radius: var(--radius-pill) !important;
+  border: 1px solid var(--color-border-hairline) !important;
+  background: var(--color-paper) !important;
+  color: var(--color-ink) !important;
+  box-shadow: none !important;
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.025em !important;
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-secondary-btn:hover {
+  background: var(--color-bone) !important;
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-primary-btn {
+  border-radius: var(--radius-pill) !important;
+  background: var(--color-ink) !important;
+  border-color: var(--color-ink) !important;
+  color: var(--color-paper) !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-primary-btn:hover {
+  opacity: 0.88;
+  background: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .vacancy-drawer--hume .vacancy-divider {
+  border-color: var(--color-border-hairline) !important;
+}
+
+[data-theme='hume'] .match-reasons-popover--hume .ant-popover-inner {
+  border-radius: 12px;
+  border: 1px solid var(--color-border-hairline);
+  box-shadow: 0 8px 24px rgba(34, 34, 34, 0.12);
+}
+
+[data-theme='hume'] .match-reasons-popover--hume .ant-popover-title {
+  min-height: auto;
+  padding: 10px 12px 0;
+  border-bottom: none;
+}
+
+[data-theme='hume'] .match-reasons-popover--hume .ant-popover-inner-content {
+  padding: 8px 12px 12px;
+}
+
+.match-reasons-popover:not(.match-reasons-popover--hume) .ant-popover-inner {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.match-reasons-popover:not(.match-reasons-popover--hume) .ant-popover-title {
+  color: rgb(100 116 139);
+  border-bottom: none;
+  min-height: auto;
+  padding: 10px 12px 0;
+}
+
+.match-reasons-popover:not(.match-reasons-popover--hume) .ant-popover-inner-content {
+  padding: 8px 12px 12px;
+}

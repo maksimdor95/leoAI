@@ -4,6 +4,7 @@
  */
 
 import type { RoleFamily } from '../services/roleFamily';
+import type { HhVacancyMeta } from '../utils/hhVacancyMeta';
 
 export interface Job {
   id: string;
@@ -18,6 +19,7 @@ export interface Job {
   skills: string[];
   experience_level: string | null; // 'junior' | 'middle' | 'senior' | null
   work_mode: string | null; // 'remote' | 'office' | 'hybrid' | null
+  source_meta: HhVacancyMeta | null;
   source: string; // 'hh.ru' | 'avito' | etc.
   source_url: string;
   role_family: RoleFamily | null;
@@ -39,6 +41,7 @@ export interface JobInput {
   skills: string[];
   experience_level?: string | null;
   work_mode?: string | null;
+  source_meta?: HhVacancyMeta | null;
   source: string;
   source_url: string;
   role_family?: RoleFamily | null;

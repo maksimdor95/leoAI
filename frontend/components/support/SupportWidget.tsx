@@ -16,23 +16,17 @@ import { getBoostyUrl } from '@/lib/boostyLink';
 import { buildTelegramSupportUrl, getTelegramSupportUrl } from '@/lib/supportLink';
 import { submitConsultationLead } from '@/lib/consultationApi';
 import { captureEvent } from '@/lib/analytics';
-
-const SERVICE_OPTIONS = [
-  'Подбор вакансий',
-  'Подготовка к собеседованию',
-  'Тренажёр интервью',
-  'Корпоративное внедрение (B2B)',
-  'Другое',
-];
+import { useAppSettings } from '@/contexts/AppSettingsContext';
+import { supportServiceOptions, supportUi } from '@/lib/supportUiCopy';
 
 const FIELD_CLASS =
   '!bg-black/30 !border-white/10 !text-white !placeholder:text-slate-500 hover:!border-white/20 focus:!border-green-500/50';
 
 const PRIMARY_BTN_CLASS =
-  'inline-flex w-full items-center justify-center rounded-full border-none bg-gradient-to-r from-green-500 to-purple-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-green-500/20 transition-all hover:from-green-400 hover:to-purple-400';
+  'support-widget-primary-btn inline-flex w-full items-center justify-center rounded-full border-none bg-gradient-to-r from-green-500 to-purple-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-green-500/20 transition-all hover:from-green-400 hover:to-purple-400';
 
 const CONSULTATION_PANEL_CLASS =
-  'w-[17.5rem] max-w-[calc(100vw-2.5rem)] rounded-2xl border border-white/10 bg-[#0a0f1e] p-5 shadow-2xl shadow-black/70 ring-1 ring-white/[0.06]';
+  'support-widget-panel w-[17.5rem] max-w-[calc(100vw-2.5rem)] rounded-2xl border border-white/10 bg-[#0a0f1e] p-5 shadow-2xl shadow-black/70 ring-1 ring-white/[0.06]';
 
 const CONSULTATION_MODAL_STYLES = {
   content: {
@@ -43,7 +37,7 @@ const CONSULTATION_MODAL_STYLES = {
 };
 
 const CONSULTATION_SECONDARY_BTN_CLASS =
-  'inline-flex w-full items-center justify-center gap-2 rounded-full border border-white/10 bg-[#121826] px-4 py-3 text-sm font-semibold text-slate-100 transition-colors hover:border-green-500/30 hover:bg-[#1a2234]';
+  'support-widget-secondary-btn inline-flex w-full items-center justify-center gap-2 rounded-full border border-white/10 bg-[#121826] px-4 py-3 text-sm font-semibold text-slate-100 transition-colors hover:border-green-500/30 hover:bg-[#1a2234]';
 
 type ConsultationFormValues = {
   name?: string;
@@ -63,10 +57,10 @@ type SupportWidgetProps = {
 
 /** Единый размер плавающей кнопки поддержки (FAB) во всех контекстах. */
 const FLOATING_BUTTON_CLASS =
-  'flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-green-500 text-white shadow-lg shadow-green-500/25 transition-all hover:scale-105 hover:bg-green-400 active:scale-95';
+  'support-widget-fab flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-green-500 text-white shadow-lg shadow-green-500/25 transition-all hover:scale-105 hover:bg-green-400 active:scale-95';
 
 const TOOLBAR_BUTTON_CLASS =
-  'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-200 transition-all hover:bg-white/[0.08] active:scale-95 sm:h-9 sm:w-9';
+  'support-widget-toolbar-btn flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-200 transition-all hover:bg-white/[0.08] active:scale-95 sm:h-9 sm:w-9';
 
 const PANEL_ANCHOR_CLASS =
   'right-[calc(1.25rem+env(safe-area-inset-right,0px))] sm:right-6';
@@ -91,6 +85,11 @@ export function SupportWidget({
   showTeaser = true,
   placement = 'floating',
 }: SupportWidgetProps) {
+  const { settings } = useAppSettings();
+  const isHume = settings.theme === 'hume-light';
+  const locale = settings.locale;
+  const s = (key: Parameters<typeof supportUi>[1]) => supportUi(locale, key);
+  const serviceOptions = supportServiceOptions(locale);
   const [open, setOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -163,13 +162,11 @@ export function SupportWidget({
         consent: values.consent,
       });
       captureEvent('support_widget_lead_submitted', { service: values.service });
-      messageApi.success('Заявка отправлена! Ответим в течение 2 часов.');
+      messageApi.success(s('leadSuccess'));
       handleCloseForm();
     } catch (error) {
       messageApi.error(
-        error instanceof Error
-          ? error.message
-          : 'Не удалось отправить заявку. Напишите нам в Telegram.'
+        error instanceof Error ? error.message : s('leadError')
       );
     } finally {
       setSubmitting(false);
@@ -185,7 +182,7 @@ export function SupportWidget({
   const renderConsultationActions = () => (
     <div className="flex flex-col gap-2.5">
       <button type="button" onClick={handleOpenForm} className={PRIMARY_BTN_CLASS}>
-        Написать нам →
+        {s('writeUs')}
       </button>
       <a
         href={telegramUrl}
@@ -212,10 +209,12 @@ export function SupportWidget({
 
   const renderConsultationPanel = () => (
     <>
-      <div className="border-b border-white/10 pb-3">
-        <div className="text-base font-semibold text-white">Получить консультацию</div>
-        <p className="mt-1.5 text-sm leading-6 text-slate-400">
-          Ответим за 2 часа. Без спама и навязчивых звонков.
+      <div className={`support-widget-divider border-b border-white/10 pb-3 ${isHume ? '' : ''}`}>
+        <div className={`support-widget-title text-base font-semibold ${isHume ? '' : 'text-white'}`}>
+          {s('consultationTitle')}
+        </div>
+        <p className={`support-widget-subtitle mt-1.5 text-sm leading-6 ${isHume ? '' : 'text-slate-400'}`}>
+          {s('consultationSubtitle')}
         </p>
       </div>
       <div className="mt-4">{renderConsultationActions()}</div>
@@ -226,7 +225,7 @@ export function SupportWidget({
     <div
       className={CONSULTATION_PANEL_CLASS}
       role="dialog"
-      aria-label="Получить консультацию"
+      aria-label={s('consultationTitle')}
     >
       {renderConsultationPanel()}
     </div>
@@ -238,9 +237,9 @@ export function SupportWidget({
           <div className={`fixed inset-0 ${TOOLBAR_OVERLAY_Z}`}>
             <button
               type="button"
-              className="absolute inset-0 bg-[#050913]/75 backdrop-blur-[2px]"
+              className={`support-widget-overlay absolute inset-0 ${isHume ? 'bg-[#222]/25' : 'bg-[#050913]/75 backdrop-blur-[2px]'}`}
               onClick={closeMenu}
-              aria-label="Закрыть консультацию"
+              aria-label={s('closeConsultation')}
             />
             <div
               className={`pointer-events-none absolute ${toolbarPanelBottomClass} inset-x-3 sm:inset-x-auto sm:right-6`}
@@ -264,9 +263,9 @@ export function SupportWidget({
       destroyOnHidden
       title={
         <div>
-          <div className="text-base font-semibold text-white">Написать нам</div>
+          <div className="text-base font-semibold text-white">{s('writeUsModal')}</div>
           <div className="mt-1 text-sm font-normal text-slate-400">
-            Оставьте контакты — свяжемся в течение 2 часов.
+            {s('writeUsModalHint')}
           </div>
         </div>
       }
@@ -281,38 +280,38 @@ export function SupportWidget({
         initialValues={{ consent: false }}
         className="mt-2"
       >
-        <Form.Item name="name" label={<span className="text-slate-300">Имя</span>}>
-          <Input placeholder="Александр" size="large" className={FIELD_CLASS} />
+        <Form.Item name="name" label={<span className="text-slate-300">{s('name')}</span>}>
+          <Input placeholder={locale === 'en' ? 'Alex' : 'Александр'} size="large" className={FIELD_CLASS} />
         </Form.Item>
         <Form.Item
           name="email"
-          label={<span className="text-slate-300">Email</span>}
-          rules={[{ type: 'email', message: 'Введите корректный email' }]}
+          label={<span className="text-slate-300">{s('email')}</span>}
+          rules={[{ type: 'email', message: s('invalidEmail') }]}
         >
           <Input placeholder="alex@company.ru" size="large" className={FIELD_CLASS} />
         </Form.Item>
-        <Form.Item name="phone" label={<span className="text-slate-300">Телефон</span>}>
+        <Form.Item name="phone" label={<span className="text-slate-300">{s('phone')}</span>}>
           <Input placeholder="+7 (903) 601-42-22" size="large" className={FIELD_CLASS} />
         </Form.Item>
         <Form.Item
           name="service"
-          label={<span className="text-slate-300">Интересующая услуга</span>}
+          label={<span className="text-slate-300">{s('service')}</span>}
         >
           <Select
             size="large"
-            placeholder="Выберите услугу"
-            options={SERVICE_OPTIONS.map((s) => ({ label: s, value: s }))}
+            placeholder={s('servicePlaceholder')}
+            options={serviceOptions.map((option) => ({ label: option, value: option }))}
             allowClear
             classNames={{ popup: { root: 'consultation-select-dropdown' } }}
           />
         </Form.Item>
         <Form.Item
           name="message"
-          label={<span className="text-slate-300">Расскажите о задаче</span>}
-          rules={[{ required: true, message: 'Опишите вашу задачу' }]}
+          label={<span className="text-slate-300">{s('message')}</span>}
+          rules={[{ required: true, message: s('taskRequired') }]}
         >
           <Input.TextArea
-            placeholder="Опишите вашу задачу, текущие процессы и ожидаемый результат…"
+            placeholder={s('messagePlaceholder')}
             autoSize={{ minRows: 3, maxRows: 6 }}
             className={FIELD_CLASS}
           />
@@ -323,14 +322,12 @@ export function SupportWidget({
           rules={[
             {
               validator: (_, value) =>
-                value
-                  ? Promise.resolve()
-                  : Promise.reject(new Error('Необходимо согласие на обработку данных')),
+                value ? Promise.resolve() : Promise.reject(new Error(s('consentRequired'))),
             },
           ]}
         >
           <Checkbox className="text-xs text-slate-400">
-            Я соглашаюсь на обработку персональных данных в соответствии с{' '}
+            {s('consent')}{' '}
             <a
               href="/privacy"
               target="_blank"
@@ -338,7 +335,7 @@ export function SupportWidget({
               className="text-green-400 hover:text-green-300"
               onClick={(e) => e.stopPropagation()}
             >
-              политикой конфиденциальности
+              {s('privacyPolicy')}
             </a>
             .
           </Checkbox>
@@ -351,7 +348,7 @@ export function SupportWidget({
           block
           className="!h-12 rounded-xl border-none bg-green-500 text-base font-semibold text-white shadow-lg hover:bg-green-400"
         >
-          Отправить заявку
+          {s('submit')}
         </Button>
       </Form>
     </Modal>
@@ -365,7 +362,7 @@ export function SupportWidget({
         <button
           type="button"
           onClick={togglePanel}
-          aria-label="Открыть консультацию"
+          aria-label={s('openConsultation')}
           aria-expanded={open}
           aria-haspopup="dialog"
           className={TOOLBAR_BUTTON_CLASS}
@@ -388,12 +385,18 @@ export function SupportWidget({
           {showTeaser && !open && (
             <div
               role="tooltip"
-              className="pointer-events-none hidden w-[13.5rem] max-w-[calc(100vw-5rem)] translate-y-1 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left opacity-0 shadow-xl shadow-black/30 backdrop-blur transition-all duration-200 invisible [@media(hover:hover)]:block [@media(hover:hover)]:group-hover:pointer-events-auto [@media(hover:hover)]:group-hover:translate-y-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:visible"
+              className="support-widget-teaser pointer-events-none hidden w-[13.5rem] max-w-[calc(100vw-5rem)] translate-y-1 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left opacity-0 shadow-xl shadow-black/30 backdrop-blur transition-all duration-200 invisible [@media(hover:hover)]:block [@media(hover:hover)]:group-hover:pointer-events-auto [@media(hover:hover)]:group-hover:translate-y-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:visible"
             >
-              <div className="text-sm font-semibold text-white">Есть вопрос?</div>
-              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400">
-                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]" />
-                AI-ассистент онлайн
+              <div className={`support-widget-title text-sm font-semibold ${isHume ? '' : 'text-white'}`}>
+                {s('teaserTitle')}
+              </div>
+              <div className={`support-widget-subtitle mt-0.5 flex items-center gap-1.5 text-xs ${isHume ? '' : 'text-slate-400'}`}>
+                <span
+                  className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
+                    isHume ? 'bg-[var(--color-iris)]' : 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]'
+                  }`}
+                />
+                {s('teaserOnline')}
               </div>
             </div>
           )}
@@ -403,7 +406,7 @@ export function SupportWidget({
           <button
             type="button"
             onClick={togglePanel}
-            aria-label="Открыть консультацию"
+            aria-label={s('openConsultation')}
             aria-expanded={open}
             aria-haspopup="dialog"
             className={FLOATING_BUTTON_CLASS}

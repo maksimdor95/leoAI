@@ -1,6 +1,12 @@
 'use client';
 
 import { Button } from 'antd';
+import { useHumeTheme } from '@/lib/useHumeTheme';
+import { useAppSettings } from '@/contexts/AppSettingsContext';
+import {
+  buildVacanciesInsightReasons,
+  vacanciesUi,
+} from '@/lib/vacanciesUiCopy';
 
 export type VacanciesInsightMeta = {
   jobsInDb: number;
@@ -27,45 +33,6 @@ export function shouldShowVacanciesInsight(
   return meta.maxMatchScore < WEAK_MATCH_QUALITY_THRESHOLD;
 }
 
-export function buildVacanciesInsightReasons(meta: VacanciesInsightMeta): string[] {
-  const reasons: string[] = [];
-
-  if (!meta.profileFamilyLabel || meta.profileFamily === 'unknown') {
-    reasons.push('Направление профиля пока не определено — матчеру сложно отобрать релевантные роли.');
-  }
-
-  if (meta.maxMatchScore < meta.matchThreshold) {
-    reasons.push(
-      `Лучший балл совпадения — ${meta.maxMatchScore} (нужно от ${meta.matchThreshold} для блока «Рекомендуем»).`
-    );
-  }
-
-  if (
-    typeof meta.familyRelevanceShare === 'number' &&
-    meta.familyRelevanceShare < 0.15 &&
-    meta.jobsInDb > 0
-  ) {
-    reasons.push(
-      `В каталоге мало вакансий вашего направления (около ${Math.round(meta.familyRelevanceShare * 100)}% релевантных).`
-    );
-  }
-
-  if (meta.weakTierTotal === 0 && meta.jobsInDb > 0) {
-    reasons.push('Профиль пока слишком краткий — для точного подбора нужен детальный анализ.');
-  }
-
-  if (meta.catalogWarning === 'no_matches' && reasons.length < 3) {
-    reasons.push('Прямых совпадений нет — это нормально для нишевых или не-IT ролей.');
-  }
-
-  if (reasons.length === 0) {
-    reasons.push('Подбор пересчитан, но подходящих вакансий пока нет.');
-    reasons.push('Углубите профиль или поправьте данные во вкладке «Профиль».');
-  }
-
-  return reasons.slice(0, 3);
-}
-
 type VacanciesInsightPanelProps = {
   meta: VacanciesInsightMeta;
   onDetailedAnalysis: () => void;
@@ -77,17 +44,35 @@ export function VacanciesInsightPanel({
   onDetailedAnalysis,
   onEditProfile,
 }: VacanciesInsightPanelProps) {
-  const reasons = buildVacanciesInsightReasons(meta);
+  const isHume = useHumeTheme();
+  const { settings } = useAppSettings();
+  const locale = settings.locale;
+  const v = (key: Parameters<typeof vacanciesUi>[1]) => vacanciesUi(locale, key);
+  const reasons = buildVacanciesInsightReasons(meta, locale);
 
   return (
-    <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-4 space-y-3">
+    <div
+      className={
+        isHume
+          ? 'rounded-2xl border border-[rgba(34,34,34,0.08)] bg-[var(--color-meringue)] p-4 space-y-3'
+          : 'rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-4 space-y-3'
+      }
+    >
       <div>
-        <h3 className="text-sm font-semibold text-amber-100">Пока мало прямых совпадений</h3>
-        <p className="mt-1 text-xs text-slate-400 leading-relaxed">
-          LEO уже сопоставил профиль с каталогом — вот что мешает точному подбору:
+        <h3 className={isHume ? 'hume-heading !text-sm' : 'text-sm font-semibold text-amber-100'}>
+          {v('insightTitle')}
+        </h3>
+        <p className={isHume ? 'mt-1 hume-body-sm leading-relaxed' : 'mt-1 text-xs text-slate-400 leading-relaxed'}>
+          {v('insightLead')}
         </p>
       </div>
-      <ul className="space-y-1.5 text-xs text-slate-300 leading-relaxed list-disc pl-4">
+      <ul
+        className={
+          isHume
+            ? 'space-y-1.5 hume-body-sm !text-xs leading-relaxed list-disc pl-4 text-[var(--color-slate-plum)]'
+            : 'space-y-1.5 text-xs text-slate-300 leading-relaxed list-disc pl-4'
+        }
+      >
         {reasons.map((reason) => (
           <li key={reason}>{reason}</li>
         ))}
@@ -97,16 +82,24 @@ export function VacanciesInsightPanel({
           type="primary"
           size="small"
           onClick={onDetailedAnalysis}
-          className="!rounded-full !border-0 !bg-gradient-to-r !from-green-500 !to-emerald-600 !text-white !text-xs !font-medium"
+          className={
+            isHume
+              ? 'hume-btn-pill !h-8 !px-4 !text-xs !border-none'
+              : '!rounded-full !border-0 !bg-gradient-to-r !from-green-500 !to-emerald-600 !text-white !text-xs !font-medium'
+          }
         >
-          Детальный анализ
+          {v('detailedAnalysis')}
         </Button>
         <Button
           size="small"
           onClick={onEditProfile}
-          className="!rounded-full !border !border-white/15 !bg-white/[0.05] !text-slate-200 !text-xs"
+          className={
+            isHume
+              ? '!rounded-full !border !border-[rgba(34,34,34,0.08)] !bg-[var(--color-paper)] !text-[var(--color-ink)] !text-xs hover:!bg-[var(--color-bone)]'
+              : '!rounded-full !border !border-white/15 !bg-white/[0.05] !text-slate-200 !text-xs'
+          }
         >
-          Редактировать профиль
+          {v('editProfile')}
         </Button>
       </div>
     </div>

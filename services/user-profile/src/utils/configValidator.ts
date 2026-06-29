@@ -64,6 +64,12 @@ export function validateConfig(): ValidationResult {
       'OAUTH_CALLBACK_BASE_URL is not set; default http://localhost:3001 is used for OAuth callbacks'
     );
   }
+  if (!process.env.HH_OAUTH_CLIENT_ID && !process.env.HH_CLIENT_ID) {
+    warnings.push('HH OAuth is not configured (HH_OAUTH_CLIENT_ID / HH_CLIENT_ID)');
+  }
+  if (!process.env.HH_OAUTH_CLIENT_SECRET && !process.env.HH_CLIENT_SECRET) {
+    warnings.push('HH OAuth is not configured (HH_OAUTH_CLIENT_SECRET / HH_CLIENT_SECRET)');
+  }
 
   return {
     valid: errors.length === 0,
