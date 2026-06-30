@@ -9,8 +9,12 @@ export async function startPolling(): Promise<void> {
   if (running) return;
   running = true;
 
-  await telegram.deleteWebhook();
-  logger.info('Long polling started (dev mode). Set TELEGRAM_WEBHOOK_URL for production webhook.');
+  try {
+    await telegram.deleteWebhook();
+  } catch (error) {
+    logger.warn('deleteWebhook failed at polling start (will retry via getUpdates)', error);
+  }
+  logger.info('Long polling started. Set TELEGRAM_WEBHOOK_URL for webhook mode.');
 
   const loop = async (): Promise<void> => {
     while (running) {

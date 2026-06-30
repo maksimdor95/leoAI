@@ -6,7 +6,7 @@ import express from 'express';
 import helmet from 'helmet';
 import { webhookRouter } from './routes/webhook';
 import { startPolling } from './services/polling';
-import { verifyBot } from './services/telegramApi';
+import { verifyBotWithRetry } from './services/telegramApi';
 import { registerTelegramWebhook } from './services/webhookRegistration';
 import { ticketCount } from './services/ticketStore';
 import { logger } from './utils/logger';
@@ -40,20 +40,36 @@ app.use('/telegram', webhookRouter);
 
 async function start(): Promise<void> {
   validateConfig();
-  await verifyBot();
 
-  app.listen(config.port, '0.0.0.0', () => {
-    logger.info(`Telegram Support Service on http://0.0.0.0:${config.port}`);
-    logger.info(`Site URL: ${config.siteUrl}`);
+  await new Promise<void>((resolve) => {
+    app.listen(config.port, '0.0.0.0', () => {
+      logger.info(`Telegram Support Service on http://0.0.0.0:${config.port}`);
+      logger.info(`Site URL: ${config.siteUrl}`);
+      resolve();
+    });
   });
 
   if (config.usePolling) {
+    void verifyBotWithRetry().then((connected) => {
+      if (!connected) {
+        logger.warn(
+          'Telegram Bot API unreachable at startup (proxy/route may be flaky). Polling will keep retrying.'
+        );
+      }
+    });
     await startPolling();
     return;
   }
 
-  if (config.registerWebhookOnStart) {
+  const connected = await verifyBotWithRetry();
+  if (!connected) {
+    logger.warn('Telegram Bot API unreachable at startup — webhook registration skipped');
+  }
+
+  if (config.registerWebhookOnStart && connected) {
     await registerTelegramWebhook();
+  } else if (config.registerWebhookOnStart) {
+    logger.warn('Webhook registration skipped — Bot API unreachable');
   } else {
     logger.info('Webhook mode. Register: npm run set-webhook');
   }

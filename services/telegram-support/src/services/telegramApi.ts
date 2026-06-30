@@ -110,3 +110,22 @@ export async function verifyBot(): Promise<void> {
     logger.warn('setMyCommands failed (bot will still handle messages)', error);
   }
 }
+
+/** WARP→Telegram on RU VPS can be flaky; retry instead of crashing the whole service. */
+export async function verifyBotWithRetry(
+  maxAttempts = 12,
+  delayMs = 5000
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await verifyBot();
+      return true;
+    } catch (error) {
+      logger.warn(`Bot verify failed (${attempt}/${maxAttempts})`, error);
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  return false;
+}
