@@ -197,7 +197,7 @@ export function AuthModal({
     : '!h-12 !rounded-xl !border-none !bg-green-500 !text-white !font-semibold !shadow-lg !shadow-green-500/20 hover:!bg-green-400 hover:!text-white active:!scale-[0.98]';
 
   const linkBtnClass = isHume
-    ? 'text-sm text-[var(--color-smoke)] transition-colors hover:text-[var(--color-ink)]'
+    ? 'auth-text-btn text-sm text-[var(--color-smoke)] transition-colors hover:text-[var(--color-ink)]'
     : 'auth-text-btn text-sm text-slate-400 transition-colors hover:text-green-300';
 
   return (

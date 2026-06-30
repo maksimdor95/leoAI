@@ -103,56 +103,42 @@ export function HeroSection() {
     : 'border border-white/10 bg-white/[0.05] text-slate-100';
 
   return (
-    <section
-      className={`relative min-h-screen overflow-x-hidden ${
-        isHume ? 'bg-[var(--color-bone)] text-[var(--color-ink)]' : 'bg-[#050913] text-white'
-      }`}
-    >
-      {isHume ? (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[11rem] overflow-hidden opacity-95 sm:h-[13rem] lg:h-[14rem]">
-          <HumeHeroWaveCanvas heroScale={2.65} />
-        </div>
-      ) : (
-        <>
-          <div className="absolute inset-0 bg-gradient-to-br from-[#050913] via-[#0a1a2e] to-[#050913] opacity-90" />
-          <div className="absolute left-1/2 top-0 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-green-500/10 blur-3xl" />
-        </>
-      )}
+    <section className="leo-hero-shell relative min-h-screen overflow-x-hidden">
+      <div className="landing-hero-bg-hume pointer-events-none absolute inset-x-0 top-0 z-0 h-[11rem] overflow-hidden opacity-95 sm:h-[13rem] lg:h-[14rem]">
+        <HumeHeroWaveCanvas heroScale={2.65} />
+      </div>
+      <div className="landing-hero-bg-leo absolute inset-0 bg-gradient-to-br from-[#050913] via-[#0a1a2e] to-[#050913] opacity-90" />
+      <div className="landing-hero-bg-leo absolute left-1/2 top-0 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-green-500/10 blur-3xl" />
 
-      {!isHume ? (
-        <div className="absolute inset-0 overflow-hidden">
-          {Array.from({ length: 20 }, (_, i) => {
-            const positions = [
-              { left: '10%', top: '20%', delay: '0s', duration: '3s' },
-              { left: '80%', top: '10%', delay: '0.5s', duration: '4s' },
-              { left: '30%', top: '60%', delay: '1s', duration: '3.5s' },
-              { left: '70%', top: '50%', delay: '1.5s', duration: '4.5s' },
-              { left: '20%', top: '80%', delay: '0.3s', duration: '3.8s' },
-            ];
-            const pos = positions[i % positions.length];
-            return (
-              <div
-                key={i}
-                className="absolute h-1 w-1 rounded-full bg-green-500/20 animate-float"
-                style={{
-                  left: pos.left,
-                  top: pos.top,
-                  animationDelay: pos.delay,
-                  animationDuration: pos.duration,
-                }}
-              />
-            );
-          })}
-        </div>
-      ) : null}
+      <div className="landing-hero-particles-leo absolute inset-0 overflow-hidden">
+        {Array.from({ length: 20 }, (_, i) => {
+          const positions = [
+            { left: '10%', top: '20%', delay: '0s', duration: '3s' },
+            { left: '80%', top: '10%', delay: '0.5s', duration: '4s' },
+            { left: '30%', top: '60%', delay: '1s', duration: '3.5s' },
+            { left: '70%', top: '50%', delay: '1.5s', duration: '4.5s' },
+            { left: '20%', top: '80%', delay: '0.3s', duration: '3.8s' },
+          ];
+          const pos = positions[i % positions.length];
+          return (
+            <div
+              key={i}
+              className="absolute h-1 w-1 rounded-full bg-green-500/20 animate-float"
+              style={{
+                left: pos.left,
+                top: pos.top,
+                animationDelay: pos.delay,
+                animationDuration: pos.duration,
+              }}
+            />
+          );
+        })}
+      </div>
 
-      <div
-        className={`relative z-10 mx-auto flex min-h-screen max-w-7xl flex-col justify-start px-6 pb-16 animate-fadeIn ${
-          isHume ? 'pt-6 sm:pt-8 lg:pt-24' : 'pt-8 sm:pt-10'
-        }`}
-      >
-        <div className="grid items-start gap-10 lg:grid-cols-[0.88fr_1.12fr] lg:gap-12">
-          <div className={`text-center lg:text-left ${isHume ? 'pt-10 sm:pt-14 lg:pt-8' : ''}`}>
+      <div className="leo-hero-content relative z-10 mx-auto flex min-h-screen max-w-7xl flex-col justify-start px-6 animate-fadeIn">
+        <div className="leo-hero-grid grid items-start gap-10 lg:grid-cols-[0.88fr_1.12fr] lg:gap-12">
+          <div className="leo-hero-copy text-center lg:text-left">
+            <div className="landing-hero-title-offset">
             <div
               className={`mb-5 inline-flex max-w-full items-center gap-2 rounded-full px-4 py-2.5 text-left text-[11px] font-semibold leading-snug tracking-wide backdrop-blur sm:text-xs sm:leading-normal ${
                 isHume
@@ -169,19 +155,13 @@ export function HeroSection() {
               />
               {copy.heroBadge}
             </div>
-            <h1
-              className={`mb-6 text-6xl md:text-8xl lg:text-9xl ${
-                isHume ? 'landing-hero-brand' : 'landing-hero-brand-leo'
-              }`}
-            >
-              LEO AI
+            <h1 className="mb-6 text-6xl md:text-8xl lg:text-9xl">
+              <span className="landing-hero-brand">LEO AI</span>
+              <span className="landing-hero-brand-leo">LEO AI</span>
             </h1>
+            </div>
 
-            <p
-              className={`mx-auto mb-6 max-w-3xl text-xl leading-relaxed md:text-2xl lg:mx-0 ${
-                isHume ? 'hume-body text-[var(--color-smoke)]' : 'text-slate-300'
-              }`}
-            >
+            <p className="leo-hero-subtitle mx-auto mb-6 max-w-3xl text-xl leading-relaxed md:text-2xl lg:mx-0">
               {copy.heroSubtitle}
             </p>
 
@@ -189,31 +169,15 @@ export function HeroSection() {
               <button
                 type="button"
                 onClick={() => handleStart(activeScenario, 'hero_cta')}
-                className={
-                  isHume
-                    ? 'hume-btn-pill px-6 py-3 text-sm font-semibold sm:text-base'
-                    : 'rounded-full bg-green-500 px-6 py-3 text-sm font-semibold leading-tight text-white shadow-lg shadow-green-950/30 transition-all hover:scale-[1.03] hover:bg-green-400 active:scale-95 sm:text-base'
-                }
+                className="landing-cta-btn px-6 py-3 text-sm font-semibold sm:text-base"
               >
                 {copy.heroCta}
               </button>
             </div>
           </div>
 
-          <div
-            className={`flex w-full overflow-hidden rounded-[2rem] p-3 shadow-2xl sm:p-4 lg:h-[640px] lg:min-h-[640px] lg:max-h-[640px] lg:shrink-0 ${
-              isHume
-                ? 'relative z-20 lg:-mt-12 border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)] shadow-[rgba(34,34,34,0.08)]'
-                : 'border border-white/10 bg-[#07101d]/80 shadow-black/30 backdrop-blur-xl'
-            }`}
-          >
-            <div
-              className={`flex min-h-0 w-full flex-1 flex-col rounded-[1.5rem] p-4 sm:p-5 ${
-                isHume
-                  ? 'border border-[rgba(34,34,34,0.08)] bg-[var(--color-bone)]'
-                  : 'border border-white/10 bg-white/[0.04]'
-              }`}
-            >
+          <div className="landing-preview-frame flex w-full overflow-hidden rounded-[2rem] border p-3 shadow-2xl sm:p-4 lg:h-[640px] lg:min-h-[640px] lg:max-h-[640px] lg:shrink-0">
+            <div className="landing-preview-inner flex min-h-0 w-full flex-1 flex-col rounded-[1.5rem] border p-4 sm:p-5">
               <div className="mb-4 flex shrink-0 flex-col gap-4 lg:mb-5 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0 pr-1">
                   <div
@@ -377,11 +341,7 @@ export function HeroSection() {
                     <button
                       type="button"
                       onClick={() => handleStart(activeScenario)}
-                      className={
-                        isHume
-                          ? 'hume-btn-pill !px-4 !py-2 !text-xs'
-                          : 'rounded-full bg-green-500 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-400'
-                      }
+                      className="landing-preview-start-btn"
                     >
                       {copy.previewStart}
                     </button>

@@ -17,6 +17,8 @@ type VoiceIndicatorProps = {
   waveOnly?: boolean;
   /** Полноширинный hero-баннер на разводящей + крупнее волна */
   waveHeroBanner?: boolean;
+  /** Компактная волна в карточке сценария чата (не hero на лендинге) */
+  waveCompact?: boolean;
 };
 
 const RING_COUNT = 4;
@@ -133,6 +135,7 @@ export function VoiceIndicator({
   assistantLevelRef,
   waveOnly = false,
   waveHeroBanner = false,
+  waveCompact = false,
 }: VoiceIndicatorProps) {
   const { settings } = useAppSettings();
   const isHumeTheme = settings.theme === 'hume-light';
@@ -266,16 +269,21 @@ export function VoiceIndicator({
 
   ribbonCanvasActiveRef.current = canvasRibbon;
 
+  const useHeroBanner = waveHeroBanner && !waveCompact;
+  const humeHeroScale = waveCompact ? 1.35 : useHeroBanner ? 2.65 : 1.85;
+
   return (
     <div
-      className={`voice-orb-wrap flex w-full justify-center ${isHumeTheme ? 'voice-orb-wrap--hume' : ''}`}
+      className={`voice-orb-wrap flex w-full justify-center ${isHumeTheme ? 'voice-orb-wrap--hume' : ''} ${
+        waveCompact ? 'voice-orb-wrap--chat-compact' : ''
+      }`}
     >
       <div
         className={`voice-stage ${
           canvasRibbon ? 'voice-stage--listening-canvas' : 'voice-stage--raf'
         } ${waveOnly ? 'voice-stage--wave-only' : ''} ${isHumeTheme ? 'voice-stage--hume' : ''} ${
-          waveHeroBanner ? 'voice-stage--hero-banner' : ''
-        } ${paused ? 'voice-orb--paused' : ''}`}
+          useHeroBanner ? 'voice-stage--hero-banner' : ''
+        } ${waveCompact ? 'voice-stage--chat-compact' : ''} ${paused ? 'voice-orb--paused' : ''}`}
         aria-hidden="true"
       >
         <div className="voice-stage-wave">
@@ -285,7 +293,8 @@ export function VoiceIndicator({
               externalLevelRef={showAssistantRibbon ? assistantLevelRef : undefined}
               paused={paused}
               reducedMotion={reduceMotion}
-              heroScale={isHumeTheme ? 2.65 : 1}
+              heroScale={humeHeroScale}
+              waveProfile={waveCompact ? 'chat' : 'hero'}
             />
           ) : canvasRibbon ? (
             <ListeningWaveCanvas

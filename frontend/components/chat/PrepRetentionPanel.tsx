@@ -6,6 +6,7 @@ import {
   resolveStarBank,
   type StarBankEntry,
 } from '@/lib/prepRetention';
+import { useHumeTheme } from '@/lib/useHumeTheme';
 
 type PrepRetentionPanelProps = {
   collectedData: Record<string, unknown>;
@@ -19,6 +20,7 @@ function starPreview(entry: StarBankEntry): string {
 }
 
 export function PrepRetentionPanel({ collectedData, compact }: PrepRetentionPanelProps) {
+  const isHume = useHumeTheme();
   const retention = resolvePrepRetention(collectedData);
   const starBank = resolveStarBank(collectedData);
 
@@ -30,15 +32,33 @@ export function PrepRetentionPanel({ collectedData, compact }: PrepRetentionPane
 
   return (
     <div
-      className={`rounded-xl border border-amber-500/25 bg-amber-500/5 ${
-        compact ? 'p-2.5 space-y-2' : 'p-3 sm:p-4 space-y-3'
-      }`}
+      className={
+        isHume
+          ? `prep-panel--hume rounded-xl border border-[var(--color-border-hairline)] bg-[var(--color-bone)] shadow-[0_1px_3px_rgba(34,34,34,0.06)] ${
+              compact ? 'space-y-2 p-2.5' : 'space-y-3 p-3 sm:p-4'
+            }`
+          : `rounded-xl border border-amber-500/25 bg-amber-500/5 ${
+              compact ? 'space-y-2 p-2.5' : 'space-y-3 p-3 sm:p-4'
+            }`
+      }
     >
       <div>
-        <div className="text-[10px] sm:text-xs uppercase tracking-wider text-amber-300/90 font-medium">
+        <div
+          className={
+            isHume
+              ? 'hume-label-sm'
+              : 'text-[10px] font-medium uppercase tracking-wider text-amber-300/90 sm:text-xs'
+          }
+        >
           Повторная подготовка
         </div>
-        <p className="text-xs sm:text-sm text-slate-200 mt-1 leading-relaxed">
+        <p
+          className={
+            isHume
+              ? 'mt-1 text-xs leading-relaxed text-[var(--color-ink)] sm:text-sm'
+              : 'mt-1 text-xs leading-relaxed text-slate-200 sm:text-sm'
+          }
+        >
           Сессия #{retention.prepSessionNumber}
           {retention.priorRole ? ` · ранее: ${retention.priorRole}` : ''}
           {retention.shortenedDiagnostics ? ' · ускоренная диагностика' : ''}
@@ -47,19 +67,33 @@ export function PrepRetentionPanel({ collectedData, compact }: PrepRetentionPane
 
       {history.length > 0 ? (
         <div className="space-y-1.5">
-          <div className="text-[10px] uppercase tracking-wide text-slate-400">Прошлые вакансии</div>
+          <div
+            className={
+              isHume
+                ? 'hume-label-sm !text-[10px]'
+                : 'text-[10px] uppercase tracking-wide text-slate-400'
+            }
+          >
+            Прошлые вакансии
+          </div>
           <ul className="space-y-1">
             {history.slice(0, 4).map((item) => (
               <li
                 key={item.sessionId}
-                className="text-xs text-slate-300 flex flex-wrap gap-x-2 gap-y-0.5"
+                className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs"
               >
-                <span className="text-white/90">{item.role ?? 'Роль не указана'}</span>
+                <span className={isHume ? 'text-[var(--color-ink)]' : 'text-white/90'}>
+                  {item.role ?? 'Роль не указана'}
+                </span>
                 {item.preparedAt ? (
-                  <span className="text-slate-500">{formatPrepDate(item.preparedAt)}</span>
+                  <span className={isHume ? 'text-[var(--color-smoke)]' : 'text-slate-500'}>
+                    {formatPrepDate(item.preparedAt)}
+                  </span>
                 ) : null}
                 {item.prepComplete ? (
-                  <span className="text-emerald-400/90">мок пройден</span>
+                  <span className={isHume ? 'text-[var(--color-slate-plum)]' : 'text-emerald-400/90'}>
+                    мок пройден
+                  </span>
                 ) : null}
               </li>
             ))}
@@ -69,23 +103,37 @@ export function PrepRetentionPanel({ collectedData, compact }: PrepRetentionPane
 
       {starBank.length > 0 ? (
         <div className="space-y-1.5">
-          <div className="text-[10px] uppercase tracking-wide text-slate-400">
+          <div
+            className={
+              isHume
+                ? 'hume-label-sm !text-[10px]'
+                : 'text-[10px] uppercase tracking-wide text-slate-400'
+            }
+          >
             Банк STAR ({starBank.length})
           </div>
           <ul className="space-y-1.5">
             {starBank.slice(0, 3).map((entry) => (
               <li
                 key={entry.id}
-                className="text-xs text-slate-300 border border-white/5 rounded-lg px-2 py-1.5 bg-black/20"
+                className={
+                  isHume
+                    ? 'rounded-lg border border-[var(--color-border-hairline)] bg-[var(--color-paper)] px-2 py-1.5 text-xs text-[var(--color-slate-plum)]'
+                    : 'rounded-lg border border-white/5 bg-black/20 px-2 py-1.5 text-xs text-slate-300'
+                }
               >
                 {entry.role ? (
-                  <span className="text-amber-200/90 block mb-0.5">{entry.role}</span>
+                  <span
+                    className={`mb-0.5 block ${isHume ? 'font-medium text-[var(--color-ink)]' : 'text-amber-200/90'}`}
+                  >
+                    {entry.role}
+                  </span>
                 ) : null}
                 <span className="leading-relaxed">{starPreview(entry)}</span>
               </li>
             ))}
           </ul>
-          <p className="text-[11px] text-slate-400">
+          <p className={`text-[11px] ${isHume ? 'text-[var(--color-smoke)]' : 'text-slate-400'}`}>
             Откройте режим STAR — LEO поможет переупаковать историю под текущую вакансию.
           </p>
         </div>

@@ -16,6 +16,190 @@ html[data-theme='leo-dark'] body {
   color: #fff;
 }
 
+html[data-theme='leo-dark'] .leo-app-shell {
+  color: #fff;
+}
+
+html[data-theme='hume'] .leo-app-shell {
+  color: var(--color-ink);
+}
+
+html[data-theme='leo-dark'] .leo-app-shell-link {
+  color: #86efac;
+}
+
+html[data-theme='leo-dark'] .leo-app-shell-link:hover {
+  color: #bbf7d0;
+}
+
+html[data-theme='hume'] .leo-app-shell-link {
+  color: var(--color-smoke);
+}
+
+html[data-theme='hume'] .leo-app-shell-link:hover {
+  color: var(--color-ink);
+}
+
+html[data-theme='leo-dark'] .leo-app-shell-heading {
+  color: #fff;
+}
+
+html[data-theme='hume'] .leo-app-shell-heading {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  color: var(--color-ink);
+}
+
+html[data-theme='leo-dark'] .leo-app-shell-muted {
+  color: #94a3b8;
+}
+
+html[data-theme='hume'] .leo-app-shell-muted {
+  color: var(--color-smoke);
+}
+
+html[data-theme='leo-dark'] .leo-app-shell-body {
+  color: #cbd5e1;
+}
+
+html[data-theme='hume'] .leo-app-shell-body {
+  color: var(--color-smoke);
+}
+
+html[data-theme='leo-dark'] .leo-surface-card {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+html[data-theme='hume'] .leo-surface-card {
+  border-color: rgba(34, 34, 34, 0.12);
+  background: var(--color-paper);
+}
+
+html[data-theme='leo-dark'] .leo-surface-card-muted {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+html[data-theme='leo-dark'] .leo-surface-card-muted--privacy {
+  border-color: rgba(74, 222, 128, 0.2);
+  background: rgba(74, 222, 128, 0.1);
+}
+
+html[data-theme='hume'] .leo-surface-card-muted {
+  border-color: rgba(34, 34, 34, 0.12);
+  background: var(--color-meringue);
+}
+
+html[data-theme='hume'] .leo-hero-shell {
+  background: var(--color-bone);
+  color: var(--color-ink);
+}
+
+html[data-theme='leo-dark'] .leo-hero-shell {
+  background: #050913;
+  color: #fff;
+}
+
+html[data-theme='hume'] .leo-hero-content {
+  padding-top: 1.5rem;
+  padding-bottom: 4rem;
+}
+
+@media (min-width: 640px) {
+  html[data-theme='hume'] .leo-hero-content {
+    padding-top: 2rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  html[data-theme='hume'] .leo-hero-content {
+    padding-top: 6rem;
+  }
+
+  html[data-theme='leo-dark'] .leo-hero-grid {
+    align-items: center;
+  }
+}
+
+html[data-theme='leo-dark'] .leo-hero-content {
+  padding-top: 6rem;
+  padding-bottom: 6rem;
+}
+
+html[data-theme='hume'] .leo-hero-copy {
+  padding-top: 2.5rem;
+}
+
+@media (min-width: 640px) {
+  html[data-theme='hume'] .leo-hero-copy {
+    padding-top: 3.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  html[data-theme='hume'] .leo-hero-copy {
+    padding-top: 2rem;
+  }
+}
+
+html[data-theme='hume'] .landing-hero-brand-leo,
+html[data-theme='leo-dark'] .landing-hero-brand {
+  display: none;
+}
+
+html[data-theme='hume'] .leo-hero-subtitle {
+  color: var(--color-smoke);
+}
+
+html[data-theme='leo-dark'] .leo-hero-subtitle {
+  color: #cbd5e1;
+}
+
+html[data-theme='hume'] .landing-preview-frame {
+  position: relative;
+  z-index: 20;
+  border-color: rgba(34, 34, 34, 0.12);
+  background: var(--color-paper);
+  box-shadow: 0 25px 50px -12px rgba(34, 34, 34, 0.08);
+}
+
+@media (min-width: 1024px) {
+  html[data-theme='hume'] .landing-preview-frame {
+    margin-top: -3rem;
+  }
+}
+
+html[data-theme='leo-dark'] .landing-preview-frame {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(7, 17, 29, 0.8);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(24px);
+}
+
+html[data-theme='hume'] .landing-preview-inner {
+  border-color: rgba(34, 34, 34, 0.08);
+  background: var(--color-bone);
+}
+
+html[data-theme='leo-dark'] .landing-preview-inner {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+html[data-theme='hume'] .leo-footer-shell {
+  border-color: rgba(34, 34, 34, 0.08);
+  background: var(--color-paper);
+  color: var(--color-smoke);
+}
+
+html[data-theme='leo-dark'] .leo-footer-shell {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(to bottom, #07111f, #050913);
+  color: #64748b;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -158,6 +342,72 @@ body {
   min-height: 0;
 }
 
+/* Компактная волна в карточке сценария чата (Hume) */
+.voice-orb-wrap--chat-compact {
+  padding-top: 0;
+  padding-bottom: 0.25rem;
+}
+
+.voice-stage--chat-compact.voice-stage--hume {
+  max-width: 100%;
+  min-height: 0;
+  width: 100%;
+}
+
+.voice-stage--chat-compact.voice-stage--hume.voice-stage--wave-only {
+  min-height: 0;
+}
+
+.voice-stage--chat-compact.voice-stage--hume .voice-stage-wave {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  height: 5.75rem;
+  border-radius: 0;
+}
+
+@media (min-width: 640px) {
+  .voice-stage--chat-compact.voice-stage--hume .voice-stage-wave {
+    height: 6.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .voice-orb-wrap--chat-compact {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .voice-stage--chat-compact.voice-stage--hume .voice-stage-wave {
+    height: 8.5rem;
+    border-radius: 1rem;
+  }
+}
+
+/* Волна вплотную к краям белой карточки чата (мобильный сценарий) */
+.leo-chat-panel {
+  --leo-chat-panel-pad: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .leo-chat-panel {
+    --leo-chat-panel-pad: 1rem;
+  }
+}
+
+@media (max-width: 1023px) {
+  .leo-chat-panel .leo-chat-wave-bleed {
+    width: calc(100% + 2 * var(--leo-chat-panel-pad));
+    margin-left: calc(-1 * var(--leo-chat-panel-pad));
+    margin-right: calc(-1 * var(--leo-chat-panel-pad));
+    margin-top: calc(-1 * var(--leo-chat-panel-pad));
+  }
+
+  .leo-chat-panel .leo-chat-wave-bleed .voice-stage--chat-compact .voice-stage-wave {
+    border-radius: 1rem 1rem 0 0;
+  }
+}
+
 .voice-stage--hume .voice-stage-wave {
   width: 100%;
   max-width: none;
@@ -190,6 +440,103 @@ body {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+html[data-theme='hume'] .landing-hero-bg-leo,
+html[data-theme='hume'] .landing-hero-particles-leo {
+  display: none;
+}
+
+html[data-theme='leo-dark'] .landing-hero-bg-hume {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  html[data-theme='hume'] .landing-hero-title-offset {
+    margin-top: 30px;
+  }
+}
+
+.landing-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease,
+    background-color 0.15s ease;
+}
+
+html[data-theme='hume'] .landing-cta-btn {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  color: var(--color-paper);
+  background: var(--color-ink);
+  border-radius: var(--radius-pill);
+  box-shadow: none;
+}
+
+html[data-theme='hume'] .landing-cta-btn:hover {
+  opacity: 0.88;
+}
+
+html[data-theme='leo-dark'] .landing-cta-btn {
+  border-radius: 9999px;
+  color: #fff;
+  background: #22c55e;
+  box-shadow: 0 10px 15px -3px rgba(5, 46, 22, 0.3);
+}
+
+html[data-theme='leo-dark'] .landing-cta-btn:hover {
+  background: #4ade80;
+  transform: scale(1.03);
+}
+
+html[data-theme='leo-dark'] .landing-cta-btn:active {
+  transform: scale(0.95);
+}
+
+.landing-preview-start-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+html[data-theme='hume'] .landing-preview-start-btn {
+  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  color: var(--color-paper);
+  background: var(--color-ink);
+  border-radius: var(--radius-pill);
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+html[data-theme='hume'] .landing-preview-start-btn:hover {
+  opacity: 0.88;
+}
+
+html[data-theme='leo-dark'] .landing-preview-start-btn {
+  border-radius: 9999px;
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: #fff;
+  background: #22c55e;
+}
+
+html[data-theme='leo-dark'] .landing-preview-start-btn:hover {
+  background: #4ade80;
 }
 
 .voice-stage--hume .voice-listening-canvas-wrap,
@@ -564,6 +911,56 @@ body {
   background: rgba(148, 163, 184, 0.55);
 }
 
+/* Компактная типографика сцены на мобильном — без скролла */
+@media (max-width: 1023px) {
+  .leo-chat-panel .leo-chat-stage .hume-stage-heading,
+  .leo-chat-panel .leo-chat-stage .leo-stage-heading,
+  .leo-chat-panel .leo-chat-stage h2 {
+    font-size: 0.9375rem !important;
+    line-height: 1.35 !important;
+  }
+
+  .leo-chat-panel .leo-chat-stage .leo-stage-subtext,
+  .leo-chat-panel .leo-chat-stage .hume-body-sm,
+  .leo-chat-panel .leo-chat-stage h2 + p {
+    font-size: 0.6875rem !important;
+    line-height: 1.4 !important;
+  }
+
+  .leo-chat-panel .leo-chat-stage .hume-stage-body {
+    font-size: 0.8125rem !important;
+    line-height: 1.4 !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  [data-theme='leo-dark'] .leo-chat-stage .leo-stage-heading {
+    font-size: clamp(1.0625rem, 2vw, 1.25rem);
+    line-height: 1.33;
+    letter-spacing: -0.01em;
+  }
+
+  [data-theme='leo-dark'] .leo-chat-stage .leo-stage-subtext {
+    line-height: 1.43;
+  }
+}
+
+/* Mobile chat: pinned input footer above safe area */
+@media (max-width: 1023px) {
+  .leo-chat-mobile-bottom {
+    flex-shrink: 0;
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  html[data-theme='hume'] .leo-chat-mobile-bottom {
+    background-color: var(--color-bone);
+  }
+
+  html[data-theme='leo-dark'] .leo-chat-mobile-bottom {
+    background-color: #050913;
+  }
+}
+
 /* Тонкий скролл в боковой истории чата */
 .chat-history-scroll {
   scrollbar-width: thin;
@@ -897,8 +1294,17 @@ body {
 .auth-modal button.auth-text-btn {
   margin: 0;
   padding: 0;
+  border: none;
   background: transparent;
   box-shadow: none;
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+}
+
+.auth-modal button.auth-text-btn:hover {
+  background: transparent;
 }
 
 .auth-modal button.auth-tab-btn {
@@ -1003,15 +1409,6 @@ body {
 }
 
 /* Текстовые кнопки (Забыли пароль?, назад) — без белого фона браузера */
-[data-theme='leo-dark'] .auth-modal button.auth-text-btn {
-  padding: 0;
-  appearance: none;
-}
-
-[data-theme='leo-dark'] .auth-modal button.auth-text-btn:hover {
-  background: transparent;
-}
-
 [data-theme='leo-dark'] .auth-modal button.auth-text-btn:focus-visible {
   outline: 2px solid rgba(74, 222, 128, 0.45);
   outline-offset: 2px;

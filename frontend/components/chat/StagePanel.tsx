@@ -104,7 +104,7 @@ export function StagePanel({
     infoCard?.title === '✅ Профиль успешно собран!';
 
   return (
-    <div className="leo-chat-stage flex flex-col items-start gap-4 sm:gap-6 w-full overflow-visible">
+    <div className="leo-chat-stage flex w-full flex-col items-start gap-2 overflow-visible sm:gap-3 lg:gap-6">
       {/* Show infoCard only if it's newer than question, or if there's no question */}
       {/* Profile snapshot is now shown in modal from history, not here */}
       {showInterviewReport && infoCard && interviewReport ? (
@@ -137,7 +137,7 @@ export function StagePanel({
         />
       ) : showQuestion && question ? (
         <Fragment>
-          <div className="space-y-2 text-left w-full">
+          <div className="w-full space-y-1.5 text-left">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <div
                 className={
@@ -151,7 +151,7 @@ export function StagePanel({
               {detailedProgressLabel ? (
                 <span
                   className={
-                    isHume ? 'hume-body-sm !text-xs' : 'text-[11px] font-medium text-slate-400'
+                    isHume ? 'hume-body-sm !text-[11px]' : 'text-[11px] font-medium text-slate-400'
                   }
                 >
                   {detailedProgressLabel}
@@ -161,8 +161,8 @@ export function StagePanel({
             <h2
               className={
                 isHume
-                  ? 'hume-stage-heading text-left w-full break-words leading-tight'
-                  : 'text-base sm:text-lg lg:text-xl font-semibold text-white leading-tight break-words w-full text-left'
+                  ? 'hume-stage-heading text-left w-full break-words leading-snug'
+                  : 'leo-stage-heading text-left w-full break-words text-sm font-semibold leading-snug text-white sm:text-base'
               }
             >
               {question.question}
@@ -171,15 +171,15 @@ export function StagePanel({
               <p
                 className={
                   isHume
-                    ? 'hume-body-sm w-full break-words text-left'
-                    : 'text-xs sm:text-sm text-slate-300 w-full break-words text-left'
+                    ? 'leo-stage-subtext hume-body-sm w-full break-words text-left leading-snug'
+                    : 'leo-stage-subtext w-full break-words text-left text-xs leading-snug text-slate-300'
                 }
               >
                 {question.placeholder}
               </p>
             )}
             {quickReplies && quickReplies.length > 0 && onQuickReply ? (
-              <div className="flex flex-wrap gap-2 pt-1 w-full">
+              <div className="flex w-full flex-wrap gap-1.5 pt-0.5">
                 {quickReplies.map((reply) => (
                   <button
                     key={reply.value}
@@ -187,22 +187,22 @@ export function StagePanel({
                     onClick={() => onQuickReply(reply.value)}
                     className={[
                       isHume
-                        ? 'group/qr inline-flex flex-col items-start rounded-2xl border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)] px-4 py-2.5 text-left transition-colors hover:border-[rgba(34,34,34,0.18)] hover:bg-[var(--color-bone)] active:scale-[0.98]'
-                        : 'group/qr inline-flex flex-col items-start rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-left transition-all hover:border-green-500/40 hover:bg-white/[0.08] active:scale-[0.98]',
+                        ? 'group/qr inline-flex flex-col items-start rounded-xl border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)] px-3 py-2 text-left transition-colors hover:border-[rgba(34,34,34,0.18)] hover:bg-[var(--color-bone)] active:scale-[0.98]'
+                        : 'group/qr inline-flex flex-col items-start rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left transition-all hover:border-green-500/40 hover:bg-white/[0.08] active:scale-[0.98]',
                       reply.fullWidth ? 'w-full basis-full' : '',
                     ].join(' ')}
                   >
                     <span
                       className={
                         isHume
-                          ? 'text-sm font-medium text-[var(--color-ink)]'
-                          : 'text-sm font-semibold text-white'
+                          ? 'leo-stage-qr-label text-xs font-medium text-[var(--color-ink)]'
+                          : 'text-xs font-semibold text-white'
                       }
                     >
                       {reply.label}
                     </span>
                     {reply.hint ? (
-                      <span className={isHume ? 'mt-0.5 hume-body-sm !text-xs' : 'mt-0.5 text-xs text-slate-400'}>
+                      <span className={isHume ? 'mt-0.5 hume-body-sm !text-[11px]' : 'mt-0.5 text-[11px] text-slate-400'}>
                         {reply.hint}
                       </span>
                     ) : null}

@@ -17,6 +17,7 @@ import {
   type AppTheme,
 } from '@/types/appSettings';
 import { localeToTtsLang, normalizeTtsVoice } from '@/lib/ttsVoices';
+import { writeThemeCookies } from '@/lib/appThemeCookie';
 
 type AppSettingsContextValue = {
   settings: AppSettings;
@@ -33,10 +34,10 @@ function applySettingsToDocument(settings: AppSettings): void {
   document.documentElement.lang = settings.locale;
   document.documentElement.dataset.theme =
     settings.theme === 'hume-light' ? 'hume' : 'leo-dark';
+  writeThemeCookies(settings);
 }
 
 export function AppSettingsProvider({ children }: { children: ReactNode }) {
-  // SSR and first client paint must match; localStorage is read after hydration.
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
 
   useEffect(() => {

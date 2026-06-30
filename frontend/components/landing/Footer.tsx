@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettings } from '@/contexts/AppSettingsContext';
@@ -7,7 +8,6 @@ import { getBoostyUrl } from '@/lib/boostyLink';
 import { landingUi } from '@/lib/landingUiCopy';
 import { useHumeTheme } from '@/lib/useHumeTheme';
 import { buildTelegramSupportUrl, getTelegramSupportUrl } from '@/lib/supportLink';
-import { AppSettingsMenu } from '@/components/chat/AppSettingsMenu';
 
 const boostyUrl = getBoostyUrl();
 const defaultSupportUrl = buildTelegramSupportUrl();
@@ -32,13 +32,7 @@ export function Footer() {
   const footerNavButtonClass = `${footerNavLinkClass} appearance-none border-0 bg-transparent p-0 font-inherit cursor-pointer outline-none shadow-none focus:outline-none focus-visible:outline-none focus-visible:ring-0`;
 
   return (
-    <footer
-      className={`border-t py-14 ${
-        isHume
-          ? 'border-[rgba(34,34,34,0.08)] bg-[var(--color-paper)]'
-          : 'border-white/10 bg-gradient-to-b from-[#07111f] to-[#050913]'
-      }`}
-    >
+    <footer className="leo-footer-shell border-t py-14">
       <div className="mx-auto max-w-7xl px-6">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-[1.25fr_0.85fr_1fr]">
           <div className="max-w-sm">
@@ -181,7 +175,9 @@ export function Footer() {
             <a href={boostyUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
               Boosty
             </a>
-            <AppSettingsMenu scope="landing" />
+            <Link href="/settings" className={footerNavLinkClass}>
+              {copy.footerSettings}
+            </Link>
           </div>
         </div>
       </div>

@@ -9,6 +9,7 @@ import { PrepArtifactsPanel } from '@/components/chat/PrepArtifactsPanel';
 import { PrepRetentionPanel } from '@/components/chat/PrepRetentionPanel';
 import type { PrepProgress } from '@/lib/prepActivities';
 import type { PrepArtifact } from '@/lib/prepArtifacts';
+import { useHumeTheme } from '@/lib/useHumeTheme';
 
 const PREP_PLAN_TITLE = 'План подготовки';
 
@@ -55,10 +56,17 @@ export function InterviewPrepInfoOverview({
   prepArtifacts = [],
   onOpenArtifactInChat,
 }: InterviewPrepInfoOverviewProps) {
+  const isHume = useHumeTheme();
   const hasCommands = Boolean(commands?.length && onCommandSelect);
   const gridClass = compact
-    ? 'grid grid-cols-1 gap-2 sm:gap-2.5'
-    : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-2.5';
+    ? 'grid grid-cols-1 gap-2.5 sm:gap-3'
+    : hidePrepPlan
+      ? 'grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3'
+      : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-2.5';
+
+  const overviewCardClass = isHume
+    ? 'prep-info-card rounded-xl border border-[var(--color-border-hairline)] bg-[var(--color-bone)] px-3 py-2.5 sm:px-3.5 sm:py-3 shadow-[0_1px_3px_rgba(34,34,34,0.06)]'
+    : 'rounded-lg border border-white/10 bg-white/5 backdrop-blur-sm shadow-sm hover:bg-white/10 transition-all duration-200 px-2.5 sm:px-3 py-2 sm:py-2.5';
 
   const prepPlanCard = infoCard.cards.find(
     (card) => card.title === PREP_PLAN_TITLE || (card.planDays && card.planDays.length > 0)
@@ -66,16 +74,34 @@ export function InterviewPrepInfoOverview({
   const overviewCards = infoCard.cards.filter((card) => card !== prepPlanCard);
 
   return (
-    <div className="space-y-2 sm:space-y-3 w-full">
+    <div className={`prep-info-overview w-full space-y-2 sm:space-y-3 ${isHume ? 'prep-info-overview--hume' : ''}`.trim()}>
       <div>
-        <div className="text-[10px] sm:text-xs uppercase tracking-wider text-green-400/80 font-medium mb-1.5">
+        <div
+          className={
+            isHume
+              ? 'hume-label-sm mb-1.5'
+              : 'mb-1.5 text-[10px] font-medium uppercase tracking-wider text-green-400/80 sm:text-xs'
+          }
+        >
           Информация
         </div>
-        <h2 className="text-base sm:text-lg lg:text-xl font-bold text-white leading-tight break-words mb-1.5">
+        <h2
+          className={
+            isHume
+              ? 'hume-stage-heading mb-1.5 break-words text-left leading-tight'
+              : 'mb-1.5 break-words text-base font-bold leading-tight text-white sm:text-lg lg:text-xl'
+          }
+        >
           {infoCard.title}
         </h2>
         {infoCard.description ? (
-          <p className="text-xs sm:text-sm text-slate-300 max-w-2xl break-words mt-1 leading-relaxed">
+          <p
+            className={
+              isHume
+                ? 'hume-body-sm mt-1 max-w-2xl break-words leading-relaxed text-[var(--color-slate-plum)]'
+                : 'mt-1 max-w-2xl break-words text-xs leading-relaxed text-slate-300 sm:text-sm'
+            }
+          >
             {infoCard.description}
           </p>
         ) : null}
@@ -85,22 +111,28 @@ export function InterviewPrepInfoOverview({
         {overviewCards.map((card) => {
           const titleText = stripIconPrefix(card.title, card.icon);
           return (
-            <div
-              key={`${card.title}-${titleText}`}
-              className="rounded-lg border border-white/10 bg-white/5 backdrop-blur-sm shadow-sm hover:bg-white/10 transition-all duration-200 px-2.5 sm:px-3 py-2 sm:py-2.5"
-            >
-              <h3 className="text-[10px] sm:text-xs font-semibold text-white mb-1 sm:mb-1.5 flex items-center gap-1.5 min-w-0">
+            <div key={`${card.title}-${titleText}`} className={overviewCardClass}>
+              <h3
+                className={
+                  isHume
+                    ? 'mb-1 flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-[var(--color-ink)] sm:mb-1.5 sm:text-xs'
+                    : 'mb-1 flex min-w-0 items-center gap-1.5 text-[10px] font-semibold text-white sm:mb-1.5 sm:text-xs'
+                }
+              >
                 {card.icon ? (
-                  <span className="text-green-400 text-xs sm:text-sm shrink-0" aria-hidden>
+                  <span
+                    className={`shrink-0 text-xs sm:text-sm ${isHume ? 'text-[var(--color-iris)]' : 'text-green-400'}`}
+                    aria-hidden
+                  >
                     {card.icon}
                   </span>
                 ) : null}
                 <span className="truncate leading-tight">{titleText}</span>
               </h3>
               <p
-                className={`text-[10px] sm:text-xs text-slate-300 leading-snug break-words whitespace-pre-line ${
-                  compact ? '' : 'line-clamp-4'
-                }`}
+                className={`break-words whitespace-pre-line text-[10px] leading-snug sm:text-xs ${
+                  isHume ? 'text-[var(--color-slate-plum)]' : 'text-slate-300'
+                } ${compact || hidePrepPlan ? '' : 'line-clamp-4'}`}
               >
                 {card.content}
               </p>
@@ -114,7 +146,11 @@ export function InterviewPrepInfoOverview({
           type="link"
           size="small"
           onClick={onOpenPrepPlan}
-          className="!h-auto !p-0 !text-amber-300/95 hover:!text-amber-200 !text-xs sm:!text-sm"
+          className={
+            isHume
+              ? '!h-auto !p-0 !text-xs !text-[var(--color-iris)] hover:!text-[var(--color-ink)] sm:!text-sm'
+              : '!h-auto !p-0 !text-xs !text-amber-300/95 hover:!text-amber-200 sm:!text-sm'
+          }
         >
           План подготовки по дням →
         </Button>
@@ -148,11 +184,21 @@ export function InterviewPrepInfoOverview({
           mockGateBlockers={mockGateBlockers}
         />
       ) : !hidePrepPlan && prepPlanCard ? (
-        <div className="rounded-lg border border-white/10 bg-white/5 px-2.5 sm:px-3 py-2.5">
-          <h3 className="text-[10px] sm:text-xs font-semibold text-white mb-1.5">
+        <div className={overviewCardClass}>
+          <h3
+            className={
+              isHume
+                ? 'mb-1.5 text-[11px] font-semibold text-[var(--color-ink)] sm:text-xs'
+                : 'mb-1.5 text-[10px] font-semibold text-white sm:text-xs'
+            }
+          >
             {prepPlanCard.title}
           </h3>
-          <p className="text-[10px] sm:text-xs text-slate-300 leading-relaxed whitespace-pre-line break-words">
+          <p
+            className={`break-words whitespace-pre-line text-[10px] leading-relaxed sm:text-xs ${
+              isHume ? 'text-[var(--color-slate-plum)]' : 'text-slate-300'
+            }`}
+          >
             {prepPlanCard.content}
           </p>
         </div>

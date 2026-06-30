@@ -54,6 +54,10 @@ type LandingStrings = {
   footerHelpCta: string;
   footerCopyright: string;
   footerFeedback: string;
+  footerSettings: string;
+  settingsBackHome: string;
+  settingsPageTitle: string;
+  settingsPageIntro: string;
 };
 
 const strings: Record<AppLocale, LandingStrings> = {
@@ -96,6 +100,10 @@ const strings: Record<AppLocale, LandingStrings> = {
     footerHelpCta: 'Написать в поддержку',
     footerCopyright: '© 2025 LEO AI. Все права защищены.',
     footerFeedback: 'Обратная связь',
+    footerSettings: 'Настройка',
+    settingsBackHome: '← На главную',
+    settingsPageTitle: 'Настройки',
+    settingsPageIntro: 'Выберите язык интерфейса и тему оформления.',
   },
   en: {
     heroBadge: 'Your personal AI assistant',
@@ -134,6 +142,10 @@ const strings: Record<AppLocale, LandingStrings> = {
     footerHelpCta: 'Contact support',
     footerCopyright: '© 2025 LEO AI. All rights reserved.',
     footerFeedback: 'Feedback',
+    footerSettings: 'Settings',
+    settingsBackHome: '← Back to home',
+    settingsPageTitle: 'Settings',
+    settingsPageIntro: 'Choose interface language and appearance.',
   },
 };
 

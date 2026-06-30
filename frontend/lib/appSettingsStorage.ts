@@ -1,5 +1,6 @@
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '@/types/appSettings';
 import { localeToTtsLang, normalizeTtsVoice } from '@/lib/ttsVoices';
+import { writeThemeCookies } from '@/lib/appThemeCookie';
 
 const STORAGE_KEY = 'leo.app.settings.v1';
 
@@ -31,4 +32,5 @@ export function readAppSettings(): AppSettings {
 export function writeAppSettings(settings: AppSettings): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  writeThemeCookies(settings);
 }

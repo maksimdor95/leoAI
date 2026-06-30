@@ -1,8 +1,16 @@
 'use client';
 
+import { useCallback, useState } from 'react';
 import { DownOutlined } from '@ant-design/icons';
 import { Popover } from 'antd';
 import { humanizeMatchReasons } from '@/lib/humanizeMatchReasons';
+import {
+  CHAT_OVERLAY_MAX_WIDTH,
+  chatHelpPlacement,
+  chatOverlayAutoAdjust,
+  getChatPopupContainer,
+} from '@/lib/chatOverlay';
+import { useCloseOnScroll } from '@/lib/useCloseOnScroll';
 import { useHumeTheme } from '@/lib/useHumeTheme';
 
 type MatchReasonsPopoverProps = {
@@ -40,6 +48,9 @@ export function MatchReasonsPopover({
   className = '',
 }: MatchReasonsPopoverProps) {
   const isHume = useHumeTheme();
+  const [open, setOpen] = useState(false);
+  const handleClose = useCallback(() => setOpen(false), []);
+  useCloseOnScroll(open, handleClose);
   const isWeak = variant === 'weak';
   const humanized = humanizeMatchReasons(reasons);
   const accentClass = isHume
@@ -74,7 +85,16 @@ export function MatchReasonsPopover({
   return (
     <Popover
       trigger="click"
-      placement="bottomLeft"
+      open={open}
+      onOpenChange={setOpen}
+      placement={chatHelpPlacement}
+      autoAdjustOverflow={chatOverlayAutoAdjust}
+      destroyOnHidden
+      arrow={{ pointAtCenter: true }}
+      getPopupContainer={getChatPopupContainer}
+      styles={{
+        root: { maxWidth: CHAT_OVERLAY_MAX_WIDTH, width: 'max-content' },
+      }}
       title={
         <span className={isHume ? 'vacancy-section-label !mb-0' : 'text-[11px] font-semibold uppercase tracking-wide text-slate-500'}>
           Почему матч

@@ -1,10 +1,17 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import { ConfigProvider } from 'antd';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { AppSettingsProvider } from '@/contexts/AppSettingsContext';
 import { GlobalAuthModal } from '@/components/GlobalAuthModal';
 import { PostHogProvider } from '@/components/PostHogProvider';
+import {
+  APP_LOCALE_COOKIE,
+  APP_THEME_COOKIE,
+  dataThemeFromCookie,
+  localeFromCookie,
+} from '@/lib/appThemeCookie';
 import { THEME_INIT_SCRIPT } from '@/lib/themeInitScript';
 import './globals.css';
 import '../styles/theme-hume.css';
@@ -35,8 +42,17 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = cookies();
+  const dataTheme = dataThemeFromCookie(cookieStore.get(APP_THEME_COOKIE)?.value);
+  const lang = localeFromCookie(cookieStore.get(APP_LOCALE_COOKIE)?.value);
+
   return (
-    <html lang="ru" suppressHydrationWarning className={`${humeSans.variable} ${humeMono.variable}`}>
+    <html
+      lang={lang}
+      data-theme={dataTheme}
+      suppressHydrationWarning
+      className={`${humeSans.variable} ${humeMono.variable}`}
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>

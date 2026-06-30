@@ -237,7 +237,7 @@ export function SupportWidget({
           <div className={`fixed inset-0 ${TOOLBAR_OVERLAY_Z}`}>
             <button
               type="button"
-              className={`support-widget-overlay absolute inset-0 ${isHume ? 'bg-[#222]/25' : 'bg-[#050913]/75 backdrop-blur-[2px]'}`}
+              className={`support-widget-overlay absolute inset-0 ${isHume ? 'bg-[#222]/25 backdrop-blur-[2px]' : 'bg-[#050913]/75 backdrop-blur-[2px]'}`}
               onClick={closeMenu}
               aria-label={s('closeConsultation')}
             />

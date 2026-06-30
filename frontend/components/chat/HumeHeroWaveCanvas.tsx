@@ -11,6 +11,8 @@ type HumeHeroWaveCanvasProps = {
   reducedMotion?: boolean;
   /** >1 — крупнее волна в hero-баннере (разводящая) */
   heroScale?: number;
+  /** hero — лендинг; chat — компактнее и пики ближе */
+  waveProfile?: 'hero' | 'chat';
 };
 
 const HUME_BG_STOPS: [number, string][] = [
@@ -29,16 +31,22 @@ function dprScale(canvas: HTMLCanvasElement): number {
   return canvas.width / rect.width;
 }
 
-/** Dual-hump envelope like hume.ai hero (peaks ~28% and ~72%) */
-function humeEnvelope(u: number): number {
-  const edge = Math.pow(Math.sin(Math.PI * u), 0.62);
-  const left = Math.exp(-Math.pow((u - 0.28) / 0.11, 2));
-  const right = Math.exp(-Math.pow((u - 0.72) / 0.13, 2)) * 0.96;
+/** Dual-hump envelope like hume.ai hero (peaks ~28% and ~72%; chat — ближе к центру) */
+function humeEnvelope(u: number, profile: 'hero' | 'chat' = 'hero'): number {
+  const leftPeak = profile === 'chat' ? 0.37 : 0.28;
+  const rightPeak = profile === 'chat' ? 0.63 : 0.72;
+  const leftSigma = profile === 'chat' ? 0.085 : 0.11;
+  const rightSigma = profile === 'chat' ? 0.09 : 0.13;
+  const edge = Math.pow(Math.sin(Math.PI * u), profile === 'chat' ? 0.72 : 0.62);
+  const left = Math.exp(-Math.pow((u - leftPeak) / leftSigma, 2));
+  const right = Math.exp(-Math.pow((u - rightPeak) / rightSigma, 2)) * 0.96;
   return edge * (0.06 + 0.94 * Math.max(left, right));
 }
 
-function humeArcEnvelope(u: number): number {
-  return Math.pow(Math.sin(Math.PI * u), 1.05) * Math.exp(-Math.pow((u - 0.58) / 0.38, 2));
+function humeArcEnvelope(u: number, profile: 'hero' | 'chat' = 'hero'): number {
+  const center = profile === 'chat' ? 0.5 : 0.58;
+  const sigma = profile === 'chat' ? 0.3 : 0.38;
+  return Math.pow(Math.sin(Math.PI * u), 1.05) * Math.exp(-Math.pow((u - center) / sigma, 2));
 }
 
 function strokeGradient(
@@ -141,7 +149,8 @@ function paintHumeHeroWave(
   canvas: HTMLCanvasElement,
   t: number,
   level: number,
-  heroScale = 1
+  heroScale = 1,
+  waveProfile: 'hero' | 'chat' = 'hero'
 ): void {
   const w = canvas.width;
   const h = canvas.height;
@@ -150,6 +159,8 @@ function paintHumeHeroWave(
   paintHumeBackground(ctx, w, h);
 
   const mid = h * 0.5;
+  const mainEnvelope = (u: number) => humeEnvelope(u, waveProfile);
+  const arcEnvelope = (u: number) => humeArcEnvelope(u, waveProfile);
 
   drawStrandBundle(ctx, w, h, t, {
     strandCount: STRAND_COUNT,
@@ -158,24 +169,24 @@ function paintHumeHeroWave(
     level,
     timeScale: 0.55,
     phaseOffset: 0,
-    envelope: humeEnvelope,
+    envelope: mainEnvelope,
     lineSpacing: 0.48,
     shadowAlpha: 0.1,
-    freqBase: 1.85,
+    freqBase: waveProfile === 'chat' ? 2.05 : 1.85,
     heroScale,
   });
 
   drawStrandBundle(ctx, w, h, t, {
     strandCount: CROSS_STRAND_COUNT,
-    midY: h * 0.58,
+    midY: h * (waveProfile === 'chat' ? 0.54 : 0.58),
     ampMul: 0.72,
     level,
     timeScale: 0.42,
     phaseOffset: Math.PI * 0.65,
-    envelope: humeArcEnvelope,
+    envelope: arcEnvelope,
     lineSpacing: 0.62,
     shadowAlpha: 0.08,
-    freqBase: 1.75,
+    freqBase: waveProfile === 'chat' ? 1.95 : 1.75,
     crossPhase: true,
     heroScale,
   });
@@ -187,6 +198,7 @@ export function HumeHeroWaveCanvas({
   paused = false,
   reducedMotion = false,
   heroScale = 1,
+  waveProfile = 'hero',
 }: HumeHeroWaveCanvasProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -233,7 +245,7 @@ export function HumeHeroWaveCanvas({
       const rawLevel = externalLevelRef?.current ?? levelRef.current;
       const targetLevel = paused ? 0.3 : rawLevel;
       levelEma.v = levelEma.v * 0.9 + targetLevel * 0.1;
-      paintHumeHeroWave(ctx, canvas, t, Math.min(1, levelEma.v), heroScale);
+      paintHumeHeroWave(ctx, canvas, t, Math.min(1, levelEma.v), heroScale, waveProfile);
       rafRef.current = requestAnimationFrame(draw);
     };
 
@@ -242,7 +254,7 @@ export function HumeHeroWaveCanvas({
       cancelled = true;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [paused, reducedMotion, externalLevelRef, heroScale]);
+  }, [paused, reducedMotion, externalLevelRef, heroScale, waveProfile]);
 
   return (
     <div ref={wrapRef} className="hume-hero-wave-wrap">

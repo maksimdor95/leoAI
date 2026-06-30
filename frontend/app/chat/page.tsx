@@ -14,7 +14,6 @@ import {
   Typography,
   message as antdMessage,
   Modal,
-  Tooltip,
 } from 'antd';
 import {
   CommandItem,
@@ -76,13 +75,14 @@ import {
   vacanciesUi,
 } from '@/lib/vacanciesUiCopy';
 import { SupportWidget } from '@/components/support/SupportWidget';
+import { ChatHelpPopover } from '@/components/chat/ChatHelpPopover';
+import { ChatHoverTooltip } from '@/components/chat/ChatHoverTooltip';
 import {
   SoundOutlined,
   AudioMutedOutlined,
   SendOutlined,
   AudioOutlined,
   ReloadOutlined,
-  QuestionCircleOutlined,
 } from '@ant-design/icons';
 import {
   uploadResumeFile,
@@ -127,6 +127,8 @@ type MatchedJobItem = {
 type JobsLoadState = 'idle' | 'scraping' | 'matching' | 'success' | 'error';
 
 type SidePanelTab = 'chat' | 'vacancies' | 'profile';
+
+type MobileMainTab = 'stage' | 'workspace';
 
 /** Метаданные ответа /api/jobs/match — прозрачность порога и объёма каталога (см. IMPROVEMENT_PLAN P0.2) */
 type JobsMatchMeta = {
@@ -279,6 +281,7 @@ function ChatPageContent() {
   const typingMessageRef = useRef<Message | null>(null);
   const handledSpeechMessageIdsRef = useRef<Set<string>>(new Set());
   const speechChainRef = useRef(Promise.resolve());
+  const speechEpochRef = useRef(0);
   /** Браузерный speechSynthesis только если явно включён — иначе только Яндекс TTS с сервера. */
   const enableBrowserTtsFallbackRef = useRef(
     process.env.NEXT_PUBLIC_ENABLE_BROWSER_TTS_FALLBACK === 'true'
@@ -309,7 +312,18 @@ function ChatPageContent() {
   const [isJobsLoading, setIsJobsLoading] = useState(false);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('chat');
+  const [mobileMainTab, setMobileMainTab] = useState<MobileMainTab>('stage');
   const [prepHistoryFilter, setPrepHistoryFilter] = useState<PrepHistoryFilter>('general');
+
+  const focusMobileWorkspace = useCallback(() => {
+    setMobileMainTab('workspace');
+  }, []);
+
+  useEffect(() => {
+    if (productSelected) {
+      setMobileMainTab('stage');
+    }
+  }, [productSelected, sessionId]);
 
   useEffect(() => {
     setPrepHistoryFilter('general');
@@ -325,7 +339,6 @@ function ChatPageContent() {
     item: MatchedJobItem;
     variant: 'recommended' | 'weak';
   } | null>(null);
-  const [hhIntegrationRefreshKey, setHhIntegrationRefreshKey] = useState(0);
   const previousJobIdsRef = useRef<Set<string>>(new Set());
   /** Список вакансий уже показывали — фоновый silent-refresh не прячет его под спиннер. */
   const jobsListHydratedRef = useRef(false);
@@ -518,6 +531,19 @@ function ChatPageContent() {
     assistantVoiceLevelRef.current = 0;
     setIsTtsSpeaking(false);
   }, []);
+
+  const cancelActiveSpeech = useCallback(() => {
+    speechEpochRef.current += 1;
+    stopAssistantAudio();
+    if (typeof window !== 'undefined') {
+      window.speechSynthesis.cancel();
+    }
+    setIsTtsSpeaking(false);
+  }, [stopAssistantAudio]);
+
+  const canUseBrowserTtsFallback = useCallback(() => {
+    return enableBrowserTtsFallbackRef.current || !isMuted;
+  }, [isMuted]);
 
   const isAssistantAudioPlaying = useCallback(() => {
     const el = assistantAudioElRef.current;
@@ -724,8 +750,12 @@ function ChatPageContent() {
   );
 
   const speakQuestionWithPriority = useCallback(
-    (message: QuestionMessage) =>
-      runSpeechExclusive(async () => {
+    (message: QuestionMessage) => {
+      cancelActiveSpeech();
+      const epoch = speechEpochRef.current;
+      return runSpeechExclusive(async () => {
+        if (speechEpochRef.current !== epoch) return;
+
         const messageId = message?.id;
         if (!messageId || handledSpeechMessageIdsRef.current.has(messageId)) return;
         handledSpeechMessageIdsRef.current.add(messageId);
@@ -739,28 +769,38 @@ function ChatPageContent() {
           payload = await waitForAssistantAudio(messageId);
         }
 
+        if (speechEpochRef.current !== epoch) return;
+
         if (payload) {
           assistantAudioByMessageIdRef.current.delete(messageId);
           const played = await playAssistantAudio(payload);
+          if (speechEpochRef.current !== epoch) {
+            stopAssistantAudio();
+            return;
+          }
           if (played) {
             lastSpokenTextRef.current = message.question.trim().toLowerCase().replace(/\s+/g, ' ');
             lastSpokenAtRef.current = Date.now();
             await waitForAssistantAudioEnd();
             return;
           }
-          if (!enableBrowserTtsFallbackRef.current || isAssistantAudioPlaying()) return;
+          if (!canUseBrowserTtsFallback() || isAssistantAudioPlaying()) return;
           speakFallback(message.question);
           return;
         }
 
-        if (!enableBrowserTtsFallbackRef.current || isAssistantAudioPlaying()) return;
+        if (!canUseBrowserTtsFallback() || isAssistantAudioPlaying()) return;
         speakFallback(message.question);
-      }),
+      });
+    },
     [
+      cancelActiveSpeech,
+      canUseBrowserTtsFallback,
       isAssistantAudioPlaying,
       playAssistantAudio,
       runSpeechExclusive,
       speakFallback,
+      stopAssistantAudio,
       waitForAssistantAudio,
       waitForAssistantAudioEnd,
     ]
@@ -768,8 +808,11 @@ function ChatPageContent() {
 
   /** Озвучка ответов text / info_card (план, карточка вакансии, диагностика и т.д.) — раньше в очередь попадали только question. */
   const speakAssistantMessageWithPriority = useCallback(
-    (message: Message) =>
-      runSpeechExclusive(async () => {
+    (message: Message) => {
+      cancelActiveSpeech();
+      const epoch = speechEpochRef.current;
+      return runSpeechExclusive(async () => {
+        if (speechEpochRef.current !== epoch) return;
         if (message.role !== MessageRole.ASSISTANT) return;
         if (message.type === MessageType.QUESTION) return;
 
@@ -789,28 +832,38 @@ function ChatPageContent() {
           payload = await waitForAssistantAudio(messageId);
         }
 
+        if (speechEpochRef.current !== epoch) return;
+
         if (payload) {
           assistantAudioByMessageIdRef.current.delete(messageId);
           const played = await playAssistantAudio(payload);
+          if (speechEpochRef.current !== epoch) {
+            stopAssistantAudio();
+            return;
+          }
           if (played) {
             lastSpokenTextRef.current = text.trim().toLowerCase().replace(/\s+/g, ' ');
             lastSpokenAtRef.current = Date.now();
             await waitForAssistantAudioEnd();
             return;
           }
-          if (!enableBrowserTtsFallbackRef.current || isAssistantAudioPlaying()) return;
+          if (!canUseBrowserTtsFallback() || isAssistantAudioPlaying()) return;
           speakFallback(text);
           return;
         }
 
-        if (!enableBrowserTtsFallbackRef.current || isAssistantAudioPlaying()) return;
+        if (!canUseBrowserTtsFallback() || isAssistantAudioPlaying()) return;
         speakFallback(text);
-      }),
+      });
+    },
     [
+      cancelActiveSpeech,
+      canUseBrowserTtsFallback,
       isAssistantAudioPlaying,
       playAssistantAudio,
       runSpeechExclusive,
       speakFallback,
+      stopAssistantAudio,
       waitForAssistantAudio,
       waitForAssistantAudioEnd,
     ]
@@ -1072,11 +1125,19 @@ function ChatPageContent() {
               return base;
             }
 
+            const isNewAssistantMessage = !prev.some((existing) => existing.id === payload.message.id);
+
             if (
+              isNewAssistantMessage &&
+              payload.message.role === MessageRole.ASSISTANT &&
+              payload.message.type === MessageType.QUESTION
+            ) {
+              void speakQuestionWithPriority(payload.message as QuestionMessage);
+            } else if (
+              isNewAssistantMessage &&
               payload.message.role === MessageRole.ASSISTANT &&
               (payload.message.type === MessageType.TEXT ||
-                payload.message.type === MessageType.INFO_CARD) &&
-              !prev.some((existing) => existing.id === payload.message.id)
+                payload.message.type === MessageType.INFO_CARD)
             ) {
               void speakAssistantMessageWithPriority(payload.message);
             }
@@ -1529,7 +1590,6 @@ function ChatPageContent() {
     if (searchParams.get('hhConnected') !== '1') {
       return;
     }
-    setHhIntegrationRefreshKey((value) => value + 1);
     const params = new URLSearchParams(searchParams.toString());
     params.delete('hhConnected');
     const query = params.toString();
@@ -1601,6 +1661,7 @@ function ChatPageContent() {
 
   const handleSend = (values: MessageFormValues) => {
     unlockAudio();
+    cancelActiveSpeech();
     if (!chatRef.current) {
       return;
     }
@@ -1695,6 +1756,8 @@ function ChatPageContent() {
     }
 
     if (command.action === 'open_vacancies' || command.action === 'show_recommendations') {
+      focusMobileWorkspace();
+      setSidePanelTab('vacancies');
       await fetchMatchedJobs({ revealPanel: true, triggerWeakMatchGate: true });
       return;
     }
@@ -1707,6 +1770,7 @@ function ChatPageContent() {
 
     const modeFromAction = parseInterviewModeFromAction(command.action);
     if (modeFromAction) {
+      focusMobileWorkspace();
       setPrepHistoryFilter(modeFromAction);
       setSidePanelTab('chat');
       if (modeFromAction === 'mock') {
@@ -2212,22 +2276,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
   }, [jobsLoadState, jobsMatchMeta, settings.locale]);
 
   const matchInfoTip = jobsMatchInfoTooltip ? (
-    <Tooltip
-      title={
-        <span className="block max-w-xs whitespace-pre-line text-xs leading-relaxed">
-          {jobsMatchInfoTooltip}
-        </span>
-      }
-      placement="topLeft"
-    >
-      <Button
-        type="text"
-        size="small"
-        icon={<QuestionCircleOutlined />}
-        className="!h-5 !w-5 !min-w-0 !p-0 !text-slate-500 hover:!text-slate-300"
-        aria-label="Как считался подбор"
-      />
-    </Tooltip>
+    <ChatHelpPopover content={<span className="whitespace-pre-line">{jobsMatchInfoTooltip}</span>} ariaLabel="Как считался подбор" />
   ) : null;
 
   const handleCloseProfileEdit = useCallback(() => {
@@ -2673,7 +2722,9 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     >
       {contextHolder}
       <Content
-        className={`flex flex-col h-screen px-4 py-4 sm:px-6 sm:py-6 lg:px-8 ${
+        className={`box-border flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden px-4 pb-2 pt-4 sm:px-6 sm:pb-3 sm:pt-6 lg:px-8 ${
+          productSelected ? 'max-lg:pb-0' : ''
+        } ${
           !productSelected && isNewChatMode ? 'lg:py-4' : 'lg:py-8'
         }`}
       >
@@ -2709,7 +2760,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                   <span className="sm:hidden">{ui('myChatsShort')}</span>
                 </Button>
               </Link>
-              <Tooltip title={ui('logoutTip')}>
+              <ChatHoverTooltip title={ui('logoutTip')}>
                 <Button
                   type="text"
                   size="small"
@@ -2718,26 +2769,73 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                 >
                   {ui('logout')}
                 </Button>
-              </Tooltip>
+              </ChatHoverTooltip>
             </div>
           </header>
 
+          {productSelected ? (
+            <div
+              role="tablist"
+              aria-label={ui('mobileMainTabsAria')}
+              className={`flex shrink-0 gap-1 rounded-2xl border p-1 lg:hidden ${
+                isHume
+                  ? 'border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)]'
+                  : 'border-white/10 bg-white/[0.04]'
+              }`}
+            >
+              {(
+                [
+                  { id: 'stage' as const, label: ui('tabMobileStage') },
+                  { id: 'workspace' as const, label: ui('tabMobileWorkspace') },
+                ] as const
+              ).map(({ id, label }) => {
+                const selected = mobileMainTab === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => setMobileMainTab(id)}
+                    className={`flex-1 rounded-xl border-none px-3 py-2.5 text-sm font-semibold transition-colors ${
+                      selected
+                        ? isHume
+                          ? 'bg-[var(--color-ink)] text-[var(--color-paper)]'
+                          : 'bg-green-500 text-white shadow-lg shadow-green-950/20'
+                        : isHume
+                          ? 'bg-transparent text-[var(--color-smoke)] hover:bg-[var(--color-bone)] hover:text-[var(--color-ink)]'
+                          : 'bg-transparent text-slate-300 hover:bg-white/[0.06] hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
           <div
-            className={`grid min-h-0 gap-3 sm:gap-4 lg:gap-5 ${
+            className={`min-h-0 gap-3 sm:gap-4 lg:gap-5 ${
               !productSelected && isNewChatMode
-                ? 'flex-1 grid-cols-1 overflow-hidden'
-                : 'h-full grid-cols-1 overflow-hidden lg:grid-cols-[1fr_minmax(320px,380px)]'
+                ? 'grid flex-1 grid-cols-1 overflow-hidden'
+                : 'flex h-full min-h-0 flex-1 flex-col overflow-hidden lg:grid lg:grid-cols-[1fr_minmax(320px,380px)]'
             }`}
           >
             <section
               className={`leo-chat-panel flex min-h-0 flex-col ${
+                productSelected
+                  ? mobileMainTab === 'workspace'
+                    ? 'max-lg:hidden'
+                    : 'max-lg:flex max-lg:min-h-0 max-lg:flex-1'
+                  : ''
+              } ${
                 !productSelected && isNewChatMode
                   ? isHume
                     ? 'flex-1 overflow-y-auto overscroll-y-contain rounded-2xl border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)] sm:rounded-3xl [-webkit-overflow-scrolling:touch] lg:overflow-hidden'
                     : 'flex-1 overflow-y-auto overscroll-y-contain rounded-2xl border border-white/[0.08] bg-[#050913]/50 sm:rounded-3xl [-webkit-overflow-scrolling:touch] lg:overflow-hidden'
                   : isHume
-                    ? 'gap-3 overflow-auto rounded-2xl border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)] p-3 sm:gap-4 sm:p-4 lg:gap-5 lg:p-5'
-                    : 'gap-3 overflow-auto rounded-2xl border border-white/10 bg-white/[0.04] p-3 backdrop-blur sm:gap-4 sm:p-4 lg:gap-5 lg:p-5'
+                    ? 'gap-2 max-lg:overflow-hidden rounded-2xl border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)] p-3 sm:gap-4 sm:p-4 lg:gap-5 lg:overflow-auto lg:p-5'
+                    : 'gap-2 max-lg:overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-3 backdrop-blur sm:gap-4 sm:p-4 lg:gap-5 lg:overflow-auto lg:p-5'
               }`}
             >
               {/* Show product selection screen for new chats */}
@@ -2745,7 +2843,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                 <ProductSelectionScreen onSelect={handleProductScenarioSelect} />
               ) : (
                 <>
-                  <div className="flex-shrink-0">
+                  <div className={`flex-shrink-0 ${isHume ? 'leo-chat-wave-bleed' : ''}`}>
                     <VoiceIndicator
                       isActive={(connected && !isMuted) || isListening}
                       isMuted={isMuted && !isListening}
@@ -2753,11 +2851,11 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                       ttsBeatAtRef={ttsBeatAtRef}
                       assistantLevelRef={assistantVoiceLevelRef}
                       waveOnly
-                      waveHeroBanner={isHume}
+                      waveCompact={isHume}
                     />
                   </div>
 
-                  <div className="flex-1 overflow-auto flex items-start justify-center min-h-0 py-2 sm:py-3">
+                  <div className="leo-chat-stage-scroll flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain chat-history-scroll py-0.5 sm:py-1 [-webkit-overflow-scrolling:touch]">
                     {connecting ? (
                       <div className="flex flex-col items-center justify-center gap-4">
                         <Spin size="large" />
@@ -2810,7 +2908,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                         />
                       </div>
                     ) : (
-                      <div className="w-full flex items-start justify-center overflow-auto">
+                      <div className="flex w-full min-h-0 items-start justify-center">
                         <StagePanel
                           question={centerStageQuestion}
                           prepModeContent={centerStagePrepContent}
@@ -2823,6 +2921,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                           }
                           onQuickReply={(value) => {
                             unlockAudio();
+                            cancelActiveSpeech();
                             chatRef.current?.sendMessage(value);
                           }}
                           interviewPrepOnOpenOverview={
@@ -2882,7 +2981,11 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
             {/* Hide aside panel when in product selection mode */}
             {productSelected && (
               <aside
-                className={`leo-chat-sidebar flex flex-col w-full overflow-hidden p-4 sm:p-5 rounded-2xl sm:rounded-3xl ${
+                className={`leo-chat-sidebar relative flex w-full min-h-0 flex-col p-4 sm:p-5 rounded-2xl sm:rounded-3xl ${
+                  mobileMainTab === 'stage'
+                    ? 'max-lg:hidden'
+                    : 'max-lg:flex max-lg:min-h-0 max-lg:flex-1'
+                } ${
                   isHume
                     ? 'border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)]'
                     : 'border border-white/10 bg-white/[0.04] backdrop-blur'
@@ -2924,19 +3027,10 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                       <>
                         <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-100 leading-snug">
                           <span>{v('matchedTitle')}</span>
-                          <Tooltip
-                            trigger={['click']}
-                            placement="topLeft"
-                            title={v('matchedTooltip')}
-                          >
-                            <Button
-                              type="text"
-                              size="small"
-                              icon={<QuestionCircleOutlined />}
-                              className="!h-5 !w-5 !min-w-0 !p-0 !text-slate-400 hover:!text-slate-200"
-                              aria-label={v('matchedTooltipAria')}
-                            />
-                          </Tooltip>
+                          <ChatHelpPopover
+                            content={v('matchedTooltip')}
+                            ariaLabel={v('matchedTooltipAria')}
+                          />
                         </div>
                         {jackProfileReadyForMatch &&
                         (matchedJobs.length > 0 ||
@@ -2964,12 +3058,12 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                     ·
                                   </span>
                                 ) : null}
-                                <Tooltip title={v('newBadgeTooltip')}>
+                                <ChatHoverTooltip title={v('newBadgeTooltip')}>
                                   <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-300 cursor-default">
                                     +{newJobBadgeIds.size}{' '}
                                     {newJobsBadgeWord(settings.locale, newJobBadgeIds.size)}
                                   </span>
-                                </Tooltip>
+                                </ChatHoverTooltip>
                               </>
                             ) : null}
                           </div>
@@ -3067,7 +3161,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                             </span>
                             {currentProduct === 'jack' ? (
                               <div className="flex shrink-0 items-center gap-1">
-                                <Tooltip title={v('refreshTooltip')}>
+                                <ChatHoverTooltip title={v('refreshTooltip')}>
                                   <Button
                                     type="text"
                                     size="small"
@@ -3080,7 +3174,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                     className="!shrink-0 !text-slate-400 hover:!text-slate-200 disabled:!text-slate-600"
                                     aria-label={v('refreshAria')}
                                   />
-                                </Tooltip>
+                                </ChatHoverTooltip>
                               </div>
                             ) : null}
                           </div>
@@ -3339,9 +3433,9 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
             )}
           </div>
 
-          {/* Hide footer when in product selection mode */}
+          {/* Mobile: footer pinned at bottom; always visible on both tabs */}
           {productSelected && (
-            <footer className="flex-shrink-0 flex flex-col gap-2 sm:gap-3 lg:flex-row lg:items-end">
+            <footer className="leo-chat-mobile-bottom flex shrink-0 flex-col gap-2 sm:gap-3 lg:flex lg:flex-row lg:items-end">
               <Form form={form} onFinish={handleSend} className="flex-1">
                 <Form.Item
                   name="message"
@@ -3359,7 +3453,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                       <div className="lg:hidden">
                         <SupportWidget placement="toolbar" showTeaser={false} />
                       </div>
-                      <Tooltip title={isMuted ? ui('muteOn') : ui('muteOff')}>
+                      <ChatHoverTooltip title={isMuted ? ui('muteOn') : ui('muteOff')}>
                         <Button
                           type="text"
                           size="small"
@@ -3371,8 +3465,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                               : '!text-white !p-1 sm:!p-2'
                           }
                         />
-                      </Tooltip>
-                      <Tooltip title={isListening ? 'Остановить запись' : 'Начать запись голоса'}>
+                      </ChatHoverTooltip>
+                      <ChatHoverTooltip title={isListening ? 'Остановить запись' : 'Начать запись голоса'}>
                         <Button
                           type="text"
                           size="small"
@@ -3388,7 +3482,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                               : `!p-1 sm:!p-2 ${isListening ? 'animate-pulse bg-green-500/20 rounded-full' : '!text-white'}`
                           }
                         />
-                      </Tooltip>
+                      </ChatHoverTooltip>
                     </div>
                     <div
                       className={`flex-1 min-w-0 chat-footer-input-wrap ${
@@ -3457,7 +3551,6 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
           vacancyPreview ? vacancyPrepJobId === vacancyPreview.item.job.id : false
         }
         sessionId={sessionId}
-        hhIntegrationRefreshKey={hhIntegrationRefreshKey}
       />
       <Modal
         title={

@@ -5,7 +5,6 @@ import { ExportOutlined } from '@ant-design/icons';
 import { Button, Modal, Spin, message } from 'antd';
 import { fetchJobDetails, recordJobInteraction } from '@/lib/jobApi';
 import { ApplicationDraftPanel } from '@/components/chat/ApplicationDraftPanel';
-import { HhIntegrationBanner } from '@/components/chat/HhIntegrationBanner';
 import { stripHtmlFromText } from '@/lib/buildVacancyPrepText';
 import { MatchReasonsPopover } from '@/components/chat/MatchReasonsPopover';
 import { uniqueLocationLabels } from '@/lib/locationLabels';
@@ -19,7 +18,6 @@ type VacancyPreviewDrawerProps = {
   onVacancyPrep?: () => void;
   vacancyPrepLoading?: boolean;
   sessionId?: string | null;
-  hhIntegrationRefreshKey?: number;
 };
 
 function formatSalary(
@@ -121,7 +119,6 @@ export function VacancyPreviewDrawer({
   onVacancyPrep,
   vacancyPrepLoading = false,
   sessionId,
-  hhIntegrationRefreshKey = 0,
 }: VacancyPreviewDrawerProps) {
   const isHume = useHumeTheme();
   const [details, setDetails] = useState<JobDetailsResponse | null>(null);
@@ -429,7 +426,6 @@ export function VacancyPreviewDrawer({
               </Button>
             ) : null}
           </div>
-          <HhIntegrationBanner refreshKey={hhIntegrationRefreshKey} />
           {context ? (
             <ApplicationDraftPanel
               jobId={context.jobId}
