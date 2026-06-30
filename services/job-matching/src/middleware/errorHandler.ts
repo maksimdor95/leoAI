@@ -60,10 +60,30 @@ export function getErrorStatusCode(error: unknown): number {
  * Determine if error should be logged
  */
 export function shouldLogError(error: unknown): boolean {
+  if (isClientDisconnectError(error)) {
+    return false;
+  }
   if (error instanceof ApplicationError && error.isOperational) {
     return false; // Operational errors are expected and don't need logging
   }
   return true; // Unexpected errors should be logged
+}
+
+function isClientDisconnectError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const message = error.message.toLowerCase();
+  const code =
+    'code' in error && typeof (error as { code?: unknown }).code === 'string'
+      ? (error as { code: string }).code
+      : undefined;
+  return (
+    message.includes('request aborted') ||
+    message.includes('aborted') ||
+    code === 'ECONNABORTED' ||
+    code === 'ECONNRESET'
+  );
 }
 
 const SENSITIVE_KEYS = new Set([
@@ -126,6 +146,11 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
       error: message,
       stack: err instanceof Error ? err.stack : undefined,
       query: sanitizeForLog(req.query),
+    });
+  } else if (isClientDisconnectError(err)) {
+    logger.debug('Client disconnected before request completed:', {
+      method: req.method,
+      path: req.path,
     });
   } else {
     logger.info('Operational error:', {

@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { SettingOutlined } from '@ant-design/icons';
 import { Button, Popover, Segmented, Select, Switch, Tooltip } from 'antd';
 import { useAppSettings } from '@/contexts/AppSettingsContext';
@@ -22,10 +23,13 @@ export function AppSettingsMenu({ variant = 'icon', scope = 'full' }: AppSetting
   const ui = (key: Parameters<typeof chatUi>[1]) => chatUi(settings.locale, key);
   const landing = landingUi(settings.locale);
 
-  const voiceOptions = TTS_VOICES[settings.ttsLang].map((voice) => ({
-    value: voice.id,
-    label: settings.locale === 'en' ? voice.labelEn : voice.labelRu,
-  }));
+  const voiceOptions = useMemo(() => {
+    if (isLandingScope) return [];
+    return TTS_VOICES[settings.ttsLang].map((voice) => ({
+      value: voice.id,
+      label: settings.locale === 'en' ? voice.labelEn : voice.labelRu,
+    }));
+  }, [isLandingScope, settings.ttsLang, settings.locale]);
 
   const content = (
     <div className="app-settings-panel w-[min(100vw-2rem,18rem)] space-y-4 p-1">

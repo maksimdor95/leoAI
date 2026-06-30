@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { readAppSettings, writeAppSettings } from '@/lib/appSettingsStorage';
 import {
+  DEFAULT_APP_SETTINGS,
   type AppLocale,
   type AppSettings,
   type AppTheme,
@@ -35,11 +36,14 @@ function applySettingsToDocument(settings: AppSettings): void {
 }
 
 export function AppSettingsProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<AppSettings>(() => readAppSettings());
+  // SSR and first client paint must match; localStorage is read after hydration.
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
 
   useEffect(() => {
-    applySettingsToDocument(settings);
-  }, [settings]);
+    const stored = readAppSettings();
+    setSettings(stored);
+    applySettingsToDocument(stored);
+  }, []);
 
   const persist = useCallback((updater: AppSettings | ((prev: AppSettings) => AppSettings)) => {
     setSettings((prev) => {

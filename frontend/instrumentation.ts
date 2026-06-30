@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/nextjs';
 
 export async function register(): Promise<void> {
   const dsn = process.env.SENTRY_DSN;
-  if (!dsn) return;
+  if (!dsn || process.env.NODE_ENV !== 'production') return;
 
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     Sentry.init({
