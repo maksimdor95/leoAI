@@ -250,8 +250,8 @@ export default function ChatsPage() {
                     aria-label="Удалить чат"
                     className={
                       isHume
-                        ? 'absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity !text-[var(--color-smoke)] hover:!text-[var(--color-ink)] hover:!bg-[var(--color-bone)] !rounded-full'
-                        : 'absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500/20 hover:bg-red-500/40 border-red-500/50 text-red-400 hover:text-red-300'
+                        ? 'absolute top-3 right-3 z-10 !text-[var(--color-smoke)] hover:!text-[var(--color-ink)] hover:!bg-[var(--color-bone)] !rounded-full'
+                        : 'absolute top-2 right-2 z-10 bg-red-500/20 hover:bg-red-500/40 border-red-500/50 text-red-400 hover:text-red-300'
                     }
                     onClick={(e) => {
                       e.preventDefault();

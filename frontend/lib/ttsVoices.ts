@@ -6,7 +6,7 @@ export type TtsVoiceOption = {
   labelEn: string;
 };
 
-/** Голоса SpeechKit — как в Playground (ru / en). */
+/** Голоса SpeechKit API v1 (`speech/v1/tts:synthesize`). v3-only (dasha, julia, lera, alexander, madi) не включаем. */
 export const TTS_VOICES: Record<TtsLang, TtsVoiceOption[]> = {
   'ru-RU': [
     { id: 'filipp', labelRu: 'Филипп', labelEn: 'Filipp' },
@@ -14,12 +14,7 @@ export const TTS_VOICES: Record<TtsLang, TtsVoiceOption[]> = {
     { id: 'omazh', labelRu: 'Омаж', labelEn: 'Omazh' },
     { id: 'ermil', labelRu: 'Ермил', labelEn: 'Ermil' },
     { id: 'zahar', labelRu: 'Захар', labelEn: 'Zahar' },
-    { id: 'madi', labelRu: 'Мади', labelEn: 'Madi' },
-    { id: 'dasha', labelRu: 'Даша', labelEn: 'Dasha' },
-    { id: 'julia', labelRu: 'Юлия', labelEn: 'Julia' },
-    { id: 'lera', labelRu: 'Лера', labelEn: 'Lera' },
     { id: 'marina', labelRu: 'Марина', labelEn: 'Marina' },
-    { id: 'alexander', labelRu: 'Александр', labelEn: 'Alexander' },
   ],
   'en-US': [
     { id: 'jane', labelRu: 'Джейн', labelEn: 'Jane' },

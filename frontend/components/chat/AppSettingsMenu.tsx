@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SettingOutlined } from '@ant-design/icons';
-import { Button, Select, Switch } from 'antd';
+import { Button, Switch } from 'antd';
 import { useAppSettings } from '@/contexts/AppSettingsContext';
 import { chatUi } from '@/lib/chatUiCopy';
 import { landingSettingsChipLabel } from '@/lib/landingUiCopy';
 import { TTS_VOICES } from '@/lib/ttsVoices';
 import { useHumeTheme } from '@/lib/useHumeTheme';
 import { AppSettingsForm } from '@/components/settings/AppSettingsForm';
+import { TtsVoicePicker } from '@/components/settings/TtsVoicePicker';
 
 type AppSettingsMenuProps = {
   variant?: 'icon' | 'pill';
@@ -68,10 +69,8 @@ export function AppSettingsMenu({ variant = 'icon' }: AppSettingsMenuProps) {
       {settings.speechEnabled ? (
         <div className="space-y-2">
           <div className="app-settings-label">{ui('ttsVoice')}</div>
-          <Select
-            showSearch
-            optionFilterProp="label"
-            className="app-settings-select w-full"
+          <TtsVoicePicker
+            ariaLabel={ui('ttsVoice')}
             value={settings.ttsVoice}
             onChange={setTtsVoice}
             options={voiceOptions}
