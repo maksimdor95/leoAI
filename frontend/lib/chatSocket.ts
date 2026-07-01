@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { getToken } from '@/lib/auth';
+import { isAuthenticated } from '@/lib/auth';
 import {
   MessageReceivedPayload,
   SessionHistoryPayload,
@@ -36,8 +36,8 @@ export type ChatSocketConfig = {
 export function createChatSocket(config: ChatSocketConfig = {}) {
   const {
     url = getDefaultSocketUrl(),
-    // Use polling as primary transport - Yandex Serverless Containers don't support WebSocket
-    transports = ['polling'],
+    // polling first for restrictive networks; VPS + Caddy supports websocket via upgrade
+    transports = ['websocket', 'polling'],
     token,
     sessionId,
     createNew,
@@ -49,16 +49,17 @@ export function createChatSocket(config: ChatSocketConfig = {}) {
     onError,
   } = config;
 
-  const authToken = token ?? getToken();
+  const authToken = token;
 
-  if (!authToken) {
+  if (!authToken && !isAuthenticated()) {
     throw new Error('Токен не найден. Пользователь должен быть авторизован.');
   }
 
   const socket = io(url, {
     transports,
+    withCredentials: true,
     auth: {
-      token: authToken,
+      ...(authToken ? { token: authToken } : {}),
       ...(sessionId ? { sessionId } : {}),
       ...(createNew ? { createNew: true } : {}),
     },

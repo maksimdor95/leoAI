@@ -1,55 +1,49 @@
 /**
  * Authentication Utilities
- * Functions for managing authentication state
+ * Session is carried via httpOnly cookie (leo_access_token) + leo_auth flag cookie.
  */
 
+let cachedUserId: string | null = null;
+
 /**
- * Save token to localStorage
+ * @deprecated Token is no longer stored in localStorage. Kept for OAuth/analytics handoff only.
  */
 export function saveToken(token: string): void {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('token', token);
     void import('./analytics').then(({ identifyFromToken }) => identifyFromToken(token));
   }
 }
 
 /**
- * Get token from localStorage
+ * JWT is in httpOnly cookie — not readable from JS. Use isAuthenticated() or credentials: 'include'.
  */
 export function getToken(): string | null {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('token');
-  }
   return null;
 }
 
 /**
- * Remove token from localStorage
+ * @deprecated Use clearClientAuthState
  */
 export function removeToken(): void {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('token');
-  }
+  // no-op: token lives in httpOnly cookie only
 }
 
 /**
- * Clear all client-visible auth state.
+ * Clear client-visible auth state (logout also clears httpOnly cookie server-side).
  */
 export function clearClientAuthState(): void {
-  removeToken();
+  cachedUserId = null;
   if (typeof document !== 'undefined') {
     document.cookie = 'leo_auth=; Max-Age=0; path=/; SameSite=Lax';
+    document.cookie = 'leo_access_token=; Max-Age=0; path=/; SameSite=Lax';
   }
   void import('./analytics').then(({ resetAnalyticsUser }) => resetAnalyticsUser());
 }
 
 /**
- * Check if user is authenticated
+ * Check if user is authenticated (non-httpOnly session flag set by backend).
  */
 export function isAuthenticated(): boolean {
-  if (getToken() !== null) {
-    return true;
-  }
   if (typeof document !== 'undefined') {
     return document.cookie
       .split(';')
@@ -57,4 +51,37 @@ export function isAuthenticated(): boolean {
       .some((part) => part === 'leo_auth=1');
   }
   return false;
+}
+
+export async function getAuthenticatedUserId(): Promise<string | null> {
+  if (!isAuthenticated()) return null;
+  if (cachedUserId) return cachedUserId;
+  try {
+    const res = await fetch('/api/users/profile', { credentials: 'include' });
+    if (!res.ok) return null;
+    const profile = (await res.json()) as { id?: string };
+    cachedUserId = profile.id ?? null;
+    return cachedUserId;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * After login/register — refresh PostHog identity from profile API (cookie auth).
+ */
+export async function syncAnalyticsIdentity(): Promise<void> {
+  if (typeof window === 'undefined' || !isAuthenticated()) return;
+  try {
+    const { identifyFromUserId } = await import('./analytics');
+    const res = await fetch('/api/users/profile', { credentials: 'include' });
+    if (!res.ok) return;
+    const profile = (await res.json()) as { id?: string };
+    if (profile.id) {
+      cachedUserId = profile.id;
+      identifyFromUserId(profile.id);
+    }
+  } catch {
+    // analytics is best-effort
+  }
 }

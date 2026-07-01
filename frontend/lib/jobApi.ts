@@ -1,5 +1,4 @@
-import { getToken } from '@/lib/auth';
-import { buildAuthHeaders } from '@/lib/authHeaders';
+import { isAuthenticated } from '@/lib/auth';
 import { getPublicJobMatchingBaseUrl } from '@/lib/publicJobMatchingUrl';
 import { getPublicConversationBaseUrl } from '@/lib/publicApiBaseUrl';
 import type {
@@ -16,14 +15,13 @@ export async function fetchJobDetails(
   jobId: string,
   options?: { refresh?: boolean }
 ): Promise<JobDetailsResponse> {
-  const token = getToken();
-  if (!token) {
+  if (!isAuthenticated()) {
     throw new Error('Unauthorized');
   }
 
   const query = options?.refresh ? '?refresh=1' : '';
   const response = await fetch(`${jobsBaseUrl()}/api/jobs/${jobId}${query}`, {
-    headers: buildAuthHeaders(token),
+    credentials: 'include',
   });
 
   if (!response.ok) {
@@ -38,15 +36,14 @@ export async function recordJobInteraction(
   jobId: string,
   interactionType: JobInteractionType
 ): Promise<void> {
-  const token = getToken();
-  if (!token) {
+  if (!isAuthenticated()) {
     return;
   }
 
   await fetch(`${jobsBaseUrl()}/api/jobs/interaction`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
-      ...buildAuthHeaders(token),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ jobId, interactionType }),
@@ -59,15 +56,14 @@ export async function generateApplicationDraft(
   jobId: string,
   body: ApplicationDraftRequest
 ): Promise<ApplicationDraftResponse> {
-  const token = getToken();
-  if (!token) {
+  if (!isAuthenticated()) {
     throw new Error('Unauthorized');
   }
 
   const response = await fetch(`${conversationBaseUrl()}/api/jobs/${jobId}/application-draft`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
-      ...buildAuthHeaders(token),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),

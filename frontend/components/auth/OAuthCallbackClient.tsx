@@ -4,8 +4,8 @@ import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from 'antd';
 import { CheckCircleFilled, LoadingOutlined } from '@ant-design/icons';
-import { saveToken } from '@/lib/auth';
-import { captureEvent, identifyFromToken } from '@/lib/analytics';
+import { syncAnalyticsIdentity } from '@/lib/auth';
+import { captureEvent } from '@/lib/analytics';
 import { resolvePostAuthHref } from '@/lib/pendingAuthRedirect';
 
 function FloatingDots() {
@@ -38,7 +38,6 @@ export function OAuthCallbackClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const success = searchParams.get('success') ?? undefined;
-  const token = searchParams.get('token') ?? undefined;
   const error = searchParams.get('error') ?? undefined;
   const kind = searchParams.get('kind') ?? undefined;
   const provider = searchParams.get('provider') ?? undefined;
@@ -59,13 +58,10 @@ export function OAuthCallbackClient() {
       return;
     }
 
-    if (token) {
-      saveToken(token);
-      identifyFromToken(token);
-      captureEvent('user_logged_in', { method: 'oauth', source: 'oauth_callback' });
-    }
+    void syncAnalyticsIdentity();
+    captureEvent('user_logged_in', { method: 'oauth', source: 'oauth_callback' });
     router.replace(resolvePostAuthHref());
-  }, [isHhIntegration, isSuccess, returnTo, router, token]);
+  }, [isHhIntegration, isSuccess, returnTo, router]);
 
   return (
     <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-[#050913] text-white px-6">

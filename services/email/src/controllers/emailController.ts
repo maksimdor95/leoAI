@@ -260,7 +260,10 @@ function isAllowedResetUrl(resetUrl: string): boolean {
 
 function assertInternalCaller(req: Request): boolean {
   const expected = process.env.INTERNAL_API_KEY?.trim();
-  if (!expected) return true;
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (!expected) {
+    return !isProduction;
+  }
   const provided = req.header('X-Internal-Key')?.trim();
   return provided === expected;
 }

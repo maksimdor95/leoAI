@@ -3,8 +3,8 @@
 import { Suspense, useEffect } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { PostHogProvider as PHProvider } from 'posthog-js/react';
-import { capturePageView, initPostHog, identifyFromToken, posthog } from '@/lib/analytics';
-import { getToken } from '@/lib/auth';
+import { capturePageView, initPostHog, posthog } from '@/lib/analytics';
+import { isAuthenticated, syncAnalyticsIdentity } from '@/lib/auth';
 
 function PostHogPageView(): null {
   const pathname = usePathname();
@@ -24,8 +24,9 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!enabled) return;
     initPostHog();
-    const token = getToken();
-    if (token) identifyFromToken(token);
+    if (isAuthenticated()) {
+      void syncAnalyticsIdentity();
+    }
   }, [enabled]);
 
   if (!enabled) return <>{children}</>;

@@ -49,7 +49,7 @@ router.get('/:jobId', authenticateToken, jobsController.getJobDetails);
  * POST /api/jobs/refresh
  * Trigger generic job scraping (diverse seed). Для админ-обновления каталога.
  */
-router.post('/refresh', authenticateToken, jobsController.refreshJobs);
+router.post('/refresh', requireJobCatalogAccess, jobsController.refreshJobs);
 
 /**
  * POST /api/jobs/scrape/for-user/:userId

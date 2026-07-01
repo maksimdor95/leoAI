@@ -1,10 +1,9 @@
 /**
  * REST-based Chat API Client
- * Works reliably in serverless environments (Yandex Serverless Containers)
+ * Fallback when WebSocket is unavailable (e.g. restrictive proxies).
  */
 
 import { getToken } from '@/lib/auth';
-import { buildAuthHeaders } from '@/lib/authHeaders';
 import { Message, type ProfileSummary } from '@/types/chat';
 import type { ClientPreferences, TtsPreferences } from '@/lib/ttsVoices';
 import { getPublicConversationBaseUrl } from './publicApiBaseUrl';
@@ -142,8 +141,6 @@ class ChatApiClient {
     options: RequestInit = {},
     timeoutMs?: number
   ): Promise<T> {
-    const token = this.token || getToken();
-
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(),
@@ -158,7 +155,6 @@ class ChatApiClient {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          ...buildAuthHeaders(token || undefined, true),
           ...options.headers,
         },
       });
@@ -198,7 +194,7 @@ class ChatApiClient {
       intent?: 'vacancy_analyze';
     } = {}
   ): Promise<void> {
-    this.token = options.token || getToken();
+    this.token = options.token || getToken() || undefined;
 
     try {
       const session = await this.request<ChatSession>('/api/chat/session', {
@@ -492,13 +488,11 @@ class ChatApiClient {
     if (!this.sessionId) {
       throw new Error('Сессия не инициализирована');
     }
-    const token = this.token || getToken();
     const response = await fetch(
       `${this.baseUrl}/api/chat/session/${this.sessionId}/resume-file?format=${encodeURIComponent(format)}`,
       {
         method: 'GET',
         credentials: 'include',
-        headers: buildAuthHeaders(token || undefined, true),
       }
     );
     if (!response.ok) {
@@ -549,13 +543,11 @@ class ChatApiClient {
     if (!this.sessionId) {
       throw new Error('Сессия не инициализирована');
     }
-    const token = this.token || getToken();
     const response = await fetch(
       `${this.baseUrl}/api/chat/session/${this.sessionId}/summary-file?format=${encodeURIComponent(format)}`,
       {
         method: 'GET',
         credentials: 'include',
-        headers: buildAuthHeaders(token || undefined, true),
       }
     );
     if (!response.ok) {

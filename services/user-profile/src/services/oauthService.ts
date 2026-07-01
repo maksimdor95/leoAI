@@ -103,11 +103,10 @@ export class OAuthService {
     });
   }
 
-  static getSuccessRedirect(provider: OAuthProvider, token: string): string {
+  static getSuccessRedirect(provider: OAuthProvider): string {
     const url = new URL(getFrontendCallbackUrl('success'));
     url.searchParams.set('provider', provider);
     url.searchParams.set('success', '1');
-    url.searchParams.set('token', token);
     return url.toString();
   }
 

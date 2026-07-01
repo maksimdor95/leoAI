@@ -4,7 +4,6 @@
  */
 
 import axios from 'axios';
-import { buildAuthHeaders } from './authHeaders';
 import { getPublicApiBaseUrl, getPublicConversationBaseUrl } from './publicApiBaseUrl';
 
 const API_URL = getPublicApiBaseUrl();
@@ -17,29 +16,7 @@ const api = axios.create({
   },
 });
 
-// Add token to requests if available (except public endpoints)
-const PUBLIC_ENDPOINTS = [
-  '/api/users/register',
-  '/api/users/login',
-  '/api/users/forgot-password',
-  '/api/users/reset-password',
-  '/api/users/reset-password/validate',
-];
-
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    // Don't add Authorization header for public endpoints
-    // Yandex Serverless Containers validates this header at infrastructure level
-    const isPublicEndpoint = PUBLIC_ENDPOINTS.some((endpoint) => config.url?.includes(endpoint));
-    if (!isPublicEndpoint) {
-      const token = localStorage.getItem('token');
-      if (token) {
-        Object.assign(config.headers, buildAuthHeaders(token));
-      }
-    }
-  }
-  return config;
-});
+api.interceptors.request.use((config) => config);
 
 const CONVERSATION_API_URL = getPublicConversationBaseUrl();
 
@@ -52,15 +29,7 @@ const conversationApi = axios.create({
 });
 
 // Add token to conversation API requests if available
-conversationApi.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('token');
-    if (token) {
-      Object.assign(config.headers, buildAuthHeaders(token));
-    }
-  }
-  return config;
-});
+conversationApi.interceptors.request.use((config) => config);
 
 // User API
 export const userAPI = {

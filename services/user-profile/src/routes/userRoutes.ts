@@ -7,12 +7,13 @@ import { Router } from 'express';
 import { UserController } from '../controllers/userController';
 import { HhIntegrationController } from '../controllers/hhIntegrationController';
 import { authenticateToken } from '../middleware/auth';
+import { authRateLimit, passwordResetRateLimit } from '../middleware/ipRateLimit';
 
 const router = Router();
 
 // Public routes
-router.post('/', UserController.registerValidation, UserController.register);
-router.post('/register', UserController.registerValidation, UserController.register);
+router.post('/', authRateLimit, UserController.registerValidation, UserController.register);
+router.post('/register', authRateLimit, UserController.registerValidation, UserController.register);
 
 router.get('/login', (_req, res) => {
   res.status(405).set('Allow', 'POST').json({
@@ -20,11 +21,11 @@ router.get('/login', (_req, res) => {
   });
 });
 
-router.post('/login', UserController.loginValidation, UserController.login);
+router.post('/login', authRateLimit, UserController.loginValidation, UserController.login);
 router.post('/logout', UserController.logout);
-router.post('/forgot-password', UserController.forgotPasswordValidation, UserController.forgotPassword);
-router.post('/reset-password', UserController.resetPasswordValidation, UserController.resetPassword);
-router.get('/reset-password/validate', UserController.validateResetToken);
+router.post('/forgot-password', passwordResetRateLimit, UserController.forgotPasswordValidation, UserController.forgotPassword);
+router.post('/reset-password', passwordResetRateLimit, UserController.resetPasswordValidation, UserController.resetPassword);
+router.get('/reset-password/validate', passwordResetRateLimit, UserController.validateResetToken);
 router.get('/oauth/hh/start', authenticateToken, HhIntegrationController.oauthStart);
 router.get('/oauth/hh/callback', HhIntegrationController.oauthCallback);
 router.get('/oauth/callback', HhIntegrationController.oauthCallback);

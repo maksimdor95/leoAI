@@ -4,6 +4,7 @@
  */
 
 import { logger } from './logger';
+import { appendJwtSecretValidation } from './jwtSecretPolicy';
 
 export interface ValidationResult {
   valid: boolean;
@@ -84,13 +85,7 @@ export function validateConfig(): ValidationResult {
     warnings.push('USE_MOCK_JOBS is enabled - using mock job data instead of real scraping');
   }
 
-  // Check if using default JWT secret (security warning)
-  const jwtSecret = process.env.JWT_SECRET;
-  if (jwtSecret === 'your_jwt_secret_key_here_change_in_production' || !jwtSecret) {
-    warnings.push(
-      'JWT_SECRET is not set or using default value - this is insecure for production!'
-    );
-  }
+  appendJwtSecretValidation(errors, warnings);
 
   return {
     valid: errors.length === 0,

@@ -158,7 +158,15 @@ app.use(
 );
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 100 }));
-app.use(express.static(publicDir));
+
+const isProduction = (process.env.NODE_ENV || 'development') === 'production';
+if (!isProduction) {
+  app.use(express.static(publicDir));
+} else {
+  app.get('/test-client.html', (_req, res) => {
+    res.status(404).json({ error: 'Not found' });
+  });
+}
 
 // Request logging
 app.use((req, _res, next) => {
@@ -181,7 +189,7 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       websocket: 'WS /socket.io',
-      testPage: '/test-client.html',
+      ...(isProduction ? {} : { testPage: '/test-client.html' }),
     },
   });
 });
@@ -193,7 +201,7 @@ async function authenticateRequest(
   next: express.NextFunction
 ): Promise<void> {
   try {
-    // Support both X-Auth-Token (for Yandex Serverless) and Authorization (for local dev)
+    // Support X-Auth-Token and Authorization (Bearer) plus httpOnly cookie
     const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
     const headerToken =
       typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
@@ -358,7 +366,7 @@ app.delete('/api/conversations/:id', authenticateRequest, async (req, res) => {
 });
 
 // ============================================
-// REST API for Chat (Serverless-compatible)
+// REST API for Chat (alternative to WebSocket)
 // ============================================
 
 // Create or get chat session
@@ -1290,7 +1298,9 @@ io.use(async (socket, next) => {
   try {
     logger.info(`WebSocket handshake attempt from ${socket.handshake.address}`);
 
-    const token = socket.handshake.auth?.token as string | undefined;
+    const token =
+      (socket.handshake.auth?.token as string | undefined) ||
+      extractCookieToken(socket.handshake.headers.cookie, 'leo_access_token');
     if (!token) {
       logger.error('Authentication error: No token provided');
       next(new Error('Authentication error: No token provided'));
@@ -1599,7 +1609,9 @@ async function start() {
       logger.info(`Conversation Service running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`WebSocket: ws://localhost:${PORT}/socket.io`);
-      logger.info(`Test page: http://localhost:${PORT}/test-client.html`);
+      if (!isProduction) {
+        logger.info(`Test page: http://localhost:${PORT}/test-client.html`);
+      }
     });
   } catch (error: unknown) {
     logger.error('Failed to start server:', error);

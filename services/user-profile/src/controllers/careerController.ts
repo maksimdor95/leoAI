@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { CareerService } from '../services/careerService';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
+import { assertResumeMagicBytes } from '../utils/fileMagicBytes';
 
 const upsertProfileSchema = z.object({
   track_id: z.string().uuid().optional(),
@@ -181,6 +182,12 @@ export class CareerController {
       }
       if (!req.file?.buffer) {
         return res.status(400).json({ error: 'Файл не передан. Используйте поле file (multipart/form-data).' });
+      }
+      try {
+        assertResumeMagicBytes(req.file.buffer, req.file.originalname || 'resume');
+      } catch (magicError: unknown) {
+        const message = magicError instanceof Error ? magicError.message : 'Invalid file';
+        return res.status(400).json({ error: message });
       }
       const trackId =
         typeof req.body?.track_id === 'string' && req.body.track_id.length > 0

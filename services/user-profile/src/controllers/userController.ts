@@ -54,7 +54,13 @@ export class UserController {
    */
   static registerValidation = [
     body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    body('password')
+      .isLength({ min: 8 })
+      .withMessage('Password must be at least 8 characters')
+      .matches(/[A-Za-z]/)
+      .withMessage('Password must contain at least one letter')
+      .matches(/\d/)
+      .withMessage('Password must contain at least one digit'),
     body('first_name').optional().isString().trim(),
     body('last_name').optional().isString().trim(),
   ];
@@ -243,7 +249,7 @@ export class UserController {
 
       const token = await OAuthService.exchangeCodeAndLogin(provider, code, state);
       setAuthCookies(res, token);
-      return res.redirect(OAuthService.getSuccessRedirect(provider, token));
+      return res.redirect(OAuthService.getSuccessRedirect(provider));
     } catch (error: unknown) {
       const reason = getErrorMessage(error);
       logger.error('OAuth callback error:', error);
@@ -282,7 +288,13 @@ export class UserController {
 
   static resetPasswordValidation = [
     body('token').isString().trim().notEmpty().withMessage('Reset token is required'),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    body('password')
+      .isLength({ min: 8 })
+      .withMessage('Password must be at least 8 characters')
+      .matches(/[A-Za-z]/)
+      .withMessage('Password must contain at least one letter')
+      .matches(/\d/)
+      .withMessage('Password must contain at least one digit'),
   ];
 
   static async resetPassword(req: Request, res: Response) {

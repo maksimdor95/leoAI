@@ -4,6 +4,7 @@
  */
 
 import { logger } from './logger';
+import { appendJwtSecretValidation } from './jwtSecretPolicy';
 
 export interface ValidationResult {
   valid: boolean;
@@ -49,13 +50,7 @@ export function validateConfig(): ValidationResult {
     warnings.push('Redis configuration may be incomplete (REDIS_HOST or REDIS_PORT not set)');
   }
 
-  // Check if using default JWT secret (security warning)
-  const jwtSecret = process.env.JWT_SECRET;
-  if (jwtSecret === 'your_jwt_secret_key_here_change_in_production' || !jwtSecret) {
-    warnings.push(
-      'JWT_SECRET is not set or using default value - this is insecure for production!'
-    );
-  }
+  appendJwtSecretValidation(errors, warnings);
 
   return {
     valid: errors.length === 0,

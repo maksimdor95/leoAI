@@ -6,6 +6,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../services/authService';
 import { logger } from '../utils/logger';
+import { extractAccessToken } from '../utils/extractAccessToken';
 
 export interface AuthRequest extends Request {
   user?: { userId: string; email: string };
@@ -20,13 +21,12 @@ export async function authenticateToken(
   next: NextFunction
 ): Promise<void> {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = extractAccessToken(req);
+    if (!token) {
       res.status(401).json({ error: 'Unauthorized: No token provided' });
       return;
     }
 
-    const token = authHeader.substring(7);
     const user = await verifyToken(token);
     if (!user) {
       res.status(401).json({ error: 'Unauthorized: Invalid token' });

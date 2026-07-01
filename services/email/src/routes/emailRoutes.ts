@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import * as emailController from '../controllers/emailController';
+import { consultationRateLimit } from '../middleware/ipRateLimit';
 
 const router = Router();
 
@@ -31,7 +32,7 @@ router.post('/send-resume-package', authenticateToken, emailController.sendResum
  * POST /api/email/send-consultation
  * Public consultation lead from support widget
  */
-router.post('/send-consultation', emailController.sendConsultation);
+router.post('/send-consultation', consultationRateLimit, emailController.sendConsultation);
 
 /**
  * POST /api/email/send-password-reset

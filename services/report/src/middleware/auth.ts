@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
+import { extractAccessToken } from '../utils/extractAccessToken';
 
 export interface AuthenticatedRequest extends Request {
   userId?: string;
@@ -21,14 +22,14 @@ export function authMiddleware(
 ): void {
   try {
     const raw = req.headers['x-auth-token'] || req.headers.authorization;
-    const authHeader = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0] : '';
+    const headerToken = typeof raw === 'string' && raw.startsWith('Bearer ') ? raw.substring(7) : null;
+    const token = headerToken || extractAccessToken(req);
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       res.status(401).json({ error: 'Authorization header required' });
       return;
     }
 
-    const token = authHeader.substring(7);
     const secret = process.env.JWT_SECRET;
     if (!secret || secret === 'your-secret-key-change-in-production' || secret === 'dev-secret-key') {
       logger.error('JWT_SECRET is not configured for report service');

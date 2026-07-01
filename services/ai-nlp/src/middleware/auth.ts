@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
+import { extractAccessToken } from '../utils/extractAccessToken';
 
 interface JwtPayload {
   userId?: string;
@@ -19,9 +20,7 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
     return;
   }
 
-  const raw = req.headers['x-auth-token'] || req.headers.authorization;
-  const authHeader = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0] : '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+  const token = extractAccessToken(req);
 
   if (!token) {
     res.status(401).json({ error: 'Authorization header required' });

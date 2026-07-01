@@ -61,6 +61,12 @@ export function identifyFromToken(token: string): void {
   if (userId) posthog.identify(userId);
 }
 
+export function identifyFromUserId(userId: string): void {
+  if (!isEnabled() || !userId) return;
+  initPostHog();
+  posthog.identify(userId);
+}
+
 export function resetAnalyticsUser(): void {
   if (!isEnabled()) return;
   posthog.reset();

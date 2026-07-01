@@ -5,15 +5,15 @@ WebSocket/REST сервис для общения пользователя с AI
 ## Технологии
 
 - **Node.js** + **TypeScript**
-- **Socket.io** - WebSocket сервер (для локальной разработки)
-- **Express** - HTTP сервер (REST API для Serverless)
+- **Socket.io** - WebSocket (production на VPS через Caddy)
+- **Express** - HTTP сервер (REST API, альтернатива WebSocket)
 - **Redis** - хранение сессий
 - **Axios** - интеграция с AI/NLP сервисом
 
 ## Функциональность
 
-- ✅ REST API для чата (основной метод для Production/Serverless)
-- ✅ WebSocket соединение для локальной разработки
+- ✅ REST API для чата (fallback / polling-friendly клиенты)
+- ✅ WebSocket (основной транспорт на VPS)
 - ✅ **Мульти-продуктовая поддержка** (Jack/LEO и wannanew)
 - ✅ **Регистр сценариев** с динамической загрузкой
 - ✅ Управление сессиями разговора (с `product` и `scenarioId`)

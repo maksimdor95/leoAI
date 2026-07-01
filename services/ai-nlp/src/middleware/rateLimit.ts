@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import type { AuthenticatedRequest } from './auth';
 
 type Bucket = {
   count: number;
@@ -10,9 +11,13 @@ const MAX_REQUESTS = Number(process.env.AI_RATE_LIMIT_MAX_REQUESTS || 120);
 const buckets = new Map<string, Bucket>();
 
 function getClientKey(req: Request): string {
-  const headerUser = req.headers['x-user-id'];
-  if (typeof headerUser === 'string' && headerUser.trim().length > 0) {
-    return `user:${headerUser.trim()}`;
+  const authReq = req as AuthenticatedRequest;
+  if (authReq.userId) {
+    return `user:${authReq.userId}`;
+  }
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return `ip:${forwarded.split(',')[0]?.trim()}`;
   }
   return `ip:${req.ip || req.socket.remoteAddress || 'unknown'}`;
 }

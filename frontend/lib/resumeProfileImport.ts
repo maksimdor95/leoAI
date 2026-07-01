@@ -2,8 +2,7 @@
  * Загрузка резюме на user-profile, извлечение полей через ai-nlp.
  */
 
-import { getToken } from './auth';
-import { buildAuthHeaders } from './authHeaders';
+import { isAuthenticated } from './auth';
 import { getPublicAiBaseUrl, getPublicApiBaseUrl } from './publicApiBaseUrl';
 
 const getUserProfileBaseUrl = () => getPublicApiBaseUrl();
@@ -43,14 +42,17 @@ export type UploadResumeResponse = {
   } | null;
 };
 
+function assertAuth(): void {
+  if (!isAuthenticated()) {
+    throw new Error('Нужна авторизация');
+  }
+}
+
 export async function uploadResumeFile(
   file: File,
   options?: { trackId?: string }
 ): Promise<UploadResumeResponse> {
-  const token = getToken();
-  if (!token) {
-    throw new Error('Нужна авторизация');
-  }
+  assertAuth();
   const fd = new FormData();
   fd.append('file', file);
   if (options?.trackId) {
@@ -58,9 +60,7 @@ export async function uploadResumeFile(
   }
   const res = await fetch(`${getUserProfileBaseUrl()}/api/career/resumes/upload`, {
     method: 'POST',
-    headers: {
-      ...buildAuthHeaders(token),
-    },
+    credentials: 'include',
     body: fd,
   });
   const data = await res.json().catch(() => ({}));
@@ -74,14 +74,11 @@ export async function extractProfileFromResumeText(
   resumeText: string,
   scenarioId: string
 ): Promise<{ fields: Record<string, unknown>; notes?: string }> {
-  const token = getToken();
-  if (!token) {
-    throw new Error('Нужна авторизация');
-  }
+  assertAuth();
   const res = await fetch(`${getAiBaseUrl()}/api/ai/extract-profile-from-resume`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
-      ...buildAuthHeaders(token, true),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ resumeText, scenarioId }),
@@ -101,13 +98,10 @@ export async function extractProfileFromResumeText(
 }
 
 export async function listResumes(trackId?: string): Promise<UploadResumeResponse['resume'][]> {
-  const token = getToken();
-  if (!token) {
-    throw new Error('Нужна авторизация');
-  }
+  assertAuth();
   const q = trackId ? `?track_id=${encodeURIComponent(trackId)}` : '';
   const res = await fetch(`${getUserProfileBaseUrl()}/api/career/resumes${q}`, {
-    headers: buildAuthHeaders(token),
+    credentials: 'include',
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -117,13 +111,10 @@ export async function listResumes(trackId?: string): Promise<UploadResumeRespons
 }
 
 export async function deleteResume(resumeId: string): Promise<void> {
-  const token = getToken();
-  if (!token) {
-    throw new Error('Нужна авторизация');
-  }
+  assertAuth();
   const res = await fetch(`${getUserProfileBaseUrl()}/api/career/resumes/${resumeId}`, {
     method: 'DELETE',
-    headers: buildAuthHeaders(token),
+    credentials: 'include',
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
