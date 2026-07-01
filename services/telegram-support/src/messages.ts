@@ -34,6 +34,13 @@ export function receivedAckText(): string {
   return 'Спасибо! Обращение передано в поддержку. Мы ответим вам здесь в Telegram.';
 }
 
+export function forwardDelayedAckText(): string {
+  return (
+    'Мы получили ваше сообщение. Сейчас есть задержка с передачей в группу поддержки — ' +
+    'напишите ещё раз через минуту, если ответа не будет.'
+  );
+}
+
 const SOURCE_LABELS: Record<string, string> = {
   support_site: 'кнопка на сайте',
   privacy: 'политика конфиденциальности',

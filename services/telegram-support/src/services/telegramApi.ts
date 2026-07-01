@@ -1,5 +1,6 @@
-import { BOT_COMMANDS } from '../botCommands';
 import { config } from '../config';
+import { markTelegramSuccess } from './connectionState';
+import { BOT_COMMANDS } from '../botCommands';
 import type { TelegramApiResponse, TelegramMessage, TelegramUpdate } from '../types/telegram';
 import { logger } from '../utils/logger';
 import { telegramFetch } from './telegramFetch';
@@ -102,6 +103,7 @@ export async function setMyCommands(): Promise<void> {
 
 export async function verifyBot(): Promise<void> {
   const me = await getMe();
+  markTelegramSuccess();
   logger.info(`Bot connected: @${me.username || 'unknown'}`);
   try {
     await setMyCommands();
@@ -111,7 +113,6 @@ export async function verifyBot(): Promise<void> {
   }
 }
 
-/** WARP→Telegram on RU VPS can be flaky; retry instead of crashing the whole service. */
 export async function verifyBotWithRetry(
   maxAttempts = 12,
   delayMs = 5000
@@ -128,4 +129,23 @@ export async function verifyBotWithRetry(
     }
   }
   return false;
+}
+
+export async function withTelegramRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+  delayMs = 2000
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+      }
+    }
+  }
+  throw lastError;
 }

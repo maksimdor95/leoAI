@@ -6,6 +6,7 @@ import {
   helpText,
   privacyText,
   receivedAckText,
+  forwardDelayedAckText,
   welcomeText,
 } from '../messages';
 import * as telegram from '../services/telegramApi';
@@ -67,8 +68,32 @@ export async function handlePrivateMessage(message: TelegramMessage): Promise<vo
     return;
   }
 
-  await forwardToSupport(message, from);
-  await telegram.sendMessage(userId, receivedAckText());
+  await handleSupportMessage(message, from);
+}
+
+async function handleSupportMessage(
+  message: TelegramMessage,
+  from: NonNullable<TelegramMessage['from']>
+): Promise<void> {
+  const userId = from.id;
+
+  try {
+    await telegram.withTelegramRetry(() => telegram.sendMessage(userId, receivedAckText()));
+  } catch (error) {
+    logger.error('Failed to send ack to user', { userId, error });
+    return;
+  }
+
+  try {
+    await telegram.withTelegramRetry(() => forwardToSupport(message, from));
+  } catch (error) {
+    logger.error('Failed to forward ticket to support group', { userId, error });
+    try {
+      await telegram.sendMessage(userId, forwardDelayedAckText());
+    } catch (notifyError) {
+      logger.error('Failed to notify user about forward delay', { userId, error: notifyError });
+    }
+  }
 }
 
 async function forwardToSupport(

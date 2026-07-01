@@ -1,9 +1,14 @@
 import { handleUpdate } from './supportRouter';
-import * as telegram from './telegramApi';
+import { getConnectionState, markTelegramError, markTelegramSuccess } from './connectionState';
+import * as telegram from '../services/telegramApi';
 import { logger } from '../utils/logger';
 
 let running = false;
 let offset = 0;
+
+const POLL_OK_MS = 3000;
+const POLL_BACKOFF_MIN_MS = 3000;
+const POLL_BACKOFF_MAX_MS = 60_000;
 
 export async function startPolling(): Promise<void> {
   if (running) return;
@@ -17,16 +22,33 @@ export async function startPolling(): Promise<void> {
   logger.info('Long polling started. Set TELEGRAM_WEBHOOK_URL for webhook mode.');
 
   const loop = async (): Promise<void> => {
+    let backoffMs = POLL_BACKOFF_MIN_MS;
+
     while (running) {
       try {
         const updates = await telegram.getUpdates(offset);
+        markTelegramSuccess();
+        backoffMs = POLL_BACKOFF_MIN_MS;
+
         for (const update of updates) {
           offset = update.update_id + 1;
           await handleUpdate(update);
         }
+
+        await sleep(POLL_OK_MS);
       } catch (error) {
-        logger.error('Polling error', error);
-        await sleep(3000);
+        markTelegramError();
+        const { consecutiveErrors } = getConnectionState();
+
+        if (consecutiveErrors === 1 || consecutiveErrors % 10 === 0) {
+          logger.warn(
+            `Polling error (retry in ${backoffMs}ms, streak=${consecutiveErrors})`,
+            error
+          );
+        }
+
+        await sleep(backoffMs);
+        backoffMs = Math.min(backoffMs * 2, POLL_BACKOFF_MAX_MS);
       }
     }
   };

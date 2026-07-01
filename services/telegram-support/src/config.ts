@@ -36,8 +36,18 @@ function optionalProxyUrl(): string {
   );
 }
 
+const strictConfigFlag = process.env.TELEGRAM_STRICT_CONFIG?.trim().toLowerCase();
+
+function resolveBindHost(): string {
+  const explicit = process.env.BIND_HOST?.trim() || process.env.TELEGRAM_BIND_HOST?.trim();
+  if (explicit) return explicit;
+  if (nodeEnv === 'production') return '127.0.0.1';
+  return '0.0.0.0';
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3008', 10),
+  bindHost: resolveBindHost(),
   nodeEnv,
   botToken: () => requireEnv('TELEGRAM_BOT_TOKEN'),
   supportChatId: () => Number(requireEnv('TELEGRAM_SUPPORT_CHAT_ID')),
@@ -71,12 +81,30 @@ export function validateConfig(): void {
   if (!Number.isFinite(chatId)) {
     throw new Error('TELEGRAM_SUPPORT_CHAT_ID must be a number');
   }
+
+  const strict =
+    strictConfigFlag === 'true' ||
+    strictConfigFlag === '1' ||
+    nodeEnv === 'production';
+
+  if (strict && !config.operatorIds.length) {
+    logger.warn(
+      'TELEGRAM_OPERATOR_IDS is empty — any member of the support group can reply to users'
+    );
+  }
+
+  if (strict && !config.usePolling && !config.webhookSecret) {
+    throw new Error('TELEGRAM_WEBHOOK_SECRET is required in webhook mode (TELEGRAM_STRICT_CONFIG)');
+  }
+
   logger.info('Telegram support config OK', {
     supportChatId: chatId,
     siteUrl: config.siteUrl,
+    bindHost: config.bindHost,
     usePolling: config.usePolling,
     webhook: config.webhookUrl || (config.ngrokAutosync ? 'ngrok-autosync' : 'none'),
     proxy: config.proxyUrl() ? 'enabled' : 'disabled',
     operators: config.operatorIds.length ? config.operatorIds.length : 'any',
+    strictConfig: strict,
   });
 }

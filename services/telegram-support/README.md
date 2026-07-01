@@ -129,3 +129,47 @@ cd services/telegram-support && npm run sync-webhook-from-ngrok   # термин
 
 - Сервис: **3008**
 - Webhook path: `POST /telegram/webhook`
+
+## Надёжность и безопасность (VPS)
+
+### Не падать при рестарте / нестабильном WARP
+
+- Сервис поднимает HTTP **до** проверки Bot API и не завершается при временной недоступности Telegram.
+- Polling с экспоненциальным backoff (3s → 60s), автоматически восстанавливается.
+- `/health` возвращает `503` + `telegram.connected: false`, пока API недоступен — видно в `https://leo-ai.ru/api/health`.
+
+### Безопасность
+
+| Переменная | Зачем |
+|------------|--------|
+| `TELEGRAM_OPERATOR_IDS` | Только эти Telegram ID могут отвечать пользователям из группы LEO Support |
+| `TELEGRAM_WEBHOOK_SECRET` | Обязателен в webhook-режиме (`TELEGRAM_STRICT_CONFIG=true`) |
+| `BIND_HOST=127.0.0.1` | Порт 3008 только на localhost; снаружи не доступен |
+| `TELEGRAM_STRICT_CONFIG=true` | Предупреждения о пустых операторах / секрете webhook |
+
+Рекомендуемый фрагмент `.env.staging.local`:
+
+```env
+TELEGRAM_STRICT_CONFIG=true
+BIND_HOST=127.0.0.1
+TELEGRAM_OPERATOR_IDS=564582497
+TELEGRAM_PROXY_URL=socks5h://127.0.0.1:40000
+TELEGRAM_USE_POLLING=true
+```
+
+### Автоперезапуск (systemd)
+
+Не зависеть от `dev:up` — отдельный unit с `Restart=always`:
+
+`infrastructure/systemd/telegram-support.service.example`
+
+### Webhook через leo-ai.ru (без ngrok)
+
+На RU VPS ngrok с IP сервера не работает. Альтернатива polling:
+
+1. В Caddy добавить `handle /telegram/webhook → 127.0.0.1:3008` (см. `infrastructure/caddy/Caddyfile.example`)
+2. `TELEGRAM_USE_POLLING=false`
+3. `TELEGRAM_WEBHOOK_URL=https://leo-ai.ru/telegram/webhook`
+4. `TELEGRAM_WEBHOOK_SECRET=<длинная случайная строка>`
+
+Исходящие (`sendMessage`) по-прежнему идут через `TELEGRAM_PROXY_URL`.

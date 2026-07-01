@@ -9,6 +9,7 @@ import { startPolling } from './services/polling';
 import { verifyBotWithRetry } from './services/telegramApi';
 import { registerTelegramWebhook } from './services/webhookRegistration';
 import { ticketCount } from './services/ticketStore';
+import { getConnectionState } from './services/connectionState';
 import { logger } from './utils/logger';
 
 const app = express();
@@ -29,10 +30,21 @@ app.get('/', (_req, res) => {
 });
 
 app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
+  const telegram = getConnectionState();
+  const ok = telegram.connected;
+
+  res.status(ok ? 200 : 503).json({
+    status: ok ? 'ok' : 'degraded',
     mode: config.usePolling ? 'polling' : 'webhook',
     openTickets: ticketCount(),
+    telegram: {
+      connected: telegram.connected,
+      lastSuccessAt: telegram.lastSuccessAt
+        ? new Date(telegram.lastSuccessAt).toISOString()
+        : null,
+      lastErrorAt: telegram.lastErrorAt ? new Date(telegram.lastErrorAt).toISOString() : null,
+      consecutiveErrors: telegram.consecutiveErrors,
+    },
   });
 });
 
@@ -42,8 +54,8 @@ async function start(): Promise<void> {
   validateConfig();
 
   await new Promise<void>((resolve) => {
-    app.listen(config.port, '0.0.0.0', () => {
-      logger.info(`Telegram Support Service on http://0.0.0.0:${config.port}`);
+    app.listen(config.port, config.bindHost, () => {
+      logger.info(`Telegram Support Service on http://${config.bindHost}:${config.port}`);
       logger.info(`Site URL: ${config.siteUrl}`);
       resolve();
     });
