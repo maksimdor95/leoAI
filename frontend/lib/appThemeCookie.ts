@@ -1,4 +1,5 @@
 import type { AppLocale, AppSettings, AppTheme } from '@/types/appSettings';
+import { localeToTtsLang } from '@/lib/ttsVoices';
 
 export const APP_THEME_COOKIE = 'leo.app.theme';
 export const APP_LOCALE_COOKIE = 'leo.app.locale';
@@ -17,6 +18,20 @@ export function themeToCookieValue(theme: AppTheme): DocumentDataTheme {
 
 export function localeFromCookie(value: string | undefined): AppLocale {
   return value === 'en' ? 'en' : 'ru';
+}
+
+/** SSR/hydration: align React settings with html data-theme from cookies. */
+export function appSettingsFromCookies(
+  themeCookie: string | undefined,
+  localeCookie: string | undefined
+): Pick<AppSettings, 'locale' | 'theme' | 'ttsLang'> {
+  const locale = localeFromCookie(localeCookie);
+  const theme: AppTheme = dataThemeFromCookie(themeCookie) === 'hume' ? 'hume-light' : 'leo-dark';
+  return {
+    locale,
+    theme,
+    ttsLang: localeToTtsLang(locale),
+  };
 }
 
 /** Client-only: keep cookie in sync with localStorage for SSR theme on refresh. */

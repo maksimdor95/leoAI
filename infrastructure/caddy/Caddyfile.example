@@ -87,6 +87,14 @@ leo-ai.ru {
     handle @conversations_api {
         reverse_proxy 127.0.0.1:3002
     }
+    # application-draft lives on conversation, not job-matching — before @jobs_api catch-all.
+    @jobs_application_draft {
+        method POST
+        path /api/jobs/*/application-draft
+    }
+    handle @jobs_application_draft {
+        reverse_proxy 127.0.0.1:3002
+    }
     @ai_api {
         path /api/ai /api/ai/*
     }

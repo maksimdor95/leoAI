@@ -49,13 +49,20 @@ const QUICK_PATH_STEP_IDS = new Set([
   'clarify',
 ]);
 
+/** Путь «готовое резюме» — не детальная анкета, счётчик «N из 36» не показываем. */
+const RESUME_PATH_STEP_IDS = new Set(['resume_upload', 'resume_ready']);
+
 const DETAILED_SET = new Set<string>(JACK_DETAILED_QUESTION_IDS);
 
 export function getJackDetailedProgress(
   currentStepId: string | null | undefined,
   completedSteps: string[] = []
 ): { current: number; total: number; label: string } | null {
-  if (!currentStepId || QUICK_PATH_STEP_IDS.has(currentStepId)) {
+  if (
+    !currentStepId ||
+    QUICK_PATH_STEP_IDS.has(currentStepId) ||
+    RESUME_PATH_STEP_IDS.has(currentStepId)
+  ) {
     return null;
   }
 

@@ -1,10 +1,26 @@
-import { getToken } from '@/lib/auth';
-import { buildAuthHeaders } from '@/lib/authHeaders';
+import { isAuthenticated } from '@/lib/auth';
 import { getPublicApiBaseUrl } from '@/lib/publicApiBaseUrl';
 import type { HhIntegrationStatus } from '@/types/hhIntegration';
 
 function usersBaseUrl(): string {
   return getPublicApiBaseUrl();
+}
+
+function authFetchInit(init: RequestInit = {}): RequestInit {
+  return {
+    ...init,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...init.headers,
+    },
+  };
+}
+
+function requireAuthenticated(): void {
+  if (!isAuthenticated()) {
+    throw new Error('Нужна авторизация');
+  }
 }
 
 async function parseJsonError(response: Response, fallback: string): Promise<never> {
@@ -31,15 +47,14 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 1200
 }
 
 export async function fetchHhIntegrationStatus(options?: { lite?: boolean }): Promise<HhIntegrationStatus> {
-  const token = getToken();
-  if (!token) {
+  if (!isAuthenticated()) {
     return { connected: false };
   }
 
   const query = options?.lite ? '?lite=1' : '';
   const response = await fetchWithTimeout(
     `${usersBaseUrl()}/api/users/integrations/hh${query}`,
-    { headers: buildAuthHeaders(token) },
+    authFetchInit(),
     12000
   );
 
@@ -51,10 +66,7 @@ export async function fetchHhIntegrationStatus(options?: { lite?: boolean }): Pr
 }
 
 export async function beginHhIntegrationConnect(returnTo?: string): Promise<void> {
-  const token = getToken();
-  if (!token) {
-    throw new Error('Нужна авторизация');
-  }
+  requireAuthenticated();
 
   const query = new URLSearchParams({ format: 'json' });
   if (returnTo) {
@@ -63,7 +75,7 @@ export async function beginHhIntegrationConnect(returnTo?: string): Promise<void
 
   const response = await fetchWithTimeout(
     `${usersBaseUrl()}/api/users/oauth/hh/start?${query.toString()}`,
-    { headers: buildAuthHeaders(token) },
+    authFetchInit(),
     15000
   );
 
@@ -80,15 +92,12 @@ export async function beginHhIntegrationConnect(returnTo?: string): Promise<void
 }
 
 export async function revokeHhIntegration(): Promise<void> {
-  const token = getToken();
-  if (!token) {
-    throw new Error('Нужна авторизация');
-  }
+  requireAuthenticated();
 
-  const response = await fetch(`${usersBaseUrl()}/api/users/integrations/hh`, {
-    method: 'DELETE',
-    headers: buildAuthHeaders(token),
-  });
+  const response = await fetch(
+    `${usersBaseUrl()}/api/users/integrations/hh`,
+    authFetchInit({ method: 'DELETE' })
+  );
 
   if (!response.ok) {
     await parseJsonError(response, 'Не удалось отключить HeadHunter');

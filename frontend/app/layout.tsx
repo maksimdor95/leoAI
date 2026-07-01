@@ -9,9 +9,12 @@ import { PostHogProvider } from '@/components/PostHogProvider';
 import {
   APP_LOCALE_COOKIE,
   APP_THEME_COOKIE,
+  appSettingsFromCookies,
   dataThemeFromCookie,
   localeFromCookie,
 } from '@/lib/appThemeCookie';
+import { normalizeTtsVoice } from '@/lib/ttsVoices';
+import { DEFAULT_APP_SETTINGS } from '@/types/appSettings';
 import { THEME_INIT_SCRIPT } from '@/lib/themeInitScript';
 import './globals.css';
 import '../styles/theme-hume.css';
@@ -43,8 +46,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = cookies();
-  const dataTheme = dataThemeFromCookie(cookieStore.get(APP_THEME_COOKIE)?.value);
-  const lang = localeFromCookie(cookieStore.get(APP_LOCALE_COOKIE)?.value);
+  const themeCookie = cookieStore.get(APP_THEME_COOKIE)?.value;
+  const localeCookie = cookieStore.get(APP_LOCALE_COOKIE)?.value;
+  const dataTheme = dataThemeFromCookie(themeCookie);
+  const lang = localeFromCookie(localeCookie);
+  const cookieSettings = appSettingsFromCookies(themeCookie, localeCookie);
+  const initialAppSettings = {
+    ...DEFAULT_APP_SETTINGS,
+    ...cookieSettings,
+    ttsVoice: normalizeTtsVoice(cookieSettings.ttsLang, DEFAULT_APP_SETTINGS.ttsVoice),
+  };
 
   return (
     <html
@@ -59,7 +70,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body suppressHydrationWarning>
         <ConfigProvider>
           <PostHogProvider>
-            <AppSettingsProvider>
+            <AppSettingsProvider initialSettings={initialAppSettings}>
               <AuthProvider>
                 {children}
                 <GlobalAuthModal />

@@ -19,6 +19,11 @@ import {
 import { localeToTtsLang, normalizeTtsVoice } from '@/lib/ttsVoices';
 import { writeThemeCookies } from '@/lib/appThemeCookie';
 
+type AppSettingsProviderProps = {
+  children: ReactNode;
+  initialSettings?: AppSettings;
+};
+
 type AppSettingsContextValue = {
   settings: AppSettings;
   setLocale: (locale: AppLocale) => void;
@@ -37,13 +42,30 @@ function applySettingsToDocument(settings: AppSettings): void {
   writeThemeCookies(settings);
 }
 
-export function AppSettingsProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+export function AppSettingsProvider({
+  children,
+  initialSettings = DEFAULT_APP_SETTINGS,
+}: AppSettingsProviderProps) {
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    if (typeof window === 'undefined') return initialSettings;
+    const stored = readAppSettings();
+    applySettingsToDocument(stored);
+    return stored;
+  });
 
   useEffect(() => {
     const stored = readAppSettings();
-    setSettings(stored);
-    applySettingsToDocument(stored);
+    setSettings((prev) => {
+      const unchanged =
+        prev.locale === stored.locale &&
+        prev.theme === stored.theme &&
+        prev.speechEnabled === stored.speechEnabled &&
+        prev.ttsLang === stored.ttsLang &&
+        prev.ttsVoice === stored.ttsVoice;
+      if (unchanged) return prev;
+      applySettingsToDocument(stored);
+      return stored;
+    });
   }, []);
 
   const persist = useCallback((updater: AppSettings | ((prev: AppSettings) => AppSettings)) => {

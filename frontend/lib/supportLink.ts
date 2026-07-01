@@ -1,4 +1,4 @@
-import { isAuthenticated } from '@/lib/auth';
+import { fetchUserProfile, isAuthenticated } from '@/lib/auth';
 
 const BOT_USERNAME = 'leoaisupportbot';
 
@@ -26,12 +26,6 @@ export async function resolveTelegramSupportUrl(): Promise<string> {
   if (typeof window === 'undefined' || !isAuthenticated()) {
     return buildTelegramSupportUrl();
   }
-  try {
-    const res = await fetch('/api/users/profile', { credentials: 'include' });
-    if (!res.ok) return buildTelegramSupportUrl();
-    const profile = (await res.json()) as { id?: string };
-    return buildTelegramSupportUrl(profile.id);
-  } catch {
-    return buildTelegramSupportUrl();
-  }
+  const profile = await fetchUserProfile();
+  return buildTelegramSupportUrl(profile?.id);
 }

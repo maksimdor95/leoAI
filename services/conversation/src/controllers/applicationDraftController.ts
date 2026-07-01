@@ -4,6 +4,7 @@ import { getSession, getUserSession } from '../services/sessionService';
 import { generateApplicationDraft } from '../services/aiClient';
 import { jackCollectedDataReadyForApplication } from '../utils/jackProfileGating';
 import { stripHtmlFromText } from '../utils/vacancyPrepText';
+import { extractRequestAccessToken } from '../utils/requestAccessToken';
 import { logger } from '../utils/logger';
 
 const JOB_MATCHING_SERVICE_URL = process.env.JOB_MATCHING_SERVICE_URL || 'http://localhost:3004';
@@ -41,11 +42,6 @@ interface JobDetailsPayload {
   conditions?: Record<string, unknown> | null;
 }
 
-function extractBearerToken(header: string | undefined): string | undefined {
-  if (!header) return undefined;
-  return header.replace(/^Bearer\s+/i, '').trim() || undefined;
-}
-
 export async function createApplicationDraft(req: Request, res: Response): Promise<void> {
   try {
     const user = (req as Request & { user?: { userId: string; email: string } }).user;
@@ -62,10 +58,7 @@ export async function createApplicationDraft(req: Request, res: Response): Promi
       matchHighlights?: string[];
     };
 
-    const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
-    const token = extractBearerToken(
-      Array.isArray(authHeader) ? authHeader[0] : (authHeader as string | undefined)
-    );
+    const token = extractRequestAccessToken(req);
     const bearer = token ? `Bearer ${token}` : '';
 
     let session =

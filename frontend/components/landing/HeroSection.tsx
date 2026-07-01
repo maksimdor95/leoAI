@@ -103,7 +103,7 @@ export function HeroSection() {
   return (
     <section className="leo-hero-shell relative min-h-screen overflow-x-hidden">
       <div className="landing-hero-bg-hume pointer-events-none absolute inset-x-0 top-0 z-0 h-[11rem] overflow-hidden opacity-95 sm:h-[13rem] lg:h-[14rem]">
-        <HumeHeroWaveCanvas heroScale={2.65} />
+        {isHume ? <HumeHeroWaveCanvas heroScale={2.65} /> : null}
       </div>
       <div className="landing-hero-bg-leo absolute inset-0 bg-gradient-to-br from-[#050913] via-[#0a1a2e] to-[#050913] opacity-90" />
       <div className="landing-hero-bg-leo absolute left-1/2 top-0 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-green-500/10 blur-3xl" />

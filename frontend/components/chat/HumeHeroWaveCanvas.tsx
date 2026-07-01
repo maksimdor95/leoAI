@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { applyCanvasSize } from '@/lib/canvasLayout';
 import { startWaveAnimationLoop, waveAnimTime } from '@/lib/waveAnimationLoop';
@@ -230,24 +230,45 @@ export function HumeHeroWaveCanvas({
     return () => mobileMq.removeEventListener('change', updateShadow);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const wrap = wrapRef.current;
     const canvas = canvasRef.current;
     if (!wrap || !canvas) return;
 
-    const sync = () => applyCanvasSize(wrap, canvas, 2);
-    sync();
+    const syncAndPaint = () => {
+      if (!applyCanvasSize(wrap, canvas, 2) || canvas.width < 2 || canvas.height < 2) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      paintHumeHeroWave(
+        ctx,
+        canvas,
+        waveAnimTime(performance.now(), reducedMotion),
+        levelRef.current,
+        heroScale,
+        waveProfile,
+        softShadowRef.current
+      );
+    };
 
-    const ro = new ResizeObserver(sync);
+    syncAndPaint();
+
+    const ro = new ResizeObserver(syncAndPaint);
     ro.observe(wrap);
-    window.addEventListener('resize', sync);
-    window.addEventListener('orientationchange', sync);
+
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) syncAndPaint();
+    });
+    io.observe(wrap);
+
+    window.addEventListener('resize', syncAndPaint);
+    window.addEventListener('orientationchange', syncAndPaint);
     return () => {
       ro.disconnect();
-      window.removeEventListener('resize', sync);
-      window.removeEventListener('orientationchange', sync);
+      io.disconnect();
+      window.removeEventListener('resize', syncAndPaint);
+      window.removeEventListener('orientationchange', syncAndPaint);
     };
-  }, []);
+  }, [heroScale, waveProfile, reducedMotion]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -267,12 +288,14 @@ export function HumeHeroWaveCanvas({
 
     const draw = (nowMs: number) => {
       if (cancelled) return;
-      if (!applyCanvasSize(wrap, canvas, 2)) {
+      const sized = applyCanvasSize(wrap, canvas, 2);
+      if (!sized) {
         badLayoutFrames += 1;
         if (badLayoutFrames > 90) reportBroken();
-        return;
+      } else {
+        badLayoutFrames = 0;
       }
-      badLayoutFrames = 0;
+      if (canvas.width < 2 || canvas.height < 2) return;
 
       const ctx = canvas.getContext('2d');
       if (!ctx) {

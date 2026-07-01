@@ -1875,6 +1875,13 @@ function ChatPageContent() {
   );
 
   const centerStageQuestion = useMemo(() => {
+    if (currentProduct === 'jack') {
+      // После разбора резюме показываем info_card (профиль + кнопки), а не старый вопрос upload.
+      if (sessionCurrentStepId === 'resume_ready') {
+        return undefined;
+      }
+      return latestQuestion;
+    }
     if (currentProduct !== 'interview-prep') {
       return latestQuestion;
     }
@@ -1903,7 +1910,14 @@ function ChatPageContent() {
     }
 
     return undefined;
-  }, [currentProduct, vacancyAnalyzeFlowActive, latestQuestion, messages, interviewPrepCollectedSnapshot.lesson_phase]);
+  }, [
+    currentProduct,
+    vacancyAnalyzeFlowActive,
+    latestQuestion,
+    messages,
+    interviewPrepCollectedSnapshot.lesson_phase,
+    sessionCurrentStepId,
+  ]);
 
   const handleTheoryReady = useCallback(() => {
     unlockAudio();

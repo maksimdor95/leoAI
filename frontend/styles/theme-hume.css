@@ -1362,6 +1362,23 @@
   border-radius: 12px !important;
 }
 
+[data-theme='hume'] .leo-chat-sidebar .matched-job-card:not(.matched-job-card--new) {
+  background: var(--color-bone) !important;
+  border: 1px solid rgba(34, 34, 34, 0.12) !important;
+  border-radius: var(--radius-card) !important;
+  box-shadow: 0 1px 3px rgba(34, 34, 34, 0.06) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .matched-job-card--new.matched-job-card--recommended {
+  border: 1px solid rgba(192, 148, 228, 0.35) !important;
+  background: var(--color-rose-mist) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .matched-job-card--new.matched-job-card--weak {
+  border: 1px solid rgba(255, 183, 96, 0.35) !important;
+  background: var(--color-meringue) !important;
+}
+
 [data-theme='hume'] .leo-chat-sidebar .text-\[11px\].font-semibold.uppercase,
 [data-theme='hume'] .leo-chat-sidebar .text-\[11px\].uppercase.tracking-wide {
   font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace !important;

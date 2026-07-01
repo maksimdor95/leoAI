@@ -46,18 +46,24 @@ export function MatchedJobCard({
 
   const toggleReasons = () => setReasonsOpen((open) => !open);
 
+  const actionBtnClass = isHume
+    ? `hume-btn-ghost !px-0 !py-0 !text-xs`
+    : `cursor-pointer text-xs font-medium ${linkClass} bg-transparent border-0 p-0`;
+
   return (
     <div
-      className={
+      className={`matched-job-card ${
+        isWeak ? 'matched-job-card--weak' : 'matched-job-card--recommended'
+      }${isNew ? ' matched-job-card--new' : ''} ${
         isHume
           ? `rounded-2xl border p-3 ${
               isWeak
                 ? isNew
                   ? 'border-[rgba(255,183,96,0.35)] bg-[var(--color-meringue)]'
-                  : 'border-[rgba(34,34,34,0.08)] bg-[var(--color-bone)]'
+                  : 'border-[rgba(34,34,34,0.12)] bg-[var(--color-bone)] shadow-[0_1px_3px_rgba(34,34,34,0.06)]'
                 : isNew
                   ? 'border-[rgba(192,148,228,0.35)] bg-[var(--color-rose-mist)]'
-                  : 'border-[rgba(34,34,34,0.08)] bg-[var(--color-paper)]'
+                  : 'border-[rgba(34,34,34,0.12)] bg-[var(--color-bone)] shadow-[0_1px_3px_rgba(34,34,34,0.06)]'
             }`
           : `rounded-xl border p-3 ${
               isWeak
@@ -66,9 +72,9 @@ export function MatchedJobCard({
                   : 'border-amber-900/40 bg-white/[0.02]'
                 : isNew
                   ? 'border-emerald-400/55 ring-1 ring-emerald-400/25 bg-white/[0.03] shadow-[0_0_20px_rgba(52,211,153,0.12)]'
-                  : 'border-white/10 bg-white/[0.03]'
+                  : 'border-white/[0.12] bg-white/[0.03]'
             }`
-      }
+      }`}
     >
       <div className="flex items-start justify-between gap-2">
         <div
@@ -112,8 +118,36 @@ export function MatchedJobCard({
         {company}
       </div>
 
-      {sourceLabel ? (
-        <div className="mt-2">
+      <div
+        className={
+          isHume
+            ? 'mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 hume-body-sm !text-xs'
+            : 'mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400'
+        }
+      >
+        <span>
+          Match:{' '}
+          {hasReasons ? (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={toggleReasons}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  toggleReasons();
+                }
+              }}
+              aria-expanded={reasonsOpen}
+              className={`cursor-pointer font-medium tabular-nums transition-colors hover:underline ${linkClass}`}
+            >
+              {score}
+            </span>
+          ) : (
+            <span className="tabular-nums">{score}</span>
+          )}
+        </span>
+        {sourceLabel ? (
           <span
             className={
               isHume
@@ -123,30 +157,7 @@ export function MatchedJobCard({
           >
             {sourceLabel}
           </span>
-        </div>
-      ) : null}
-
-      <div className={isHume ? 'mt-2 hume-body-sm !text-xs' : 'mt-2 text-xs text-slate-400'}>
-        Match:{' '}
-        {hasReasons ? (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={toggleReasons}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                toggleReasons();
-              }
-            }}
-            aria-expanded={reasonsOpen}
-            className={`cursor-pointer font-medium tabular-nums transition-colors hover:underline ${linkClass}`}
-          >
-            {score}
-          </span>
-        ) : (
-          <span className="tabular-nums">{score}</span>
-        )}
+        ) : null}
       </div>
 
       {hasReasons && reasonsOpen ? (
@@ -198,15 +209,7 @@ export function MatchedJobCard({
       {(onOpenVacancy || onVacancyPrep) && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {onOpenVacancy ? (
-            <button
-              type="button"
-              onClick={onOpenVacancy}
-              className={
-                isHume
-                  ? 'hume-btn-ghost !px-0 !py-0 !text-xs'
-                  : `cursor-pointer text-xs font-medium ${linkClass} bg-transparent border-0 p-0`
-              }
-            >
+            <button type="button" onClick={onOpenVacancy} className={actionBtnClass}>
               Открыть вакансию
             </button>
           ) : null}
@@ -215,15 +218,7 @@ export function MatchedJobCard({
               type="button"
               disabled={vacancyPrepLoading}
               onClick={vacancyPrepLoading ? undefined : onVacancyPrep}
-              className={
-                isHume
-                  ? `hume-btn-pill !h-7 !px-3 !text-[11px] !border-none ${
-                      vacancyPrepLoading ? 'opacity-50 cursor-not-allowed' : ''
-                    }`
-                  : `cursor-pointer text-xs font-medium text-green-400 hover:text-green-300 bg-transparent border-0 p-0 ${
-                      vacancyPrepLoading ? 'opacity-50 cursor-not-allowed' : ''
-                    }`
-              }
+              className={`${actionBtnClass}${vacancyPrepLoading ? ' opacity-50 cursor-not-allowed' : ''}`}
             >
               {vacancyPrepLoading ? 'Готовим разбор…' : 'Разбор вакансии'}
             </button>
