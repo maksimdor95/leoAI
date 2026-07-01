@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
+import { applyCanvasSize } from '@/lib/canvasLayout';
+import { startWaveAnimationLoop, waveAnimTime } from '@/lib/waveAnimationLoop';
 
 type HumeHeroWaveCanvasProps = {
   /** 0..1 — optional amplitude boost (TTS / mic) */
@@ -13,6 +15,7 @@ type HumeHeroWaveCanvasProps = {
   heroScale?: number;
   /** hero — лендинг; chat — компактнее и пики ближе */
   waveProfile?: 'hero' | 'chat';
+  onCanvasBroken?: () => void;
 };
 
 const HUME_BG_STOPS: [number, string][] = [
@@ -92,6 +95,7 @@ function drawStrandBundle(
     freqBase: number;
     crossPhase?: boolean;
     heroScale?: number;
+    softShadow?: boolean;
   }
 ): void {
   const dpr = dprScale(ctx.canvas);
@@ -135,9 +139,11 @@ function drawStrandBundle(
     ctx.lineWidth = (0.65 + 0.95 * w2) * dpr;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    ctx.shadowColor = `rgba(192, 148, 228, ${opts.shadowAlpha * w2})`;
-    ctx.shadowBlur = 2.2 * dpr;
-    ctx.shadowOffsetY = 0.6 * dpr;
+    if (opts.softShadow !== false) {
+      ctx.shadowColor = `rgba(192, 148, 228, ${opts.shadowAlpha * w2})`;
+      ctx.shadowBlur = 2.2 * dpr;
+      ctx.shadowOffsetY = 0.6 * dpr;
+    }
     ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
@@ -150,7 +156,8 @@ function paintHumeHeroWave(
   t: number,
   level: number,
   heroScale = 1,
-  waveProfile: 'hero' | 'chat' = 'hero'
+  waveProfile: 'hero' | 'chat' = 'hero',
+  softShadow = true
 ): void {
   const w = canvas.width;
   const h = canvas.height;
@@ -174,6 +181,7 @@ function paintHumeHeroWave(
     shadowAlpha: 0.1,
     freqBase: waveProfile === 'chat' ? 2.05 : 1.85,
     heroScale,
+    softShadow,
   });
 
   drawStrandBundle(ctx, w, h, t, {
@@ -189,6 +197,7 @@ function paintHumeHeroWave(
     freqBase: waveProfile === 'chat' ? 1.95 : 1.75,
     crossPhase: true,
     heroScale,
+    softShadow,
   });
 }
 
@@ -199,62 +208,100 @@ export function HumeHeroWaveCanvas({
   reducedMotion = false,
   heroScale = 1,
   waveProfile = 'hero',
+  onCanvasBroken,
 }: HumeHeroWaveCanvasProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rafRef = useRef(0);
+  const stopLoopRef = useRef<(() => void) | null>(null);
   const levelRef = useRef(level);
   levelRef.current = level;
+  const softShadowRef = useRef(true);
+  const brokenRef = useRef(onCanvasBroken);
+  brokenRef.current = onCanvasBroken;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mobileMq = window.matchMedia('(max-width: 639px)');
+    const updateShadow = () => {
+      softShadowRef.current = !mobileMq.matches;
+    };
+    updateShadow();
+    mobileMq.addEventListener('change', updateShadow);
+    return () => mobileMq.removeEventListener('change', updateShadow);
+  }, []);
 
   useEffect(() => {
     const wrap = wrapRef.current;
     const canvas = canvasRef.current;
     if (!wrap || !canvas) return;
 
-    const ro = new ResizeObserver(() => {
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      const { width, height } = wrap.getBoundingClientRect();
-      const cw = Math.max(1, Math.floor(width * dpr));
-      const ch = Math.max(1, Math.floor(height * dpr));
-      canvas.width = cw;
-      canvas.height = ch;
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-    });
+    const sync = () => applyCanvasSize(wrap, canvas, 2);
+    sync();
+
+    const ro = new ResizeObserver(sync);
     ro.observe(wrap);
-    return () => ro.disconnect();
+    window.addEventListener('resize', sync);
+    window.addEventListener('orientationchange', sync);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', sync);
+      window.removeEventListener('orientationchange', sync);
+    };
   }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
 
     let cancelled = false;
+    let badLayoutFrames = 0;
+    let reportedBroken = false;
     const levelEma = { v: levelRef.current };
 
-    const draw = () => {
+    const reportBroken = () => {
+      if (reportedBroken) return;
+      reportedBroken = true;
+      brokenRef.current?.();
+    };
+
+    const draw = (nowMs: number) => {
       if (cancelled) return;
+      if (!applyCanvasSize(wrap, canvas, 2)) {
+        badLayoutFrames += 1;
+        if (badLayoutFrames > 90) reportBroken();
+        return;
+      }
+      badLayoutFrames = 0;
+
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        rafRef.current = requestAnimationFrame(draw);
+        reportBroken();
         return;
       }
 
-      const now = performance.now() / 1000;
-      const t = reducedMotion ? 0 : now;
+      const t = waveAnimTime(nowMs, reducedMotion);
       const rawLevel = externalLevelRef?.current ?? levelRef.current;
       const targetLevel = paused ? 0.3 : rawLevel;
       levelEma.v = levelEma.v * 0.9 + targetLevel * 0.1;
-      paintHumeHeroWave(ctx, canvas, t, Math.min(1, levelEma.v), heroScale, waveProfile);
-      rafRef.current = requestAnimationFrame(draw);
+      paintHumeHeroWave(
+        ctx,
+        canvas,
+        t,
+        Math.min(1, levelEma.v),
+        heroScale,
+        waveProfile,
+        softShadowRef.current
+      );
     };
 
-    rafRef.current = requestAnimationFrame(draw);
+    stopLoopRef.current = startWaveAnimationLoop(draw);
     return () => {
       cancelled = true;
-      cancelAnimationFrame(rafRef.current);
+      stopLoopRef.current?.();
+      stopLoopRef.current = null;
     };
-  }, [paused, reducedMotion, externalLevelRef, heroScale, waveProfile]);
+  }, [paused, reducedMotion, externalLevelRef, heroScale, waveProfile, onCanvasBroken]);
 
   return (
     <div ref={wrapRef} className="hume-hero-wave-wrap">

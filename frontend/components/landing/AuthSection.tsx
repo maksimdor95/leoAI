@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Form, Input, Button, Typography, message } from 'antd';
 import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { userAPI } from '@/lib/api';
-import { saveToken } from '@/lib/auth';
+import { syncAnalyticsIdentity } from '@/lib/auth';
 import { captureEvent } from '@/lib/analytics';
 
 type ApiError = {
@@ -58,10 +58,8 @@ export function AuthSection() {
     setLoading(true);
     try {
       const result = await userAPI.login(values);
-      if (result.token) {
-        saveToken(result.token);
-        captureEvent('user_logged_in', { method: 'email' });
-      }
+      void syncAnalyticsIdentity();
+      captureEvent('user_logged_in', { method: 'email' });
       message.success('Вход выполнен успешно!');
       router.push('/chat');
     } catch (error: unknown) {
@@ -75,11 +73,9 @@ export function AuthSection() {
   const handleRegister = async (values: { email: string; password: string }) => {
     setLoading(true);
     try {
-      const result = await userAPI.register(values);
-      if (result.token) {
-        saveToken(result.token);
-        captureEvent('user_registered', { method: 'email' });
-      }
+      await userAPI.register(values);
+      void syncAnalyticsIdentity();
+      captureEvent('user_registered', { method: 'email' });
       message.success('Регистрация успешна!');
       router.push('/chat');
     } catch (error: unknown) {

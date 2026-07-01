@@ -442,6 +442,12 @@ body {
   height: 100%;
 }
 
+.voice-listening-canvas,
+.hume-hero-wave-canvas {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
 html[data-theme='hume'] .landing-hero-bg-leo,
 html[data-theme='hume'] .landing-hero-particles-leo {
   display: none;

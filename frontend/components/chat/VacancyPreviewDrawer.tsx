@@ -7,6 +7,7 @@ import { fetchJobDetails, recordJobInteraction } from '@/lib/jobApi';
 import { ApplicationDraftPanel } from '@/components/chat/ApplicationDraftPanel';
 import { stripHtmlFromText } from '@/lib/buildVacancyPrepText';
 import { MatchReasonsPopover } from '@/components/chat/MatchReasonsPopover';
+import { formatJobSourceLabel } from '@/lib/jobSourceLabel';
 import { uniqueLocationLabels } from '@/lib/locationLabels';
 import type { JobDetailsResponse, MatchedJobPreviewContext } from '@/types/jobs';
 import { useHumeTheme } from '@/lib/useHumeTheme';
@@ -326,7 +327,7 @@ export function VacancyPreviewDrawer({
                 variant={context.variant}
               />
             ) : null}
-            {job?.source ? <span>Источник: {job.source}</span> : null}
+            {job?.source ? <span>{formatJobSourceLabel(job.source)}</span> : null}
             {details?.stale ? (
               <span
                 className={

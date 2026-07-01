@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { formatJobSourceLabel } from '@/lib/jobSourceLabel';
 import { humanizeMatchReasons } from '@/lib/humanizeMatchReasons';
 import { useHumeTheme } from '@/lib/useHumeTheme';
 
@@ -35,6 +36,7 @@ export function MatchedJobCard({
   const isWeak = variant === 'weak';
   const humanized = humanizeMatchReasons(reasons);
   const hasReasons = humanized.length > 0;
+  const sourceLabel = formatJobSourceLabel(source);
 
   const linkClass = isHume
     ? 'text-[var(--color-ink)] underline-offset-2 hover:underline'
@@ -110,8 +112,21 @@ export function MatchedJobCard({
         {company}
       </div>
 
+      {sourceLabel ? (
+        <div className="mt-2">
+          <span
+            className={
+              isHume
+                ? 'inline-flex rounded-full border border-[rgba(34,34,34,0.1)] bg-[var(--color-meringue)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-smoke)]'
+                : 'inline-flex rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400'
+            }
+          >
+            {sourceLabel}
+          </span>
+        </div>
+      ) : null}
+
       <div className={isHume ? 'mt-2 hume-body-sm !text-xs' : 'mt-2 text-xs text-slate-400'}>
-        {source ? `Источник: ${source} · ` : ''}
         Match:{' '}
         {hasReasons ? (
           <span

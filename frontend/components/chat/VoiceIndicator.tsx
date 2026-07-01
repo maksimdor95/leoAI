@@ -4,6 +4,7 @@ import type { RefObject } from 'react';
 import { HumeHeroWaveCanvas } from '@/components/chat/HumeHeroWaveCanvas';
 import { ListeningWaveCanvas, type SyntheticMood } from '@/components/chat/ListeningWaveCanvas';
 import { useAppSettings } from '@/contexts/AppSettingsContext';
+import { startWaveAnimationLoop, waveAnimTime } from '@/lib/waveAnimationLoop';
 
 export type VoiceIndicatorMode = 'idle' | 'typing' | 'listening' | 'speaking';
 
@@ -186,12 +187,17 @@ export function VoiceIndicator({
   waveOnlyRef.current = waveOnly;
 
   const [micListenMode, setMicListenMode] = useState<'canvas' | 'svg'>('canvas');
+  const [canvasWaveMode, setCanvasWaveMode] = useState<'canvas' | 'svg'>('canvas');
 
   useEffect(() => {
     if (mode === 'listening') {
       setMicListenMode('canvas');
     }
   }, [mode]);
+
+  const onCanvasBroken = useCallback(() => {
+    setCanvasWaveMode('svg');
+  }, []);
 
   const showMicRibbon =
     mode === 'listening' && !paused && !reduceMotion && micListenMode === 'canvas';
@@ -200,9 +206,10 @@ export function VoiceIndicator({
   const syntheticRibbon =
     waveOnly && !showAssistantRibbon && (mode === 'speaking' || mode === 'typing' || mode === 'idle');
 
-  // Hume theme: always canvas ribbon on cream card (hero-style, hume.ai)
+  // Hume theme: canvas ribbon on cream card (hero-style, hume.ai)
   const canvasRibbon =
-    isHumeTheme || showMicRibbon || (waveOnly && (showAssistantRibbon || syntheticRibbon));
+    canvasWaveMode === 'canvas' &&
+    (isHumeTheme || showMicRibbon || (waveOnly && (showAssistantRibbon || syntheticRibbon)));
 
   const onListenMicFailed = useCallback(() => {
     setMicListenMode('svg');
@@ -221,10 +228,9 @@ export function VoiceIndicator({
           : 0.32;
 
   useEffect(() => {
-    let raf = 0;
     const t0 = performance.now();
 
-    const drawFrame = (now: number, t: number) => {
+    const drawFrame = (nowMs: number) => {
       const m = modeRef.current;
       if (ribbonCanvasActiveRef.current) return;
 
@@ -232,9 +238,10 @@ export function VoiceIndicator({
       const mut = mutedRef.current;
       const ttsAt = ttsBeatAtRef.current ?? 0;
       const freezeTime = isPa || (mut && m === 'idle');
-      const tUse = freezeTime ? 0 : t;
+      const elapsedMs = freezeTime ? 0 : nowMs - t0;
+      const tAnim = waveAnimTime(elapsedMs, reduceMotion);
 
-      const { main, mirror } = buildPathsFromSkeleton(skeleton, tUse, now, m, mut, ttsAt);
+      const { main, mirror } = buildPathsFromSkeleton(skeleton, tAnim, nowMs, m, mut, ttsAt);
 
       mirrorRef.current?.setAttribute('d', mirror);
       glowRef.current?.setAttribute('d', main);
@@ -244,8 +251,8 @@ export function VoiceIndicator({
 
       const centerEl = ribbonRefs.current[2];
       if (centerEl) {
-        if (!freezeTime && !reduceMotion) {
-          const dashOff = (t * 72) % 1000;
+        if (!freezeTime) {
+          const dashOff = (tAnim * 72) % 1000;
           centerEl.style.strokeDashoffset = String(-dashOff);
         } else {
           centerEl.style.strokeDashoffset = '0';
@@ -253,18 +260,8 @@ export function VoiceIndicator({
       }
     };
 
-    if (reduceMotion) {
-      raf = requestAnimationFrame((now) => drawFrame(now, 0));
-      return () => cancelAnimationFrame(raf);
-    }
-
-    const loop = (now: number) => {
-      const t = (now - t0) / 1000;
-      drawFrame(now, t);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    const stop = startWaveAnimationLoop(drawFrame);
+    return stop;
   }, [skeleton, ttsBeatAtRef, reduceMotion]);
 
   ribbonCanvasActiveRef.current = canvasRibbon;
@@ -287,7 +284,7 @@ export function VoiceIndicator({
         aria-hidden="true"
       >
         <div className="voice-stage-wave">
-          {isHumeTheme ? (
+          {canvasRibbon && isHumeTheme ? (
             <HumeHeroWaveCanvas
               level={humeLevel}
               externalLevelRef={showAssistantRibbon ? assistantLevelRef : undefined}
@@ -295,6 +292,7 @@ export function VoiceIndicator({
               reducedMotion={reduceMotion}
               heroScale={humeHeroScale}
               waveProfile={waveCompact ? 'chat' : 'hero'}
+              onCanvasBroken={onCanvasBroken}
             />
           ) : canvasRibbon ? (
             <ListeningWaveCanvas
@@ -305,6 +303,7 @@ export function VoiceIndicator({
               reducedMotion={reduceMotion}
               externalLevelRef={showAssistantRibbon ? assistantLevelRef : undefined}
               onStreamFailed={showMicRibbon ? onListenMicFailed : undefined}
+              onCanvasBroken={onCanvasBroken}
             />
           ) : (
           <svg

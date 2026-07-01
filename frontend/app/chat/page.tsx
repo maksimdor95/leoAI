@@ -28,7 +28,7 @@ import {
   TextMessage,
 } from '@/types/chat';
 import { createChatApi, ChatApi } from '@/lib/chatApi';
-import { clearClientAuthState, getToken, isAuthenticated } from '@/lib/auth';
+import { clearClientAuthState, getAuthenticatedUserId, isAuthenticated } from '@/lib/auth';
 import { captureEvent } from '@/lib/analytics';
 import { userAPI } from '@/lib/api';
 import { jackCollectedDataReadyForJobMatch } from '@/lib/jackProfileGating';
@@ -980,7 +980,6 @@ function ChatPageContent() {
       }, 12000);
 
       const chat = createChatApi({
-        token: getToken() ?? undefined,
         sessionId: sessionIdParam ?? undefined,
         createNew: isNew ?? true,
         product: isNew ? product : undefined,
@@ -1506,8 +1505,7 @@ function ChatPageContent() {
 
   const handleVacancyPrepFromJob = useCallback(
     async (item: MatchedJobItem) => {
-      const token = getToken();
-      if (!token) {
+      if (!isAuthenticated()) {
         messageApi.warning('Нужна авторизация для разбора вакансии');
         return;
       }
@@ -1523,7 +1521,7 @@ function ChatPageContent() {
       if (!job.description?.trim() && !job.requirements?.trim()) {
         try {
           const response = await fetch(`${getJobMatchingBaseUrl()}/api/jobs/${job.id}`, {
-            headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include',
           });
           if (response.ok) {
             const data = await response.json();
@@ -1549,8 +1547,7 @@ function ChatPageContent() {
 
   const handleOpenVacancyFromJob = useCallback(
     (item: MatchedJobItem, variant: 'recommended' | 'weak') => {
-      const token = getToken();
-      if (!token) {
+      if (!isAuthenticated()) {
         messageApi.warning('Нужна авторизация для просмотра вакансии');
         return;
       }
@@ -2327,15 +2324,14 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     silent?: boolean;
     triggerWeakMatchGate?: boolean;
   }) => {
-    const token = getToken();
-    if (!token) {
+    if (!isAuthenticated()) {
       if (!options?.silent) {
         messageApi.warning('Нужна авторизация для подбора вакансий');
       }
       return;
     }
 
-    const userId = getUserIdFromToken(token);
+    const userId = await getAuthenticatedUserId();
     if (!userId) {
       if (!options?.silent) {
         messageApi.error('Не удалось определить пользователя. Перезайдите в аккаунт.');
@@ -2363,10 +2359,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
       const response = await fetch(
         `${getJobMatchingBaseUrl()}/api/jobs/match/${userId}${sessionQuery}`,
         {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
+          credentials: 'include',
+        }
       );
 
       const data = await response.json().catch(() => ({}));
@@ -2502,7 +2496,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         setIsJobsLoading(false);
       }
     }
-  }, [getJobMatchingBaseUrl, getUserIdFromToken, messageApi, sessionCurrentStepId, syncSessionMetadata]);
+  }, [getJobMatchingBaseUrl, messageApi, sessionCurrentStepId, syncSessionMetadata]);
 
   /**
    * Кнопка reload теперь делает «умное обновление»:
@@ -2510,12 +2504,11 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
    * 2) фоном перезапрашивает match через задержку, когда каталог успеет обновиться.
    */
   const requestFreshJobsForProfile = useCallback(async () => {
-    const token = getToken();
-    if (!token) {
+    if (!isAuthenticated()) {
       messageApi.warning('Нужна авторизация');
       return;
     }
-    const userId = getUserIdFromToken(token);
+    const userId = await getAuthenticatedUserId();
     if (!userId) {
       messageApi.error('Не удалось определить пользователя. Перезайдите в аккаунт.');
       return;
@@ -2540,8 +2533,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         `${getJobMatchingBaseUrl()}/api/jobs/scrape/for-user/${userId}`,
         {
           method: 'POST',
+          credentials: 'include',
           headers: {
-            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         }
@@ -2571,7 +2564,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     } finally {
       setIsJobsLoading(false);
     }
-  }, [fetchMatchedJobs, getJobMatchingBaseUrl, getUserIdFromToken, jackProfileReadyForMatch, messageApi]);
+  }, [fetchMatchedJobs, getJobMatchingBaseUrl, jackProfileReadyForMatch, messageApi]);
 
   useEffect(() => {
     if (!productSelected || currentProduct !== 'jack' || !connected || !latestUserMessageId) {

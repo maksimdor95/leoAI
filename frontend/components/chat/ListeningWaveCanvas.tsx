@@ -3,6 +3,8 @@
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { useAppSettings } from '@/contexts/AppSettingsContext';
+import { applyCanvasSize } from '@/lib/canvasLayout';
+import { startWaveAnimationLoop, waveAnimTime } from '@/lib/waveAnimationLoop';
 
 export type RibbonDrive = 'microphone' | 'synthetic' | 'external';
 export type SyntheticMood = 'idle' | 'typing' | 'speaking';
@@ -16,6 +18,8 @@ type ListeningWaveCanvasProps = {
   reducedMotion?: boolean;
   externalLevelRef?: RefObject<number>;
   onStreamFailed?: () => void;
+  /** Canvas layout/context failed — parent may fall back to SVG wave */
+  onCanvasBroken?: () => void;
 };
 
 function pickAudioContext(): typeof AudioContext | null {
@@ -113,7 +117,7 @@ function paintRibbon(
     c.fillRect(0, 0, w, h);
   }
 
-  const tUse = opts.reducedMotion ? t * 0.06 : t;
+  const tUse = waveAnimTime(t * 1000, opts.reducedMotion);
   const mid = h * 0.5;
   const steps = Math.min(220, Math.max(96, Math.floor(w / 4)));
   const hNorm = h / 108;
@@ -236,13 +240,14 @@ export function ListeningWaveCanvas({
   reducedMotion = false,
   externalLevelRef,
   onStreamFailed,
+  onCanvasBroken,
 }: ListeningWaveCanvasProps) {
   const { settings } = useAppSettings();
   const humeThemeRef = useRef(settings.theme === 'hume-light');
   humeThemeRef.current = settings.theme === 'hume-light';
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rafRef = useRef(0);
+  const stopLoopRef = useRef<(() => void) | null>(null);
   const audioRef = useRef<{
     ctx: AudioContext;
     stream: MediaStream;
@@ -252,6 +257,8 @@ export function ListeningWaveCanvas({
   } | null>(null);
   const failRef = useRef(onStreamFailed);
   failRef.current = onStreamFailed;
+  const brokenRef = useRef(onCanvasBroken);
+  brokenRef.current = onCanvasBroken;
   const levelEmaRef = useRef(0.35);
 
   useEffect(() => {
@@ -259,23 +266,24 @@ export function ListeningWaveCanvas({
     const canvas = canvasRef.current;
     if (!wrap || !canvas) return;
 
-    const ro = new ResizeObserver(() => {
-      const dpr = Math.min(2.5, window.devicePixelRatio || 1);
-      const { width, height } = wrap.getBoundingClientRect();
-      const cw = Math.max(1, Math.floor(width * dpr));
-      const ch = Math.max(1, Math.floor(height * dpr));
-      canvas.width = cw;
-      canvas.height = ch;
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-    });
+    const sync = () => applyCanvasSize(wrap, canvas, 2.5);
+    sync();
+
+    const ro = new ResizeObserver(sync);
     ro.observe(wrap);
-    return () => ro.disconnect();
+    window.addEventListener('resize', sync);
+    window.addEventListener('orientationchange', sync);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', sync);
+      window.removeEventListener('orientationchange', sync);
+    };
   }, []);
 
   useEffect(() => {
     if (!active) {
-      cancelAnimationFrame(rafRef.current);
+      stopLoopRef.current?.();
+      stopLoopRef.current = null;
       if (audioRef.current) {
         audioRef.current.stream.getTracks().forEach((tr) => tr.stop());
         void audioRef.current.ctx.close();
@@ -285,50 +293,73 @@ export function ListeningWaveCanvas({
     }
 
     const cvs = canvasRef.current;
-    if (!cvs) return;
+    const wrap = wrapRef.current;
+    if (!cvs || !wrap) return;
+
+    let badLayoutFrames = 0;
+    let reportedBroken = false;
+    const reportBroken = () => {
+      if (reportedBroken) return;
+      reportedBroken = true;
+      brokenRef.current?.();
+    };
+    const ensureLayout = () => {
+      if (applyCanvasSize(wrap, cvs, 2.5)) {
+        badLayoutFrames = 0;
+        return true;
+      }
+      badLayoutFrames += 1;
+      if (badLayoutFrames > 90) reportBroken();
+      return false;
+    };
+
+    const startPaintLoop = (frame: (nowMs: number) => void) => {
+      stopLoopRef.current?.();
+      stopLoopRef.current = startWaveAnimationLoop(frame);
+    };
 
     if (drive === 'synthetic') {
       let cancelled = false;
-      const draw = () => {
+      startPaintLoop((nowMs) => {
         if (cancelled) return;
+        if (!ensureLayout()) return;
         const c = cvs.getContext('2d');
         if (!c) {
-          rafRef.current = requestAnimationFrame(draw);
+          reportBroken();
           return;
         }
-        const t = performance.now() / 1000;
+        const t = nowMs / 1000;
         const raw = syntheticLevel(t, syntheticMood, paused);
         levelEmaRef.current = levelEmaRef.current * 0.88 + raw * 0.12;
         const level = Math.min(1, levelEmaRef.current);
         paintRibbon(c, cvs, level, t, { reducedMotion, hume: humeThemeRef.current });
-        rafRef.current = requestAnimationFrame(draw);
-      };
-      rafRef.current = requestAnimationFrame(draw);
+      });
       return () => {
         cancelled = true;
-        cancelAnimationFrame(rafRef.current);
+        stopLoopRef.current?.();
+        stopLoopRef.current = null;
       };
     }
 
     if (drive === 'external') {
       let cancelled = false;
-      const draw = () => {
+      startPaintLoop((nowMs) => {
         if (cancelled) return;
+        if (!ensureLayout()) return;
         const c = cvs.getContext('2d');
         if (!c) {
-          rafRef.current = requestAnimationFrame(draw);
+          reportBroken();
           return;
         }
-        const t = performance.now() / 1000;
+        const t = nowMs / 1000;
         const raw = Math.max(0, Math.min(1, externalLevelRef?.current ?? 0));
         levelEmaRef.current = levelEmaRef.current * 0.82 + raw * 0.18;
         paintRibbon(c, cvs, levelEmaRef.current, t, { reducedMotion, hume: humeThemeRef.current });
-        rafRef.current = requestAnimationFrame(draw);
-      };
-      rafRef.current = requestAnimationFrame(draw);
+      });
       return () => {
         cancelled = true;
-        cancelAnimationFrame(rafRef.current);
+        stopLoopRef.current?.();
+        stopLoopRef.current = null;
       };
     }
 
@@ -390,11 +421,12 @@ export function ListeningWaveCanvas({
         return;
       }
 
-      const draw = () => {
+      startPaintLoop((nowMs) => {
         if (cancelled || !audioRef.current) return;
+        if (!ensureLayout()) return;
         const c = cvs.getContext('2d');
         if (!c) {
-          rafRef.current = requestAnimationFrame(draw);
+          reportBroken();
           return;
         }
 
@@ -411,26 +443,24 @@ export function ListeningWaveCanvas({
         const rms = audioRef.current.rmsEma;
         const level = Math.min(1, Math.pow(rms * 5.5, 0.78));
 
-        const t = performance.now() / 1000;
+        const t = nowMs / 1000;
         paintRibbon(c, cvs, level, t, { reducedMotion, hume: humeThemeRef.current });
-        rafRef.current = requestAnimationFrame(draw);
-      };
-
-      rafRef.current = requestAnimationFrame(draw);
+      });
     };
 
     void setup();
 
     return () => {
       cancelled = true;
-      cancelAnimationFrame(rafRef.current);
+      stopLoopRef.current?.();
+      stopLoopRef.current = null;
       if (audioRef.current) {
         audioRef.current.stream.getTracks().forEach((tr) => tr.stop());
         void audioRef.current.ctx.close();
         audioRef.current = null;
       }
     };
-  }, [active, drive, syntheticMood, paused, reducedMotion, onStreamFailed, externalLevelRef]);
+  }, [active, drive, syntheticMood, paused, reducedMotion, onStreamFailed, externalLevelRef, onCanvasBroken]);
 
   return (
     <div ref={wrapRef} className="voice-listening-canvas-wrap">

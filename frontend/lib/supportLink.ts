@@ -1,5 +1,4 @@
-import { getUserIdFromToken } from '@/lib/analytics';
-import { getToken } from '@/lib/auth';
+import { isAuthenticated } from '@/lib/auth';
 
 const BOT_USERNAME = 'leoaisupportbot';
 
@@ -16,10 +15,23 @@ export function buildTelegramSupportUrl(siteUserId?: string | null): string {
 
 /** Prefer logged-in user id for support deep link. */
 export function getTelegramSupportUrl(): string {
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined' || !isAuthenticated()) {
     return buildTelegramSupportUrl();
   }
-  const token = getToken();
-  if (!token) return buildTelegramSupportUrl();
-  return buildTelegramSupportUrl(getUserIdFromToken(token));
+  return buildTelegramSupportUrl();
+}
+
+/** Resolve support URL with user id from profile API (cookie auth). */
+export async function resolveTelegramSupportUrl(): Promise<string> {
+  if (typeof window === 'undefined' || !isAuthenticated()) {
+    return buildTelegramSupportUrl();
+  }
+  try {
+    const res = await fetch('/api/users/profile', { credentials: 'include' });
+    if (!res.ok) return buildTelegramSupportUrl();
+    const profile = (await res.json()) as { id?: string };
+    return buildTelegramSupportUrl(profile.id);
+  } catch {
+    return buildTelegramSupportUrl();
+  }
 }

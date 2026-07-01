@@ -7,7 +7,7 @@ import { useAppSettings } from '@/contexts/AppSettingsContext';
 import { getBoostyUrl } from '@/lib/boostyLink';
 import { landingUi } from '@/lib/landingUiCopy';
 import { useHumeTheme } from '@/lib/useHumeTheme';
-import { buildTelegramSupportUrl, getTelegramSupportUrl } from '@/lib/supportLink';
+import { buildTelegramSupportUrl, resolveTelegramSupportUrl } from '@/lib/supportLink';
 
 const boostyUrl = getBoostyUrl();
 const defaultSupportUrl = buildTelegramSupportUrl();
@@ -20,7 +20,7 @@ export function Footer() {
   const [supportBotUrl, setSupportBotUrl] = useState(defaultSupportUrl);
 
   useEffect(() => {
-    setSupportBotUrl(getTelegramSupportUrl());
+    void resolveTelegramSupportUrl().then(setSupportBotUrl);
   }, []);
 
   const linkClass = isHume

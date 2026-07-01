@@ -8,6 +8,7 @@ import { isAuthenticated } from '@/lib/auth';
 import { captureEvent } from '@/lib/analytics';
 import { setPendingAuthRedirect } from '@/lib/pendingAuthRedirect';
 import {
+  getLandingHowItWorksSteps,
   getLandingPreviewScenarios,
   landingUi,
   type LandingPreviewScenarioCopy,
@@ -15,18 +16,11 @@ import {
 } from '@/lib/landingUiCopy';
 import { useHumeTheme } from '@/lib/useHumeTheme';
 import { HumeHeroWaveCanvas } from '@/components/chat/HumeHeroWaveCanvas';
-import {
-  BulbOutlined,
-  FileTextOutlined,
-  RocketOutlined,
-  SearchOutlined,
-} from '@ant-design/icons';
+import { BulbOutlined, SearchOutlined } from '@ant-design/icons';
 
 const SCENARIO_ICONS: Record<LandingPreviewScenarioId, ReactNode> = {
-  'quick-start': <RocketOutlined />,
   jobs: <SearchOutlined />,
   'interview-prep': <BulbOutlined />,
-  'pm-interview': <FileTextOutlined />,
 };
 
 export function HeroSection() {
@@ -39,7 +33,11 @@ export function HeroSection() {
     () => getLandingPreviewScenarios(settings.locale),
     [settings.locale]
   );
-  const [activeScenarioId, setActiveScenarioId] = useState<LandingPreviewScenarioId>('quick-start');
+  const howItWorksSteps = useMemo(
+    () => getLandingHowItWorksSteps(settings.locale),
+    [settings.locale]
+  );
+  const [activeScenarioId, setActiveScenarioId] = useState<LandingPreviewScenarioId>('jobs');
 
   const activeScenario =
     previewScenarios.find((scenario) => scenario.id === activeScenarioId) ?? previewScenarios[0];
@@ -352,6 +350,70 @@ export function HeroSection() {
           </div>
         </div>
 
+        <div id="how-it-works" className="mt-20">
+          <div className="mb-10 text-center">
+            <div
+              className={`mb-3 text-xs font-semibold uppercase tracking-[0.36em] ${
+                isHume ? 'text-[var(--color-smoke)]' : 'text-green-300/70'
+              }`}
+            >
+              {copy.howItWorksEyebrow}
+            </div>
+            <h2
+              className={`mb-4 text-3xl font-bold md:text-4xl ${
+                isHume ? 'hume-heading' : 'text-white'
+              }`}
+            >
+              {copy.howItWorksTitle}
+            </h2>
+          </div>
+
+          <div className="mx-auto grid max-w-5xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {howItWorksSteps.map((step, index) => (
+              <div
+                key={step.title}
+                className={`rounded-3xl border p-5 ${
+                  isHume
+                    ? 'border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)]'
+                    : 'border-white/10 bg-white/[0.04]'
+                }`}
+              >
+                <div
+                  className={`mb-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
+                    isHume
+                      ? 'bg-[var(--color-meringue)] text-[var(--color-iris)]'
+                      : 'bg-green-500/15 text-green-300'
+                  }`}
+                >
+                  {index + 1}
+                </div>
+                <h3
+                  className={`text-sm font-semibold leading-snug ${
+                    isHume ? 'text-[var(--color-ink)]' : 'text-white'
+                  }`}
+                >
+                  {step.title}
+                </h3>
+                <p
+                  className={`mt-2 text-sm leading-relaxed ${
+                    isHume ? 'hume-body-sm' : 'text-slate-400'
+                  }`}
+                >
+                  {step.body}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <p
+            className={`mx-auto mt-8 max-w-3xl text-center text-sm leading-relaxed ${
+              isHume ? 'text-[var(--color-smoke)]' : 'text-slate-400'
+            }`}
+          >
+            {copy.howItWorksNote}
+          </p>
+        </div>
+
         <div id="features" className="mt-20">
           <div className="mb-12 text-center">
             <div
@@ -377,7 +439,7 @@ export function HeroSection() {
             </p>
           </div>
 
-          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mx-auto grid max-w-4xl grid-cols-1 gap-5 md:grid-cols-2">
             {previewScenarios.map((scenario, index) => (
               <button
                 key={scenario.id}

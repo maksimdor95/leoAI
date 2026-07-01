@@ -23,6 +23,7 @@ export interface HealthStatus {
     scraping: {
       mockJobsEnabled: boolean;
       hhApiConfigured: boolean;
+      superjobApiConfigured: boolean;
     };
   };
 }
@@ -96,6 +97,7 @@ export async function getHealthStatus(): Promise<HealthStatus> {
 
   const mockJobsEnabled = process.env.USE_MOCK_JOBS === 'true';
   const hhApiConfigured = !!process.env.HH_API_KEY;
+  const superjobApiConfigured = !!process.env.SUPERJOB_API_KEY;
 
   return {
     service: 'job-matching-service',
@@ -107,6 +109,7 @@ export async function getHealthStatus(): Promise<HealthStatus> {
       scraping: {
         mockJobsEnabled,
         hhApiConfigured,
+        superjobApiConfigured,
       },
     },
   };

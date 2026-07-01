@@ -1,10 +1,6 @@
 import type { AppLocale } from '@/types/appSettings';
 
-export type LandingPreviewScenarioId =
-  | 'quick-start'
-  | 'jobs'
-  | 'interview-prep'
-  | 'pm-interview';
+export type LandingPreviewScenarioId = 'jobs' | 'interview-prep';
 
 export type LandingPreviewScenarioCopy = {
   id: LandingPreviewScenarioId;
@@ -20,6 +16,11 @@ export type LandingPreviewScenarioCopy = {
   accentClassHume: string;
 };
 
+export type LandingHowItWorksStep = {
+  title: string;
+  body: string;
+};
+
 type LandingStrings = {
   heroBadge: string;
   heroSubtitle: string;
@@ -32,6 +33,9 @@ type LandingStrings = {
   previewChatTitle: string;
   previewInputPlaceholder: string;
   previewStart: string;
+  howItWorksEyebrow: string;
+  howItWorksTitle: string;
+  howItWorksNote: string;
   featuresEyebrow: string;
   featuresTitle: string;
   featuresBody: string;
@@ -62,28 +66,32 @@ type LandingStrings = {
 
 const strings: Record<AppLocale, LandingStrings> = {
   ru: {
-    heroBadge: 'Ваш персональный AI-ассистент',
+    heroBadge: 'Карьерный AI-ассистент',
     heroSubtitle:
-      'Находим идеальные вакансии, которые подходят именно вам, и помогаем с подготовкой.',
-    heroCta: 'Начать поиск',
+      'Подберём вакансии под ваш опыт, подготовим сопроводительное и проведём пробное собеседование — всё в диалоге с LEO.',
+    heroCta: 'Начать с LEO',
     settingsLanguageHint: 'Язык интерфейса и тема оформления',
     previewEyebrow: 'Превью диалога',
-    previewTitle: 'Выбери сценарий и посмотри, как LEO ведёт чат',
+    previewTitle: 'Посмотрите, как LEO ведёт диалог',
     previewLiveBadge: 'живой сценарий',
-    previewScenariosAria: 'Сценарии LEO AI',
+    previewScenariosAria: 'Возможности LEO AI',
     previewChatTitle: 'Чат с LEO',
     previewInputPlaceholder: 'Введите ответ…',
     previewStart: 'Старт',
-    featuresEyebrow: '5 сценариев в одном ассистенте',
-    featuresTitle: 'Почему выбирают?',
+    howItWorksEyebrow: 'Как это работает',
+    howItWorksTitle: 'От диалога до отклика — честно',
+    howItWorksNote:
+      'LEO не заменяет job-площадки: мы помогаем найти, понять совпадение и подготовиться. Отклик отправляется на сайте работодателя или агрегатора — для этого нужен аккаунт и резюме там.',
+    featuresEyebrow: 'Два пути в одном ассистенте',
+    featuresTitle: 'Что умеет LEO',
     featuresBody:
-      'LEO не просто отвечает в чате: он ведёт пользователя от первого карьерного запроса до подбора вакансий, тренировки интервью и персонального плана роста.',
+      'Подбор из крупных российских job-площадок с объяснением match score и подготовка к собеседованию с персональным отчётом.',
     headerFeatures: 'Возможности',
     headerLogin: 'Войти',
     headerStart: 'Начать',
     headerChat: 'Чат с LEO',
     footerTagline:
-      'Находим идеальные вакансии, которые подходят именно вам, и помогаем с подготовкой.',
+      'LEO — карьерный ассистент: подбор вакансий, сопроводительные и подготовка к интервью. Отклик — на сайте площадки.',
     footerNav: 'Навигация',
     footerFeatures: 'Возможности',
     footerRegister: 'Регистрация',
@@ -106,27 +114,32 @@ const strings: Record<AppLocale, LandingStrings> = {
     settingsPageIntro: 'Выберите язык интерфейса и тему оформления.',
   },
   en: {
-    heroBadge: 'Your personal AI assistant',
+    heroBadge: 'Career AI assistant',
     heroSubtitle:
-      'We find jobs that fit you and help you prepare for interviews.',
-    heroCta: 'Start search',
+      'We match jobs to your experience, draft cover letters, and run mock interviews — all in one dialogue with LEO.',
+    heroCta: 'Start with LEO',
     settingsLanguageHint: 'Interface language and appearance',
     previewEyebrow: 'Dialogue preview',
-    previewTitle: 'Pick a scenario and see how LEO runs the chat',
+    previewTitle: 'See how LEO runs the conversation',
     previewLiveBadge: 'live scenario',
-    previewScenariosAria: 'LEO AI scenarios',
+    previewScenariosAria: 'LEO AI capabilities',
     previewChatTitle: 'Chat with LEO',
     previewInputPlaceholder: 'Type your reply…',
     previewStart: 'Start',
-    featuresEyebrow: '5 scenarios in one assistant',
-    featuresTitle: 'Why LEO?',
+    howItWorksEyebrow: 'How it works',
+    howItWorksTitle: 'From chat to application — transparently',
+    howItWorksNote:
+      'LEO does not replace job boards: we help you find roles, understand fit, and prepare. You apply on the employer or aggregator site — you need an account and resume there.',
+    featuresEyebrow: 'Two paths in one assistant',
+    featuresTitle: 'What LEO does',
     featuresBody:
-      'LEO doesn’t just chat — it guides you from your first career question to job matching, interview practice, and a personal growth plan.',
+      'Job matching from major Russian job boards with match score explanations, plus interview prep with a personal report.',
     headerFeatures: 'Features',
     headerLogin: 'Log in',
     headerStart: 'Get started',
     headerChat: 'Chat with LEO',
-    footerTagline: 'We find jobs that fit you and help you prepare for interviews.',
+    footerTagline:
+      'LEO — career assistant: job matching, cover letters, and interview prep. You apply on the job board site.',
     footerNav: 'Navigation',
     footerFeatures: 'Features',
     footerRegister: 'Sign up',
@@ -149,193 +162,141 @@ const strings: Record<AppLocale, LandingStrings> = {
   },
 };
 
-const scenarios: Record<AppLocale, LandingPreviewScenarioCopy[]> = {
+const howItWorksSteps: Record<AppLocale, LandingHowItWorksStep[]> = {
   ru: [
     {
-      id: 'quick-start',
-      label: 'Быстрый старт',
-      title: 'Быстрый старт подбора',
-      description: 'Пройдем мини-диагностику и сразу перейдем к первому shortlist вакансий',
-      accentClassLeo: 'text-cyan-300 border-cyan-400/30 bg-cyan-400/10',
-      accentClassHume: 'text-[var(--color-iris)] border-[rgba(34,34,34,0.12)] bg-[var(--color-meringue)]',
-      href: '/chat?new=true&product=jack',
-      starter: 'Быстрый подбор',
-      metrics: ['3 вопроса', 'shortlist', 'профиль'],
-      spotlight:
-        'Мини-диагностика без длинной анкеты: LEO быстро понимает цель и переводит разговор к первым вакансиям.',
-      messages: [
-        {
-          role: 'leo',
-          text: 'Привет! Быстро соберу контекст: роль, опыт и формат работы. Начнем с желаемой позиции?',
-        },
-        { role: 'user', text: 'Хочу Product Manager, удаленно или гибрид, middle+.' },
-        {
-          role: 'leo',
-          text: 'Отлично. Уточню стек, зарплатную вилку и приоритеты, а затем покажу первые релевантные вакансии.',
-        },
-      ],
+      title: 'Рассказываете LEO о себе',
+      body: 'Роль, опыт, формат работы — в чате или голосом. Без длинной анкеты.',
     },
+    {
+      title: 'LEO подбирает и объясняет',
+      body: 'Shortlist из крупных российских job-площадок с match score и причинами совпадения.',
+    },
+    {
+      title: 'Готовит сопроводительное',
+      body: 'Письмо под конкретную вакансию по вашему профилю — можно отредактировать.',
+    },
+    {
+      title: 'Вы откликаетесь на сайте',
+      body: 'LEO откроет вакансию на площадке-источнике. Письмо скопировано — вставьте его в форму отклика.',
+    },
+  ],
+  en: [
+    {
+      title: 'Tell LEO about yourself',
+      body: 'Role, experience, work format — in chat or by voice. No long forms.',
+    },
+    {
+      title: 'LEO matches and explains',
+      body: 'A shortlist from major Russian job boards with match score and reasons.',
+    },
+    {
+      title: 'Drafts your cover letter',
+      body: 'Tailored to the job from your profile — editable before you apply.',
+    },
+    {
+      title: 'You apply on the site',
+      body: 'LEO opens the listing on the source site. Letter copied — paste it into the application form.',
+    },
+  ],
+};
+
+const scenarios: Record<AppLocale, LandingPreviewScenarioCopy[]> = {
+  ru: [
     {
       id: 'jobs',
       label: 'Вакансии',
       title: 'Подбор вакансий',
-      description: 'Соберу твой профиль и подберу идеальные вакансии под твой опыт',
+      description:
+        'Соберу профиль в диалоге и покажу вакансии с объяснением, почему они вам подходят',
       accentClassLeo: 'text-green-300 border-green-400/30 bg-green-400/10',
       accentClassHume: 'text-[var(--color-iris)] border-[rgba(34,34,34,0.12)] bg-[var(--color-meringue)]',
       href: '/chat?new=true&product=jack',
-      metrics: ['каталог hh.ru', 'match score', 'прозрачно'],
+      metrics: ['job-площадки', 'match score', 'сопроводительное'],
       spotlight:
-        'LEO собирает профиль из диалога, сопоставляет его со свежим каталогом вакансий и объясняет, почему совпадение сильное или слабое.',
+        'LEO отсеивает шум, ранжирует по релевантности и готовит письмо для отклика. Отклик — на сайте площадки, где размещена вакансия.',
       messages: [
         {
           role: 'leo',
-          text: 'Расскажи, какие роли тебе интересны и что точно не подходит. Я буду отсеивать шум.',
+          text: 'Здравствуйте! Соберу профиль и подберу вакансии. Выберите: быстрый подбор, детальный анализ или разбор готового резюме.',
         },
-        { role: 'user', text: 'Ищу продуктовую роль в B2B SaaS, важны рост и сильная команда.' },
+        { role: 'user', text: 'Быстрый подбор' },
         {
           role: 'leo',
-          text: 'Зафиксировал. Подберу вакансии по релевантности, объясню причины совпадения и помогу выбрать приоритет.',
+          text: 'Отлично. Уточню роль, опыт и формат — и покажу первые релевантные вакансии с объяснением match score.',
         },
       ],
     },
     {
       id: 'interview-prep',
-      label: 'Тренажёр',
-      title: 'Тренажёр интервью',
-      description: 'Разберу вакансию, составлю план и проведу кейсы, теорию или мок-интервью',
+      label: 'Интервью',
+      title: 'Подготовка к собеседованию',
+      description:
+        'Разбор вакансии, тренировка или пробное интервью на любую роль — с персональным отчётом',
       accentClassLeo: 'text-amber-300 border-amber-400/30 bg-amber-400/10',
       accentClassHume: 'text-[var(--color-iris)] border-[rgba(34,34,34,0.12)] bg-[var(--color-meringue)]',
       href: '/chat?new=true&product=interview-prep',
-      metrics: ['план', 'кейсы', 'мок'],
+      metrics: ['любая роль', 'мок-интервью', 'PDF-отчёт'],
       spotlight:
-        'Можно принести конкретную вакансию: LEO разберёт требования, подсветит пробелы и проведёт тренировку.',
+        'Можно разобрать конкретную вакансию или пройти пробное собеседование как у работодателя. В конце — отчёт с рекомендациями.',
       messages: [
         {
           role: 'leo',
-          text: 'Пришли вакансию или требования к роли. Я соберу план подготовки и зоны риска.',
+          text: 'Помогу подготовиться к собеседованию. Выберите: пробное собеседование или разбор вакансии?',
         },
-        { role: 'user', text: 'Нужно подготовиться к Product Manager в финтехе.' },
+        { role: 'user', text: 'Пробное собеседование' },
         {
           role: 'leo',
-          text: 'Сделаю карту тем: продуктовые метрики, discovery, prioritization и кейс-интервью. Потом можем потренироваться.',
-        },
-      ],
-    },
-    {
-      id: 'pm-interview',
-      label: 'Интервью',
-      title: 'Подготовка к собеседованию',
-      description: 'Проведу пробное интервью на Product Manager и дам персональный отчёт',
-      accentClassLeo: 'text-purple-300 border-purple-400/30 bg-purple-400/10',
-      accentClassHume: 'text-[var(--color-iris)] border-[rgba(34,34,34,0.12)] bg-[var(--color-meringue)]',
-      href: '/chat?new=true&product=wannanew',
-      metrics: ['пробное интервью', 'отчёт', 'рекомендации'],
-      spotlight:
-        'Формат как у реального интервью: вопросы, ответы, обратная связь и персональный отчёт после завершения.',
-      messages: [
-        {
-          role: 'leo',
-          text: 'Проведем интервью как с нанимающим менеджером. Я буду задавать вопросы и фиксировать сильные ответы.',
-        },
-        { role: 'user', text: 'Давай Product Manager mock interview.' },
-        {
-          role: 'leo',
-          text: 'Начнем с продуктового опыта, затем перейдем к кейсу. В конце дам персональный отчёт и план улучшений.',
+          text: 'Проведу интервью как представитель компании-работодателя. В конце — персональный отчёт с рекомендациями.',
         },
       ],
     },
   ],
   en: [
     {
-      id: 'quick-start',
-      label: 'Quick start',
-      title: 'Quick job matching',
-      description: 'A mini diagnostic, then your first job shortlist',
-      accentClassLeo: 'text-cyan-300 border-cyan-400/30 bg-cyan-400/10',
-      accentClassHume: 'text-[var(--color-iris)] border-[rgba(34,34,34,0.12)] bg-[var(--color-meringue)]',
-      href: '/chat?new=true&product=jack',
-      starter: 'Quick match',
-      metrics: ['3 questions', 'shortlist', 'profile'],
-      spotlight:
-        'No long form — LEO quickly understands your goal and moves the conversation to first job matches.',
-      messages: [
-        {
-          role: 'leo',
-          text: "Hi! I'll quickly gather context: role, experience, and work format. Shall we start with your target position?",
-        },
-        { role: 'user', text: 'Product Manager, remote or hybrid, mid-senior level.' },
-        {
-          role: 'leo',
-          text: "Great. I'll clarify stack, salary range, and priorities, then show the first relevant jobs.",
-        },
-      ],
-    },
-    {
       id: 'jobs',
       label: 'Jobs',
       title: 'Job matching',
-      description: "I'll build your profile and match jobs to your experience",
+      description:
+        "I'll build your profile in chat and show jobs with an explanation of why they fit",
       accentClassLeo: 'text-green-300 border-green-400/30 bg-green-400/10',
       accentClassHume: 'text-[var(--color-iris)] border-[rgba(34,34,34,0.12)] bg-[var(--color-meringue)]',
       href: '/chat?new=true&product=jack',
-      metrics: ['hh.ru catalog', 'match score', 'transparent'],
+      metrics: ['job boards', 'match score', 'cover letter'],
       spotlight:
-        'LEO builds your profile from chat, matches it to a fresh job catalog, and explains strong vs weak fits.',
+        'LEO filters noise, ranks by relevance, and drafts your cover letter. You apply on the site where the job is listed.',
       messages: [
         {
           role: 'leo',
-          text: "Tell me which roles interest you and what definitely doesn't fit. I'll filter the noise.",
+          text: "Hello! I'll build your profile and match jobs. Choose: quick match, detailed analysis, or review an existing resume.",
         },
-        { role: 'user', text: 'Product role in B2B SaaS — growth and a strong team matter.' },
+        { role: 'user', text: 'Quick match' },
         {
           role: 'leo',
-          text: "Got it. I'll match jobs by relevance, explain why each fits, and help you prioritize.",
+          text: "Great. I'll clarify role, experience, and format — then show the first relevant jobs with match score explanations.",
         },
       ],
     },
     {
       id: 'interview-prep',
-      label: 'Trainer',
-      title: 'Interview trainer',
-      description: 'Job breakdown, prep plan, cases, theory, or mock interview',
+      label: 'Interview',
+      title: 'Interview prep',
+      description: 'Vacancy breakdown, practice, or mock interview for any role — with a personal report',
       accentClassLeo: 'text-amber-300 border-amber-400/30 bg-amber-400/10',
       accentClassHume: 'text-[var(--color-iris)] border-[rgba(34,34,34,0.12)] bg-[var(--color-meringue)]',
       href: '/chat?new=true&product=interview-prep',
-      metrics: ['plan', 'cases', 'mock'],
+      metrics: ['any role', 'mock interview', 'PDF report'],
       spotlight:
-        'Bring a specific job posting — LEO breaks down requirements, highlights gaps, and runs practice.',
+        'Analyze a specific job or run a mock interview like a real employer. You get a report with recommendations at the end.',
       messages: [
         {
           role: 'leo',
-          text: 'Send a job posting or role requirements. I’ll build a prep plan and risk areas.',
+          text: "I'll help you prepare for interviews. Choose: mock interview or vacancy breakdown?",
         },
-        { role: 'user', text: 'Need to prep for a Product Manager role in fintech.' },
+        { role: 'user', text: 'Mock interview' },
         {
           role: 'leo',
-          text: "I'll map topics: product metrics, discovery, prioritization, and case interviews. Then we can practice.",
-        },
-      ],
-    },
-    {
-      id: 'pm-interview',
-      label: 'Interview',
-      title: 'Interview prep',
-      description: 'Mock Product Manager interview with a personal report',
-      accentClassLeo: 'text-purple-300 border-purple-400/30 bg-purple-400/10',
-      accentClassHume: 'text-[var(--color-iris)] border-[rgba(34,34,34,0.12)] bg-[var(--color-meringue)]',
-      href: '/chat?new=true&product=wannanew',
-      metrics: ['mock interview', 'report', 'recommendations'],
-      spotlight:
-        'Real interview format: questions, answers, feedback, and a personal report when you finish.',
-      messages: [
-        {
-          role: 'leo',
-          text: "I'll interview you like a hiring manager — questions and strong-answer notes.",
-        },
-        { role: 'user', text: "Let's do a Product Manager mock interview." },
-        {
-          role: 'leo',
-          text: "We'll start with product experience, then a case. At the end — a personal report and improvement plan.",
+          text: "I'll interview you as the hiring company. At the end — a personal report with recommendations.",
         },
       ],
     },
@@ -344,6 +305,10 @@ const scenarios: Record<AppLocale, LandingPreviewScenarioCopy[]> = {
 
 export function landingUi(locale: AppLocale): LandingStrings {
   return strings[locale];
+}
+
+export function getLandingHowItWorksSteps(locale: AppLocale): LandingHowItWorksStep[] {
+  return howItWorksSteps[locale];
 }
 
 export function getLandingPreviewScenarios(locale: AppLocale): LandingPreviewScenarioCopy[] {

@@ -13,7 +13,7 @@ import {
 } from 'antd';
 import { CloseOutlined, MessageOutlined } from '@ant-design/icons';
 import { getBoostyUrl } from '@/lib/boostyLink';
-import { buildTelegramSupportUrl, getTelegramSupportUrl } from '@/lib/supportLink';
+import { buildTelegramSupportUrl, resolveTelegramSupportUrl } from '@/lib/supportLink';
 import { submitConsultationLead } from '@/lib/consultationApi';
 import { captureEvent } from '@/lib/analytics';
 import { useAppSettings } from '@/contexts/AppSettingsContext';
@@ -101,7 +101,7 @@ export function SupportWidget({
   const isToolbar = placement === 'toolbar';
 
   useEffect(() => {
-    setTelegramUrl(getTelegramSupportUrl());
+    void resolveTelegramSupportUrl().then(setTelegramUrl);
   }, []);
 
   useEffect(() => {

@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Modal, Form, Input, Button, Typography, message } from 'antd';
 import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { userAPI } from '@/lib/api';
-import { saveToken, getToken } from '@/lib/auth';
-import { captureEvent, identifyFromToken } from '@/lib/analytics';
+import { syncAnalyticsIdentity } from '@/lib/auth';
+import { captureEvent } from '@/lib/analytics';
 import { resolvePostAuthHref } from '@/lib/pendingAuthRedirect';
 import { SocialAuthButton } from '@/components/auth/SocialAuthButton';
 import { useAppSettings } from '@/contexts/AppSettingsContext';
@@ -97,11 +97,8 @@ export function AuthModal({
     onClose();
   };
 
-  const finishAuth = (eventName: 'user_logged_in' | 'user_registered', method: string) => {
-    const token = getToken();
-    if (token) {
-      identifyFromToken(token);
-    }
+  const finishAuth = async (eventName: 'user_logged_in' | 'user_registered', method: string) => {
+    await syncAnalyticsIdentity();
     captureEvent(eventName, { method, source });
     message.success(eventName === 'user_logged_in' ? t.loginSuccess : t.registerSuccess);
     onClose();
@@ -111,11 +108,8 @@ export function AuthModal({
   const handleLogin = async (values: { email: string; password: string }) => {
     setLoading(true);
     try {
-      const result = await userAPI.login(values);
-      if (result.token) {
-        saveToken(result.token);
-      }
-      finishAuth('user_logged_in', 'email');
+      await userAPI.login(values);
+      await finishAuth('user_logged_in', 'email');
     } catch (error: unknown) {
       captureEvent('auth_failed', { method: 'email', mode: 'login', source });
       message.error(getErrorMessage(error, t.loginError));
@@ -127,11 +121,8 @@ export function AuthModal({
   const handleRegister = async (values: { email: string; password: string }) => {
     setLoading(true);
     try {
-      const result = await userAPI.register(values);
-      if (result.token) {
-        saveToken(result.token);
-      }
-      finishAuth('user_registered', 'email');
+      await userAPI.register(values);
+      await finishAuth('user_registered', 'email');
     } catch (error: unknown) {
       captureEvent('auth_failed', { method: 'email', mode: 'register', source });
       message.error(getErrorMessage(error, t.registerError));
