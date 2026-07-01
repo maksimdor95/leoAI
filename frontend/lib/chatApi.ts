@@ -194,7 +194,7 @@ class ChatApiClient {
       intent?: 'vacancy_analyze';
     } = {}
   ): Promise<void> {
-    this.token = options.token || getToken() || undefined;
+    this.token = options.token ?? getToken() ?? null;
 
     try {
       const session = await this.request<ChatSession>('/api/chat/session', {
