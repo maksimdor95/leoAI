@@ -1,8 +1,59 @@
 # VPS example: /etc/caddy/Caddyfile
-# Order matters — specific /api/* routes before the catch-all to user-profile (3001).
+# Requires Caddy built with github.com/mholt/caddy-ratelimit (see scripts/dev/install-caddy-ratelimit-vps.sh).
+# Stock apt Caddy does NOT include rate_limit.
+# Order matters — specific /api/* routes before catch-alls.
 
 leo-ai.ru {
     encode gzip
+
+    # --- Rate limits (per IP) — complement app-level limits ---
+    @user_login method POST path /api/users/login
+    handle @user_login {
+        rate_limit {
+            zone user_login {
+                key {remote_host}
+                events 10
+                window 1m
+            }
+        }
+        reverse_proxy 127.0.0.1:3001
+    }
+
+    @user_register method POST path /api/users/register /api/users
+    handle @user_register {
+        rate_limit {
+            zone user_register {
+                key {remote_host}
+                events 10
+                window 1m
+            }
+        }
+        reverse_proxy 127.0.0.1:3001
+    }
+
+    @forgot_password method POST path /api/users/forgot-password
+    handle @forgot_password {
+        rate_limit {
+            zone forgot_password {
+                key {remote_host}
+                events 5
+                window 1m
+            }
+        }
+        reverse_proxy 127.0.0.1:3001
+    }
+
+    @consultation method POST path /api/email/send-consultation
+    handle @consultation {
+        rate_limit {
+            zone consultation {
+                key {remote_host}
+                events 5
+                window 1m
+            }
+        }
+        reverse_proxy 127.0.0.1:3005
+    }
 
     handle /api/health {
         reverse_proxy 127.0.0.1:3000
@@ -24,6 +75,10 @@ leo-ai.ru {
     }
     handle /api/email* {
         reverse_proxy 127.0.0.1:3005
+    }
+    # Telegram support webhook (when TELEGRAM_USE_POLLING=false)
+    handle /telegram/webhook {
+        reverse_proxy 127.0.0.1:3008
     }
     handle /api/* {
         reverse_proxy 127.0.0.1:3001

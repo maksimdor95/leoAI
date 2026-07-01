@@ -12,7 +12,7 @@
 
 **Главный актив:** карьерные данные -- навыки, карьерные цели, ответы на интервью, история обучения и откликов (Career Graph: Users -- Skills -- Tools -- Jobs -- Learning).
 
-**Технологии:** YandexGPT, Docker Compose, Yandex Cloud Serverless Containers.
+**Технологии:** YandexGPT, Docker Compose, VPS (Caddy), Yandex Cloud API (GPT/TTS/Object Storage).
 
 ---
 
@@ -300,7 +300,7 @@ Beginner -> Intermediate -> Advanced -> Expert (или числовая шкал
 | Сценарий LEO "PM-интервью" (`product=wannanew`) | Реализовано |
 | Голосовой ввод (Web Speech API) | Реализовано |
 | Онбординг карьерного профиля | Реализовано |
-| Docker Compose + Yandex Cloud Serverless | Реализовано |
+| Docker Compose + VPS (Caddy) | Реализовано |
 | YandexGPT интеграция | Реализовано |
 | Resume Agent | В планах |
 | Skills Analysis Agent | В планах |

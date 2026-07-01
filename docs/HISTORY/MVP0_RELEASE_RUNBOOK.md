@@ -71,8 +71,8 @@ RUNS=2 npm run smoke:mvp0:full:auto
 
 ## 5) Rollback steps
 
-- Serverless: вернуться на предыдущую стабильную revision.
-- PM2: переключиться на предыдущий commit/tag и перезапустить сервисы.
+- VPS: `git checkout <stable-tag>` + `npm run dev:deploy:staging` (или `deploy-staging.sh`).
+- PM2 (если используется): переключиться на предыдущий commit/tag и перезапустить сервисы.
 - Подтвердить восстановление:
   - `npm run smoke:mvp0`
   - `RUNS=1 SMOKE_FINAL_ARTIFACT=1 npm run smoke:mvp0:full:auto`

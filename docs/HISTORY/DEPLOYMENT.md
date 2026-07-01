@@ -18,16 +18,15 @@
 
 ---
 
-## Альтернативный/целевой cloud-контур (Yandex Cloud)
+## Production-переменные окружения
 
-## Требования
+> **Примечание:** контур **Yandex Cloud Serverless Containers** (workflow `deploy-yc.yml`, `infrastructure/yandex-cloud/`) снят с эксплуатации. Единственный актуальный деплой — **VPS + Caddy** (см. выше). Yandex Cloud по-прежнему используется только как **внешний API**: YandexGPT, SpeechKit TTS, Object Storage для PDF.
+
+### Требования (локально / VPS)
 
 - Node.js 18+, Docker, Docker Compose
-- Yandex Cloud CLI (`yc`) — [установка](https://cloud.yandex.ru/docs/cli/quickstart)
-- PostgreSQL 14+ (Yandex Managed PostgreSQL или self-hosted)
-- Redis 7+ (Yandex Managed Redis или self-hosted)
-
-## Production-переменные окружения
+- PostgreSQL 14+ (на VPS — Docker `postgres` или managed)
+- Redis 7+ (на VPS — Docker `redis` или managed)
 
 ### General
 
@@ -185,39 +184,7 @@ docker build -t leoai-email        ./services/email
 docker build -t leoai-report       ./services/report
 ```
 
-### Yandex Serverless Containers
-
-1. GitHub Actions собирает Docker-образы и публикует в Yandex Container Registry.
-2. Каждый сервис разворачивается как Serverless Container.
-3. WebSocket не поддерживается в serverless — для `conversation` используйте REST API с polling.
-
-## GitHub Actions секреты
-
-### Repository Secrets
-
-| Секрет | Описание |
-|---|---|
-| `YC_REGISTRY_ID` | ID реестра Container Registry |
-| `YC_SERVICE_ACCOUNT_ID` | ID сервисного аккаунта |
-| `YC_SERVICE_ACCOUNT_KEY_JSON` | JSON-ключ сервисного аккаунта |
-| `YC_ACCESS_KEY_ID` | Access Key (Object Storage) |
-| `YC_SECRET_ACCESS_KEY` | Secret Key (Object Storage) |
-| `YC_API_KEY` | API-ключ YandexGPT |
-| `DB_HOST` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` / `DB_PORT` | Параметры PostgreSQL |
-| `REDIS_HOST` / `REDIS_PASSWORD` | Параметры Redis |
-| `JWT_SECRET` | Секрет JWT |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_SECURE` | SMTP-параметры |
-| `FROM_EMAIL` / `FROM_NAME` | Отправитель |
-
-### Workflow-переменные (не секреты)
-
-| Переменная | Описание |
-|---|---|
-| `YC_FOLDER_ID` | ID каталога Yandex Cloud |
-| `YC_NETWORK_ID` | ID сети |
-| `YC_SUBNET_ID` | ID подсети |
-
-## Nginx (Reverse Proxy)
+## Reverse proxy (Caddy / Nginx)
 
 ```nginx
 upstream user_profile { server 127.0.0.1:3001; }
@@ -282,14 +249,15 @@ npm run smoke:mvp0
 
 ## Откат (Rollback)
 
-Serverless Containers:
+VPS (через git + `dev:deploy:staging`):
 
 ```bash
-yc serverless container revision list --container-name leoai-user-profile
-yc serverless container revision deploy --container-name leoai-user-profile --revision-id <ID>
+git fetch origin main
+git checkout <stable-commit>
+bash ./scripts/dev/deploy-staging.sh --skip-pull
 ```
 
-PM2 (через git):
+PM2 (если используется):
 
 ```bash
 git checkout <commit>

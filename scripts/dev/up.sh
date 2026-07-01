@@ -72,8 +72,13 @@ start_service() {
     run_cmd="npm run start"
     post_env="export NODE_ENV=production"
   elif [[ "$mode" == "next-dev" ]]; then
-    # next dev + NODE_ENV=production (e.g. staging env file) breaks PostCSS/Tailwind (@tailwind in globals.css).
+    # next dev + NODE_ENV=production breaks PostCSS/Tailwind (@tailwind in globals.css).
     post_env="export NODE_ENV=development"
+  fi
+
+  # Staging VPS: backend must run with NODE_ENV=production (JWT/INTERNAL_API_KEY validators, secure cookies).
+  if [[ "$mode" != "next-dev" && "$ENV_FILE" == *staging* ]]; then
+    post_env="export NODE_ENV=production"
   fi
 
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -100,6 +105,7 @@ while IFS= read -r line || [[ -n \"\$line\" ]]; do
   export \"\$key=\$value\"
 done < \"$ENV_FILE\"
 $post_env
+echo \"[$name] NODE_ENV=\${NODE_ENV:-unset}\" >&2
 cd \"$ROOT_DIR/$rel_dir\" && $run_cmd
 " >"$log_file" 2>&1 &
   local pid="$!"

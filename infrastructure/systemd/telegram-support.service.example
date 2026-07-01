@@ -1,0 +1,30 @@
+# systemd unit for telegram-support on VPS (independent of dev:up).
+#
+#   sudo cp infrastructure/systemd/telegram-support.service.example /etc/systemd/system/telegram-support.service
+#   sudo nano /etc/systemd/system/telegram-support.service   # paths, User
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now telegram-support
+#
+# Env: EnvironmentFile=/home/ubuntu/leoAI/.env.staging.local
+# Requires WARP (or other TELEGRAM_PROXY_URL) for outbound Bot API on RU VPS.
+
+[Unit]
+Description=LEO AI Telegram support bot
+After=network-online.target warp-svc.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/leoAI/services/telegram-support
+EnvironmentFile=/home/ubuntu/leoAI/.env.staging.local
+Environment=TELEGRAM_STRICT_CONFIG=true
+Environment=BIND_HOST=127.0.0.1
+ExecStart=/usr/bin/npm run dev
+Restart=always
+RestartSec=15
+StandardOutput=append:/home/ubuntu/leoAI/.runlogs/telegram-support.log
+StandardError=append:/home/ubuntu/leoAI/.runlogs/telegram-support.log
+
+[Install]
+WantedBy=multi-user.target

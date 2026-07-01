@@ -42,6 +42,21 @@ print_tts_status() {
   fi
 }
 
+print_backend_node_env() {
+  local log_file="$ROOT_DIR/.runlogs/user-profile.log"
+  if [[ ! -f "$log_file" ]]; then
+    echo "[backend-env] user-profile log not found"
+    return 0
+  fi
+  local line
+  line="$(grep -E '\[user-profile\] NODE_ENV=' "$log_file" | tail -1 || true)"
+  if [[ -n "$line" ]]; then
+    echo "[backend-env] $line"
+  else
+    echo "[backend-env] NODE_ENV not found in user-profile.log (service may predate logging)"
+  fi
+}
+
 print_status "frontend" 3000
 print_status "user-profile" 3001
 print_status "conversation" 3002
@@ -50,4 +65,5 @@ print_status "job-matching" 3004
 print_status "email" 3005
 print_status "telegram-support" 3008
 print_status "report" 3007
+print_backend_node_env
 print_tts_status

@@ -70,6 +70,8 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+bash "$ROOT_DIR/scripts/dev/validate-staging-env.sh" "$ENV_FILE"
+
 echo "=== Staging deploy ==="
 echo "Root: $ROOT_DIR"
 echo "Env:  $ENV_FILE"
@@ -149,6 +151,14 @@ if [[ "$local_code" != "200" ]] || [[ "$public_code" != "200" ]]; then
   echo "  tail -40 $ROOT_DIR/.runlogs/frontend.log" >&2
   echo "  tail -40 $ROOT_DIR/.runlogs/user-profile.log" >&2
   exit 1
+fi
+
+telegram_health="$(curl -s --max-time 8 "http://127.0.0.1:3008/health" 2>/dev/null || echo '{}')"
+if [[ "$telegram_health" != *'"connected":true'* ]]; then
+  echo
+  echo "Warning: telegram-support is up but Telegram API is not connected (WARP/proxy)." >&2
+  echo "  tail -40 $ROOT_DIR/.runlogs/telegram-support.log" >&2
+  echo "  Bot may recover automatically; support tickets may be delayed." >&2
 fi
 
 echo
