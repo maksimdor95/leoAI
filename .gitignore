@@ -49,6 +49,7 @@ Thumbs.db
 *.temp
 .cache/
 .temp/
+.wrangler/
 
 # Файлы базы данных (локальные)
 *.db

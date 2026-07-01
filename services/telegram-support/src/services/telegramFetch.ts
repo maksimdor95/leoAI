@@ -108,19 +108,28 @@ export async function telegramFetch(
   input: string,
   init?: RequestInit & { dispatcher?: Dispatcher }
 ): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  if (config.apiProxySecret) {
+    headers.set('X-Telegram-Proxy-Secret', config.apiProxySecret);
+  }
+  const requestInit: RequestInit & { dispatcher?: Dispatcher } = {
+    ...init,
+    headers,
+  };
+
   const proxyUrl = config.proxyUrl();
 
   if (proxyUrl && isSocksUrl(proxyUrl)) {
-    return socksFetch(input, init);
+    return socksFetch(input, requestInit);
   }
 
   const proxyDispatcher = getTelegramDispatcher();
   if (!proxyDispatcher) {
-    return fetch(input, init);
+    return fetch(input, requestInit);
   }
 
   return fetch(input, {
-    ...init,
+    ...requestInit,
     dispatcher: proxyDispatcher,
   });
 }

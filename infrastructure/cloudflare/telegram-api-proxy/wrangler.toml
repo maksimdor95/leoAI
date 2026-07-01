@@ -1,0 +1,6 @@
+name = "leo-telegram-api-proxy"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+
+# Secret (do not commit):
+#   npx wrangler secret put PROXY_SECRET

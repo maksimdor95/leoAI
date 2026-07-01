@@ -58,6 +58,7 @@ export const config = {
   ),
   operatorIds: parseOperatorIds(process.env.TELEGRAM_OPERATOR_IDS),
   apiRoot: (process.env.TELEGRAM_API_ROOT?.trim() || 'https://api.telegram.org').replace(/\/$/, ''),
+  apiProxySecret: process.env.TELEGRAM_API_PROXY_SECRET?.trim() || '',
   proxyUrl: optionalProxyUrl,
   webhookUrl,
   ngrokAutosync: ngrokAutosyncFlag === 'true' || ngrokAutosyncFlag === '1',
@@ -97,10 +98,19 @@ export function validateConfig(): void {
     throw new Error('TELEGRAM_WEBHOOK_SECRET is required in webhook mode (TELEGRAM_STRICT_CONFIG)');
   }
 
+  const usingWorker = !config.apiRoot.includes('api.telegram.org');
+  if (usingWorker && !config.apiProxySecret) {
+    logger.warn('TELEGRAM_API_ROOT is custom but TELEGRAM_API_PROXY_SECRET is empty — Worker will reject requests');
+  }
+  if (usingWorker && config.proxyUrl()) {
+    logger.warn('TELEGRAM_API_ROOT points to Worker — unset TELEGRAM_PROXY_URL or traffic may bypass Worker');
+  }
+
   logger.info('Telegram support config OK', {
     supportChatId: chatId,
     siteUrl: config.siteUrl,
     bindHost: config.bindHost,
+    apiRoot: usingWorker ? config.apiRoot : 'api.telegram.org',
     usePolling: config.usePolling,
     webhook: config.webhookUrl || (config.ngrokAutosync ? 'ngrok-autosync' : 'none'),
     proxy: config.proxyUrl() ? 'enabled' : 'disabled',
