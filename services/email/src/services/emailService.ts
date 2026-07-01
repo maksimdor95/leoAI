@@ -11,7 +11,7 @@ import { logger } from '../utils/logger';
 import { compileTemplate, TemplateName } from './templateService';
 
 // Ensure env is loaded before reading SMTP/SendGrid vars at module load time.
-dotenv.config({ override: true });
+dotenv.config();
 
 // SMTP Configuration (Yandex Mail)
 const SMTP_HOST = process.env.SMTP_HOST || '';

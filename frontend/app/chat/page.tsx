@@ -542,8 +542,8 @@ function ChatPageContent() {
   }, [stopAssistantAudio]);
 
   const canUseBrowserTtsFallback = useCallback(() => {
-    return enableBrowserTtsFallbackRef.current || !isMuted;
-  }, [isMuted]);
+    return enableBrowserTtsFallbackRef.current;
+  }, []);
 
   const isAssistantAudioPlaying = useCallback(() => {
     const el = assistantAudioElRef.current;

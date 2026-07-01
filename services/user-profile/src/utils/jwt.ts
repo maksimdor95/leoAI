@@ -7,8 +7,8 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import { logger } from './logger';
 
-// Load .env before reading JWT_SECRET (index.ts runs dotenv after imports are resolved).
-dotenv.config({ override: true });
+// Fill unset vars from service .env; do not override secrets from up.sh / .env.staging.local.
+dotenv.config();
 
 const JWT_SECRET: string = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '7d';

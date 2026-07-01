@@ -4,7 +4,7 @@
  */
 
 import dotenv from 'dotenv';
-dotenv.config({ override: true });
+dotenv.config();
 
 import { initSentry } from './utils/sentry';
 initSentry('email');

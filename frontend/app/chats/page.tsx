@@ -12,7 +12,8 @@ import {
   ArrowLeftOutlined,
 } from '@ant-design/icons';
 import { conversationAPI, ConversationPreview } from '@/lib/api';
-import { isAuthenticated } from '@/lib/auth';
+import { clearClientAuthState, isAuthenticated } from '@/lib/auth';
+import axios from 'axios';
 import Link from 'next/link';
 import { SupportWidget } from '@/components/support/SupportWidget';
 import { AppSettingsMenu } from '@/components/chat/AppSettingsMenu';
@@ -59,6 +60,13 @@ export default function ChatsPage() {
       const data = await conversationAPI.getConversations();
       setConversations(data.conversations);
     } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        clearClientAuthState();
+        messageApi.warning(ui('chatsAuthRequired'));
+        openAuthModal('login', { source: 'chats_auth_required' });
+        router.push('/');
+        return;
+      }
       const errorMessage = error instanceof Error ? error.message : ui('chatsLoadError');
       messageApi.error(errorMessage);
     } finally {

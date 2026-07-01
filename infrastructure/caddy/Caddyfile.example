@@ -7,7 +7,11 @@ leo-ai.ru {
     encode gzip
 
     # --- Rate limits (per IP) — complement app-level limits ---
-    @user_login method POST path /api/users/login
+    # Use block matchers: inline `method POST path ...` parses incorrectly in Caddy.
+    @user_login {
+        method POST
+        path /api/users/login
+    }
     handle @user_login {
         rate_limit {
             zone user_login {
@@ -19,7 +23,10 @@ leo-ai.ru {
         reverse_proxy 127.0.0.1:3001
     }
 
-    @user_register method POST path /api/users/register /api/users
+    @user_register {
+        method POST
+        path /api/users/register /api/users
+    }
     handle @user_register {
         rate_limit {
             zone user_register {
@@ -31,7 +38,10 @@ leo-ai.ru {
         reverse_proxy 127.0.0.1:3001
     }
 
-    @forgot_password method POST path /api/users/forgot-password
+    @forgot_password {
+        method POST
+        path /api/users/forgot-password
+    }
     handle @forgot_password {
         rate_limit {
             zone forgot_password {
@@ -43,7 +53,10 @@ leo-ai.ru {
         reverse_proxy 127.0.0.1:3001
     }
 
-    @consultation method POST path /api/email/send-consultation
+    @consultation {
+        method POST
+        path /api/email/send-consultation
+    }
     handle @consultation {
         rate_limit {
             zone consultation {
@@ -61,19 +74,35 @@ leo-ai.ru {
     handle /socket.io/* {
         reverse_proxy 127.0.0.1:3002
     }
-    handle /api/chat* {
+    # Use explicit path matchers — `/api/chat*` does NOT match `/api/chat/session` in Caddy.
+    @chat_api {
+        path /api/chat /api/chat/*
+    }
+    handle @chat_api {
         reverse_proxy 127.0.0.1:3002
     }
-    handle /api/conversations* {
+    @conversations_api {
+        path /api/conversations /api/conversations/*
+    }
+    handle @conversations_api {
         reverse_proxy 127.0.0.1:3002
     }
-    handle /api/ai* {
+    @ai_api {
+        path /api/ai /api/ai/*
+    }
+    handle @ai_api {
         reverse_proxy 127.0.0.1:3003
     }
-    handle /api/jobs* {
+    @jobs_api {
+        path /api/jobs /api/jobs/*
+    }
+    handle @jobs_api {
         reverse_proxy 127.0.0.1:3004
     }
-    handle /api/email* {
+    @email_api {
+        path /api/email /api/email/*
+    }
+    handle @email_api {
         reverse_proxy 127.0.0.1:3005
     }
     # Telegram support webhook (when TELEGRAM_USE_POLLING=false)

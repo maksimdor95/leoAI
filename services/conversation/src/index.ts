@@ -252,6 +252,23 @@ function extractCookieToken(cookieHeader: string | undefined, cookieName: string
   }
 }
 
+/** Bearer from headers or httpOnly cookie — needed for ai-nlp after cookie-auth migration. */
+function extractRequestAccessToken(req: express.Request): string | undefined {
+  const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
+  const headerToken = extractBearerToken(
+    typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
+      ? rawAuthHeader
+      : undefined
+  );
+  const cookieToken = extractCookieToken(req.headers.cookie, 'leo_access_token');
+  return headerToken || cookieToken || undefined;
+}
+
+function buildRequestAuthorizationHeader(req: express.Request): string | undefined {
+  const token = extractRequestAccessToken(req);
+  return token ? `Bearer ${token}` : undefined;
+}
+
 function getSpeakableTextFromAssistantMessage(message: Message | null): string {
   if (!message || message.role !== MessageRole.ASSISTANT) return '';
   if (message.type === MessageType.TEXT && 'content' in message) return String(message.content || '');
@@ -402,12 +419,7 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
     let hydratedSession = await getSession(session.id);
     let assistantAudio: AssistantAudioResult = null;
     let entryAssistantMessage: Message | null = null;
-    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
-    const token = extractBearerToken(
-      typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
-        ? rawAuthHeader
-        : undefined
-    );
+    const token = extractRequestAccessToken(req);
     if (hydratedSession) {
       await persistClientPreferencesIfPresent(hydratedSession.id, { locale, ttsPreferences });
       hydratedSession = (await getSession(hydratedSession.id)) ?? hydratedSession;
@@ -509,13 +521,8 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
     await addMessageToSession(sessionForReply.id, userMessage);
 
     // Process reply
-    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
-    const token = extractBearerToken(
-      typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
-        ? rawAuthHeader
-        : undefined
-    );
-    const replyResult = await handleUserReply(sessionForReply, content.trim(), token || undefined);
+    const token = extractRequestAccessToken(req);
+    const replyResult = await handleUserReply(sessionForReply, content.trim(), token);
 
     if (replyResult.metadataUpdates) {
       await updateSessionMetadata(sessionForReply.id, replyResult.metadataUpdates);
@@ -541,12 +548,7 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
       if (updatedSessionForCompletion) {
         const completedSteps = updatedSessionForCompletion.metadata.completedSteps || [];
         if (completedSteps.length > 5) {
-          const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
-          const token = extractBearerToken(
-            typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
-              ? rawAuthHeader
-              : undefined
-          );
+          const token = extractRequestAccessToken(req);
 
           if (token) {
             handleConversationCompletion({
@@ -626,12 +628,7 @@ app.post('/api/chat/session/:id/analyze-vacancy', authenticateRequest, async (re
     });
     await addMessageToSession(sessionForReply.id, userMessage);
 
-    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
-    const token = extractBearerToken(
-      typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
-        ? rawAuthHeader
-        : undefined
-    );
+    const token = extractRequestAccessToken(req);
 
     const replyResult = await analyzeVacancyFromText(
       sessionForReply,
@@ -704,12 +701,7 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
 
     const result = await applyImportedCollectedData(sessionForReply, collectedData);
     await updateSession(sessionForReply);
-    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
-    const token = extractBearerToken(
-      typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
-        ? rawAuthHeader
-        : undefined
-    );
+    const token = extractRequestAccessToken(req);
 
     const mergedRole =
       (result.metadataUpdates?.collectedData?.desired_role as string | undefined) ||
@@ -758,14 +750,11 @@ app.post('/api/chat/session/:id/summary', authenticateRequest, async (req, res) 
       return;
     }
 
-    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
-    const token = extractBearerToken(
-      Array.isArray(rawAuthHeader) ? rawAuthHeader[0] : (rawAuthHeader as string | undefined)
-    );
+    const token = extractRequestAccessToken(req);
 
     const summary = await generateProfileSummaryFromCollectedData({
       collectedData: session.metadata.collectedData || {},
-      authToken: token || undefined,
+      authToken: token,
     });
 
     const downloadCommand: Message = {
@@ -819,10 +808,7 @@ app.get('/api/chat/session/:id/summary-file', authenticateRequest, async (req, r
       return;
     }
 
-    const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
-    const token = extractBearerToken(
-      Array.isArray(authHeader) ? authHeader[0] : (authHeader as string | undefined)
-    );
+    const token = extractRequestAccessToken(req);
 
     let summary: ProfileSummaryExport | null = parseProfileSummaryDraft(
       session.metadata.flags?.profileSummaryDraft
@@ -867,15 +853,12 @@ app.post('/api/chat/session/:id/resume', authenticateRequest, async (req, res) =
       return;
     }
 
-    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
-    const token = extractBearerToken(
-      Array.isArray(rawAuthHeader) ? rawAuthHeader[0] : (rawAuthHeader as string | undefined)
-    );
+    const token = extractRequestAccessToken(req);
 
     const { resume, format } = await generateResumeFromCollectedData({
       collectedData: session.metadata.collectedData || {},
       format: 'markdown',
-      authToken: token || undefined,
+      authToken: token,
     });
 
     // По UX показываем только действия (скачать PDF/DOCX), без длинного markdown в чате.
@@ -932,10 +915,7 @@ app.get('/api/chat/session/:id/resume-file', authenticateRequest, async (req, re
       return;
     }
 
-    const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
-    const token = extractBearerToken(
-      Array.isArray(authHeader) ? authHeader[0] : (authHeader as string | undefined)
-    );
+    const token = extractRequestAccessToken(req);
 
     const cachedDraft =
       typeof session.metadata.flags?.resumeDraft === 'string'
@@ -991,16 +971,13 @@ app.post('/api/chat/session/:id/resume-email', authenticateRequest, async (req, 
       ? body.email.trim()
       : user.email;
 
-    const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
-    const token = extractBearerToken(
-      Array.isArray(authHeader) ? authHeader[0] : (authHeader as string | undefined)
-    );
+    const token = extractRequestAccessToken(req);
     const bearer = token ? `Bearer ${token}` : '';
 
     const { resume } = await generateResumeFromCollectedData({
       collectedData: session.metadata.collectedData || {},
       format: 'markdown',
-      authToken: token || undefined,
+      authToken: token,
     });
 
     const coverLetter = await generateFreeChatResponse({
@@ -1086,7 +1063,7 @@ app.post('/api/chat/session/:id/report', authenticateRequest, async (req, res) =
 
     // Proxy request to Report Service
     const reportServiceUrl = process.env.REPORT_SERVICE_URL || 'http://localhost:3007';
-    const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const authorization = buildRequestAuthorizationHeader(req);
 
     try {
       const axios = (await import('axios')).default;
@@ -1095,7 +1072,7 @@ app.post('/api/chat/session/:id/report', authenticateRequest, async (req, res) =
         { sessionId, userId: user.userId, email: user.email },
         {
           headers: {
-            Authorization: authHeader,
+            ...(authorization ? { Authorization: authorization } : {}),
             'Content-Type': 'application/json',
           },
           timeout: 10000,
@@ -1131,14 +1108,10 @@ app.get('/api/chat/session/:id/report-preview', authenticateRequest, async (req,
     }
 
     const reportServiceUrl = process.env.REPORT_SERVICE_URL || 'http://localhost:3007';
-    const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const authorization = buildRequestAuthorizationHeader(req);
 
     try {
       const axios = (await import('axios')).default;
-      const bearer =
-        typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
-          ? authHeader
-          : `Bearer ${String(authHeader || '').replace(/^Bearer\s+/i, '')}`;
 
       // Report не дергает conversation по сети — передаём collectedData после проверки сессии здесь.
       const response = await axios.post(
@@ -1146,8 +1119,7 @@ app.get('/api/chat/session/:id/report-preview', authenticateRequest, async (req,
         { collectedData: session.metadata.collectedData || {}, sessionId },
         {
           headers: {
-            Authorization: bearer,
-            'X-Auth-Token': bearer,
+            ...(authorization ? { Authorization: authorization, 'X-Auth-Token': authorization } : {}),
             'Content-Type': 'application/json',
           },
           timeout: 20000,
@@ -1183,7 +1155,7 @@ app.get('/api/chat/session/:sessionId/report/:reportId', authenticateRequest, as
 
     // Proxy request to Report Service
     const reportServiceUrl = process.env.REPORT_SERVICE_URL || 'http://localhost:3007';
-    const authHeader = req.headers['x-auth-token'] || req.headers.authorization;
+    const authorization = buildRequestAuthorizationHeader(req);
 
     try {
       const axios = (await import('axios')).default;
@@ -1191,7 +1163,7 @@ app.get('/api/chat/session/:sessionId/report/:reportId', authenticateRequest, as
         `${reportServiceUrl}/api/report/${reportId}/status`,
         {
           headers: {
-            Authorization: authHeader,
+            ...(authorization ? { Authorization: authorization } : {}),
           },
           timeout: 10000,
         }
@@ -1230,18 +1202,13 @@ app.post('/api/chat/session/:id/command', authenticateRequest, async (req, res) 
     const sessionForCommand = (await getSession(session.id)) ?? session;
     const requestTtsPrefs = parseTtsPreferences(ttsPreferences);
 
-    const rawAuthHeader = req.headers['x-auth-token'] || req.headers.authorization;
-    const token = extractBearerToken(
-      typeof rawAuthHeader === 'string' || Array.isArray(rawAuthHeader)
-        ? rawAuthHeader
-        : undefined
-    );
+    const token = extractRequestAccessToken(req);
 
     const commandResult = await handleCommand(
       sessionForCommand,
       commandId,
       action,
-      token || undefined
+      token
     );
 
     if (commandResult.metadataUpdates) {

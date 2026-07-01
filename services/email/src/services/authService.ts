@@ -7,7 +7,8 @@ import jwt, { JwtPayload } from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import { logger } from '../utils/logger';
 
-dotenv.config({ override: true });
+// Fill unset vars only — staging injects JWT_SECRET via up.sh before Node starts.
+dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const DEFAULT_PLACEHOLDER = 'your-secret-key-change-in-production';

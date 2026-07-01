@@ -8,7 +8,7 @@ import jwt, { JwtPayload } from 'jsonwebtoken';
 import { logger } from '../utils/logger';
 
 const USER_PROFILE_SERVICE_URL = process.env.USER_PROFILE_SERVICE_URL || 'http://localhost:3001';
-const JWT_SECRET = process.env.JWT_SECRET;
+const getJwtSecret = (): string | undefined => process.env.JWT_SECRET?.trim();
 const JWT_ALGORITHM: jwt.Algorithm = 'HS256';
 
 /**
@@ -24,7 +24,8 @@ export async function verifyToken(
   token: string
 ): Promise<{ userId: string; email: string } | null> {
   try {
-    if (!JWT_SECRET || JWT_SECRET === 'your-secret-key-change-in-production') {
+    const jwtSecret = getJwtSecret();
+    if (!jwtSecret || jwtSecret === 'your-secret-key-change-in-production') {
       logger.error('JWT_SECRET is not configured for conversation service');
       return null;
     }
@@ -33,7 +34,7 @@ export async function verifyToken(
     const cleanToken = token.replace(/^Bearer\s+/, '');
 
     // Verify token locally (fast)
-    const decoded = jwt.verify(cleanToken, JWT_SECRET, {
+    const decoded = jwt.verify(cleanToken, jwtSecret, {
       algorithms: [JWT_ALGORITHM],
     });
     if (typeof decoded !== 'object' || decoded === null) {
