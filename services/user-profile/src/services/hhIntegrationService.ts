@@ -5,6 +5,7 @@ import {
   type UserOAuthTokenRecord,
 } from '../models/userOAuthTokenRepository';
 import { logger } from '../utils/logger';
+import { getJwtSecret, JWT_ALGORITHM } from '../utils/jwt';
 
 const HH_API_URL = process.env.HH_API_URL || 'https://api.hh.ru';
 const HH_AUTHORIZE_URL = process.env.HH_OAUTH_AUTHORIZE_URL || 'https://hh.ru/oauth/authorize';
@@ -12,7 +13,6 @@ const HH_TOKEN_URL = process.env.HH_OAUTH_TOKEN_URL || `${HH_API_URL}/token`;
 const HH_USER_AGENT =
   process.env.HH_USER_AGENT || 'leoAI-user-profile/1.0 (support@leoai.local)';
 const HH_OAUTH_STATE_EXPIRATION = '15m';
-const JWT_ALGORITHM: jwt.Algorithm = 'HS256';
 const TOKEN_REFRESH_SKEW_MS = 60_000;
 
 export interface HhIntegrationStatus {
@@ -35,10 +35,6 @@ interface HhTokenResponse {
   refresh_token?: string;
   expires_in?: number;
   token_type?: string;
-}
-
-function getJwtSecret(): string {
-  return process.env.JWT_SECRET || 'your_jwt_secret_key_here_change_in_production';
 }
 
 function getHhOAuthClientId(): string {

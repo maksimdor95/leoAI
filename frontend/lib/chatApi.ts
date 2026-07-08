@@ -81,6 +81,8 @@ class ChatApiClient {
   private sessionId: string | null = null;
   private sessionMetadata: SessionMetadata | null = null;
   private pollingInterval: ReturnType<typeof setInterval> | null = null;
+  /** Invalidates in-flight poll ticks when polling restarts or client disconnects. */
+  private pollingGeneration = 0;
   private lastMessageCount = 0;
   private requestTimeoutMs = Number(process.env.NEXT_PUBLIC_CHAT_REQUEST_TIMEOUT_MS || 20000);
   private getClientPreferences?: () => ClientPreferences | undefined;
@@ -592,15 +594,28 @@ class ChatApiClient {
   /**
    * Poll for new messages (fallback for real-time)
    */
+  private isStaleSessionPollingError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('session not found') ||
+      message.includes('http 404') ||
+      message.includes('not found or unauthorized')
+    );
+  }
+
   private startPolling(): void {
     this.stopPolling();
+    const generation = this.pollingGeneration;
 
     // Poll every 3 seconds
     this.pollingInterval = setInterval(async () => {
-      if (!this.sessionId) return;
+      if (!this.sessionId || generation !== this.pollingGeneration) return;
 
       try {
         const session = await this.request<ChatSession>(`/api/chat/session/${this.sessionId}`);
+
+        if (generation !== this.pollingGeneration) return;
 
         if (session.metadata) {
           this.sessionMetadata = session.metadata;
@@ -613,13 +628,26 @@ class ChatApiClient {
           this.lastMessageCount = session.messages.length;
         }
       } catch (error) {
-        // Silently ignore polling errors
+        if (generation !== this.pollingGeneration) return;
+
+        if (this.isStaleSessionPollingError(error)) {
+          // Session expired in Redis or was deleted — stop spamming 404 every 3s.
+          this.stopPolling();
+          this.sessionId = null;
+          this.onError?.({
+            message: 'Сессия истекла или недоступна. Обновите страницу или откройте чат заново.',
+          });
+          this.onDisconnected?.();
+          return;
+        }
+
         console.warn('Polling error:', error);
       }
     }, 3000);
   }
 
   private stopPolling(): void {
+    this.pollingGeneration += 1;
     if (this.pollingInterval) {
       clearInterval(this.pollingInterval);
       this.pollingInterval = null;

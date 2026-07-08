@@ -1414,6 +1414,31 @@ html[data-theme='leo-dark'] .landing-preview-start-btn:hover {
   background: #16a34a !important;
 }
 
+[data-theme='leo-dark'] .auth-modal .auth-social-btn.ant-btn,
+[data-theme='leo-dark'] .auth-social-btn--leo.ant-btn {
+  height: 3rem !important;
+  border-radius: 0.75rem !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(0, 0, 0, 0.3) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-weight: 500 !important;
+  font-size: 1rem !important;
+  box-shadow: none !important;
+}
+
+[data-theme='leo-dark'] .auth-modal .auth-social-btn.ant-btn:not(:disabled):hover,
+[data-theme='leo-dark'] .auth-social-btn--leo.ant-btn:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #fff !important;
+}
+
+[data-theme='leo-dark'] .auth-modal .auth-social-btn .ant-btn-icon,
+[data-theme='leo-dark'] .auth-social-btn--leo .ant-btn-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
 /* Текстовые кнопки (Забыли пароль?, назад) — без белого фона браузера */
 [data-theme='leo-dark'] .auth-modal button.auth-text-btn:focus-visible {
   outline: 2px solid rgba(74, 222, 128, 0.45);

@@ -3,7 +3,7 @@
 **Версия:** 1.0  
 **Дата:** 2026-06-22  
 **Статус:** Рабочий план внедрения  
-**Источник правды:** [`INTERVIEW_PREP_METHODOLOGY.md`](./INTERVIEW_PREP_METHODOLOGY.md) v1.3  
+**Источник правды:** [`INTERVIEW_PREP_METHODOLOGY.md`](./INTERVIEW_PREP_METHODOLOGY.md) v1.3; продуктовый CJM/IA — [`INTERVIEW_PREP_CJM_v1.4.md`](./INTERVIEW_PREP_CJM_v1.4.md) (этапы, не дни)  
 **Спеки:** [`INTERVIEW_PREP_MOCK_RITUAL_PROMPT_SPEC.md`](./INTERVIEW_PREP_MOCK_RITUAL_PROMPT_SPEC.md), [`INTERVIEW_PREP_RESCUE_PROMPT_SPEC.md`](./INTERVIEW_PREP_RESCUE_PROMPT_SPEC.md)
 
 **Оценка горизонта:** ~8–12 недель (2–3 человека) при последовательном прохождении фаз.

@@ -7,7 +7,7 @@ import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { requireJobCatalogAccess } from '../middleware/jobCatalogAuth';
 import * as jobsController from '../controllers/jobsController';
-import { recordInteraction } from '../controllers/telemetryController';
+import { getViewedJobIds, recordInteraction } from '../controllers/telemetryController';
 
 const router = Router();
 
@@ -16,6 +16,12 @@ const router = Router();
  * Record user interaction with a job
  */
 router.post('/interaction', authenticateToken, recordInteraction);
+
+/**
+ * GET /api/jobs/interactions/viewed
+ * Job ids the user has opened in the vacancy preview (interaction_type = view).
+ */
+router.get('/interactions/viewed', authenticateToken, getViewedJobIds);
 
 /**
  * GET /api/jobs/catalog

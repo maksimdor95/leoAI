@@ -1343,6 +1343,31 @@
   color: #c2410c !important;
 }
 
+[data-theme='hume'] .auth-modal.leo-hume-modal .auth-social-btn.ant-btn,
+[data-theme='hume'] .auth-social-btn--hume.ant-btn {
+  height: 3rem !important;
+  border-radius: 0.75rem !important;
+  border: 1px solid rgba(34, 34, 34, 0.12) !important;
+  background: var(--color-paper) !important;
+  color: var(--color-ink) !important;
+  font-weight: 500 !important;
+  font-size: 1rem !important;
+  box-shadow: none !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .auth-social-btn.ant-btn:not(:disabled):hover,
+[data-theme='hume'] .auth-social-btn--hume.ant-btn:not(:disabled):hover {
+  background: var(--color-bone) !important;
+  border-color: rgba(34, 34, 34, 0.18) !important;
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .auth-modal.leo-hume-modal .auth-social-btn .ant-btn-icon,
+[data-theme='hume'] .auth-social-btn--hume .ant-btn-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
 /* Sidebar: profile fields, vacancy sections, ghost actions */
 [data-theme='hume'] .leo-chat-sidebar .text-emerald-400\/90,
 [data-theme='hume'] .leo-chat-sidebar .text-amber-400\/90 {
@@ -1369,14 +1394,9 @@
   box-shadow: 0 1px 3px rgba(34, 34, 34, 0.06) !important;
 }
 
-[data-theme='hume'] .leo-chat-sidebar .matched-job-card--new.matched-job-card--recommended {
+[data-theme='hume'] .leo-chat-sidebar .matched-job-card--new {
   border: 1px solid rgba(192, 148, 228, 0.35) !important;
   background: var(--color-rose-mist) !important;
-}
-
-[data-theme='hume'] .leo-chat-sidebar .matched-job-card--new.matched-job-card--weak {
-  border: 1px solid rgba(255, 183, 96, 0.35) !important;
-  background: var(--color-meringue) !important;
 }
 
 [data-theme='hume'] .leo-chat-sidebar .text-\[11px\].font-semibold.uppercase,
@@ -1429,6 +1449,48 @@
   font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace;
   font-size: 10px;
   letter-spacing: 0.025em;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .leo-vacancies-new-filter {
+  background: var(--color-mint) !important;
+  color: var(--color-slate-plum) !important;
+  border: 1px solid var(--color-border-hairline) !important;
+  box-shadow: none !important;
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace;
+  font-size: 10px !important;
+  letter-spacing: 0.025em;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .leo-vacancies-new-filter:hover {
+  background: color-mix(in srgb, var(--color-mint) 88%, var(--color-iris) 12%) !important;
+  color: var(--color-ink) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .leo-vacancies-new-filter--active {
+  background: color-mix(in srgb, var(--color-mint) 72%, var(--color-iris) 28%) !important;
+  color: var(--color-ink) !important;
+  border-color: color-mix(in srgb, var(--color-iris) 35%, var(--color-border-hairline) 65%) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .leo-vacancies-favorite-filter {
+  background: var(--color-paper) !important;
+  color: var(--color-smoke) !important;
+  border: 1px solid var(--color-border-hairline) !important;
+  box-shadow: none !important;
+  font-family: var(--font-pp-fraktion-mono), ui-monospace, monospace;
+  font-size: 10px !important;
+  letter-spacing: 0.025em;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .leo-vacancies-favorite-filter:hover {
+  background: var(--color-rose-mist) !important;
+  color: var(--color-iris) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .leo-vacancies-favorite-filter--active {
+  background: color-mix(in srgb, var(--color-rose-mist) 70%, var(--color-iris) 30%) !important;
+  color: var(--color-iris) !important;
+  border-color: color-mix(in srgb, var(--color-iris) 40%, var(--color-border-hairline) 60%) !important;
 }
 
 /* Vacancy drawer — Hume light */

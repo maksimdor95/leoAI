@@ -32,6 +32,25 @@ export async function fetchJobDetails(
   return response.json() as Promise<JobDetailsResponse>;
 }
 
+export async function fetchViewedJobIds(): Promise<string[]> {
+  if (!isAuthenticated()) {
+    return [];
+  }
+
+  const response = await fetch(`${jobsBaseUrl()}/api/jobs/interactions/viewed`, {
+    credentials: 'include',
+  }).catch(() => null);
+
+  if (!response?.ok) {
+    return [];
+  }
+
+  const data = await response.json().catch(() => ({}));
+  return Array.isArray(data?.jobIds)
+    ? data.jobIds.filter((id: unknown): id is string => typeof id === 'string')
+    : [];
+}
+
 export async function recordJobInteraction(
   jobId: string,
   interactionType: JobInteractionType

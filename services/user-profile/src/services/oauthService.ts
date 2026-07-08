@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 import { UserRepository } from '../models/userRepository';
 import { hashPassword } from '../utils/password';
-import { generateToken } from '../utils/jwt';
+import { generateToken, getJwtSecret, JWT_ALGORITHM } from '../utils/jwt';
 
 export type OAuthProvider = 'google' | 'yandex';
 
@@ -19,11 +19,6 @@ type OAuthProfile = {
 };
 
 const OAUTH_STATE_EXPIRATION = '10m';
-const JWT_ALGORITHM: jwt.Algorithm = 'HS256';
-
-function getJwtSecret(): string {
-  return process.env.JWT_SECRET || 'your_jwt_secret_key_here_change_in_production';
-}
 
 function buildStateToken(provider: OAuthProvider): string {
   return jwt.sign({ provider }, getJwtSecret(), {
@@ -33,11 +28,20 @@ function buildStateToken(provider: OAuthProvider): string {
 }
 
 function validateStateToken(state: string, provider: OAuthProvider): void {
-  const decoded = jwt.verify(state, getJwtSecret(), {
-    algorithms: [JWT_ALGORITHM],
-  }) as OAuthStatePayload;
-  if (decoded.provider !== provider) {
-    throw new Error('OAuth state provider mismatch');
+  try {
+    const decoded = jwt.verify(state, getJwtSecret(), {
+      algorithms: [JWT_ALGORITHM],
+    }) as OAuthStatePayload;
+    if (decoded.provider !== provider) {
+      throw new Error('OAuth state provider mismatch');
+    }
+  } catch (error) {
+    if (error instanceof jwt.JsonWebTokenError) {
+      throw new Error(
+        'Сессия OAuth недействительна. Начните вход заново. Для локальной разработки проверьте OAUTH_CALLBACK_BASE_URL и redirect URI в Яндекс OAuth.'
+      );
+    }
+    throw error;
   }
 }
 
@@ -167,6 +171,8 @@ export class OAuthService {
   }
 
   private static async fetchYandexProfile(code: string): Promise<OAuthProfile> {
+    const callbackBaseUrl = process.env.OAUTH_CALLBACK_BASE_URL || 'http://localhost:3001';
+    const callbackUrl = `${callbackBaseUrl}/api/users/oauth/yandex/callback`;
     const clientId = process.env.YANDEX_CLIENT_ID;
     const clientSecret = process.env.YANDEX_CLIENT_SECRET;
     if (!clientId || !clientSecret) {
@@ -180,6 +186,7 @@ export class OAuthService {
         code,
         client_id: clientId,
         client_secret: clientSecret,
+        redirect_uri: callbackUrl,
       }).toString(),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );

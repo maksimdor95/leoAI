@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ExportOutlined } from '@ant-design/icons';
+import { ExportOutlined, HeartFilled, HeartOutlined } from '@ant-design/icons';
 import { Button, Modal, Spin, message } from 'antd';
 import { fetchJobDetails, recordJobInteraction } from '@/lib/jobApi';
 import { ApplicationDraftPanel } from '@/components/chat/ApplicationDraftPanel';
@@ -19,6 +19,9 @@ type VacancyPreviewDrawerProps = {
   onVacancyPrep?: () => void;
   vacancyPrepLoading?: boolean;
   sessionId?: string | null;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
+  favoriteAriaLabel?: string;
 };
 
 function formatSalary(
@@ -120,6 +123,9 @@ export function VacancyPreviewDrawer({
   onVacancyPrep,
   vacancyPrepLoading = false,
   sessionId,
+  isFavorite = false,
+  onToggleFavorite,
+  favoriteAriaLabel = 'Добавить в избранное',
 }: VacancyPreviewDrawerProps) {
   const isHume = useHumeTheme();
   const [details, setDetails] = useState<JobDetailsResponse | null>(null);
@@ -270,6 +276,67 @@ export function VacancyPreviewDrawer({
     ? 'vacancy-secondary-btn'
     : '!border-white/15 !text-slate-200 !bg-white/5 hover:!bg-white/10';
 
+  const sourceLabel = formatJobSourceLabel(job?.source ?? context?.source);
+
+  const favoriteButton =
+    onToggleFavorite && context ? (
+      <button
+        type="button"
+        aria-label={favoriteAriaLabel}
+        aria-pressed={isFavorite}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleFavorite();
+        }}
+        className={
+          isHume
+            ? `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent transition-colors ${
+                isFavorite
+                  ? 'text-[var(--color-iris)] hover:bg-[var(--color-rose-mist)]'
+                  : 'text-[var(--color-smoke)] hover:border-[rgba(34,34,34,0.08)] hover:bg-[var(--color-paper)] hover:text-[var(--color-iris)]'
+              }`
+            : `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${
+                isFavorite
+                  ? 'text-rose-400 hover:bg-rose-500/10'
+                  : 'text-slate-500 hover:bg-white/[0.06] hover:text-rose-300'
+              }`
+        }
+      >
+        {isFavorite ? (
+          <HeartFilled className="text-sm" aria-hidden />
+        ) : (
+          <HeartOutlined className="text-sm" aria-hidden />
+        )}
+      </button>
+    ) : null;
+
+  const metadataRow = context ? (
+    <div
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs ${
+        isHume ? 'vacancy-muted-text' : 'text-slate-400'
+      }`}
+    >
+      <MatchReasonsPopover
+        score={context.score}
+        reasons={context.reasons}
+        variant={context.variant}
+      />
+      {sourceLabel ? <span>{sourceLabel}</span> : null}
+      {favoriteButton}
+      {details?.stale ? (
+        <span
+          className={
+            isHume
+              ? 'rounded-full bg-[var(--color-meringue)] px-2 py-0.5 text-[var(--color-slate-plum)]'
+              : 'rounded-full bg-amber-500/10 px-2 py-0.5 text-amber-300'
+          }
+        >
+          данные могли устареть
+        </span>
+      ) : null}
+    </div>
+  ) : null;
+
   return (
     <Modal
       open={open}
@@ -280,7 +347,7 @@ export function VacancyPreviewDrawer({
       width="100%"
       wrapClassName={`vacancy-preview-modal-wrap ${isHume ? 'vacancy-preview-modal-wrap--hume' : ''}`}
       className="vacancy-preview-modal"
-      destroyOnClose={false}
+      destroyOnHidden={false}
       styles={getVacancyModalStyles(isHume)}
       title={
         context ? (
@@ -305,8 +372,11 @@ export function VacancyPreviewDrawer({
       }
     >
       {loading && !details ? (
-        <div className="flex justify-center py-12">
-          <Spin />
+        <div className="space-y-4">
+          {metadataRow}
+          <div className="flex justify-center py-12">
+            <Spin />
+          </div>
         </div>
       ) : error && !details ? (
         <div className="space-y-3">
@@ -319,27 +389,7 @@ export function VacancyPreviewDrawer({
         <div className={isHume ? 'vacancy-drawer vacancy-drawer--hume' : 'vacancy-drawer vacancy-drawer--dark'}>
         <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start lg:px-8">
           <div className="space-y-4 min-w-0">
-          <div className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs ${isHume ? 'vacancy-muted-text' : 'text-slate-400'}`}>
-            {context ? (
-              <MatchReasonsPopover
-                score={context.score}
-                reasons={context.reasons}
-                variant={context.variant}
-              />
-            ) : null}
-            {job?.source ? <span>{formatJobSourceLabel(job.source)}</span> : null}
-            {details?.stale ? (
-              <span
-                className={
-                  isHume
-                    ? 'rounded-full bg-[var(--color-meringue)] px-2 py-0.5 text-[var(--color-slate-plum)]'
-                    : 'rounded-full bg-amber-500/10 px-2 py-0.5 text-amber-300'
-                }
-              >
-                данные могли устареть
-              </span>
-            ) : null}
-          </div>
+          {metadataRow}
 
           {factChips.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">

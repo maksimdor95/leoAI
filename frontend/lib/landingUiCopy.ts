@@ -25,6 +25,7 @@ type LandingStrings = {
   heroBadge: string;
   heroSubtitle: string;
   heroCta: string;
+  heroSignedInAs: string;
   settingsLanguageHint: string;
   previewEyebrow: string;
   previewTitle: string;
@@ -70,6 +71,7 @@ const strings: Record<AppLocale, LandingStrings> = {
     heroSubtitle:
       'Подберём вакансии под ваш опыт, подготовим сопроводительное и проведём пробное собеседование — всё в диалоге с LEO.',
     heroCta: 'Начать с LEO',
+    heroSignedInAs: 'Вы вошли как',
     settingsLanguageHint: 'Язык интерфейса и тема оформления',
     previewEyebrow: 'Превью диалога',
     previewTitle: 'Посмотрите, как LEO ведёт диалог',
@@ -118,6 +120,7 @@ const strings: Record<AppLocale, LandingStrings> = {
     heroSubtitle:
       'We match jobs to your experience, draft cover letters, and run mock interviews — all in one dialogue with LEO.',
     heroCta: 'Start with LEO',
+    heroSignedInAs: 'Signed in as',
     settingsLanguageHint: 'Interface language and appearance',
     previewEyebrow: 'Dialogue preview',
     previewTitle: 'See how LEO runs the conversation',

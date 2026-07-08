@@ -118,7 +118,6 @@ export function AppSettingsMenu({ variant = 'icon' }: AppSettingsMenuProps) {
     <Button
       type="text"
       size="small"
-      icon={<SettingOutlined aria-hidden />}
       onClick={toggle}
       aria-expanded={open}
       aria-haspopup="dialog"
@@ -128,7 +127,9 @@ export function AppSettingsMenu({ variant = 'icon' }: AppSettingsMenuProps) {
           : 'app-settings-trigger !text-slate-200 hover:!text-green-300 hover:!bg-white/[0.06] text-xs sm:text-sm'
       }
       aria-label={ui('settings')}
-    />
+    >
+      {ui('settings')}
+    </Button>
   );
 
   return (

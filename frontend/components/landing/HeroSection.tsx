@@ -54,6 +54,26 @@ export function HeroSection() {
       ? `${scenario.href}&starter=${encodeURIComponent(scenario.starter)}`
       : scenario.href;
 
+  const newChatHref = '/chat?new=true';
+
+  const handleHeroCta = () => {
+    const authenticated = isAuthenticated();
+
+    captureEvent('landing_cta_clicked', {
+      scenario_id: activeScenario.id,
+      is_authenticated: authenticated,
+      source: 'hero_cta',
+    });
+
+    if (!authenticated) {
+      setPendingAuthRedirect({ href: newChatHref });
+      openAuthModal('register', { source: 'hero_cta' });
+      return;
+    }
+
+    router.push(newChatHref);
+  };
+
   const handleStart = (
     scenario: LandingPreviewScenarioCopy = activeScenario,
     source: 'hero_cta' | 'preview_start' = 'preview_start'
@@ -166,7 +186,7 @@ export function HeroSection() {
             <div className="flex flex-col items-center lg:items-start">
               <button
                 type="button"
-                onClick={() => handleStart(activeScenario, 'hero_cta')}
+                onClick={handleHeroCta}
                 className="landing-cta-btn px-6 py-3 text-sm font-semibold sm:text-base"
               >
                 {copy.heroCta}

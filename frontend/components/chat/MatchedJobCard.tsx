@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { HeartFilled, HeartOutlined } from '@ant-design/icons';
 import { formatJobSourceLabel } from '@/lib/jobSourceLabel';
 import { humanizeMatchReasons } from '@/lib/humanizeMatchReasons';
 import { useHumeTheme } from '@/lib/useHumeTheme';
@@ -13,6 +14,9 @@ type MatchedJobCardProps = {
   sourceUrl?: string;
   reasons?: string[];
   isNew?: boolean;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
+  favoriteAriaLabel?: string;
   variant?: 'recommended' | 'weak';
   onOpenVacancy?: () => void;
   onVacancyPrep?: () => void;
@@ -26,6 +30,9 @@ export function MatchedJobCard({
   source,
   reasons,
   isNew,
+  isFavorite = false,
+  onToggleFavorite,
+  favoriteAriaLabel = 'Добавить в избранное',
   variant = 'recommended',
   onOpenVacancy,
   onVacancyPrep,
@@ -40,9 +47,7 @@ export function MatchedJobCard({
 
   const linkClass = isHume
     ? 'text-[var(--color-ink)] underline-offset-2 hover:underline'
-    : isWeak
-      ? 'text-amber-400/90 hover:text-amber-300'
-      : 'text-green-400 hover:text-green-300';
+    : 'text-green-400 hover:text-green-300';
 
   const toggleReasons = () => setReasonsOpen((open) => !open);
 
@@ -52,31 +57,58 @@ export function MatchedJobCard({
 
   return (
     <div
-      className={`matched-job-card ${
+      className={`matched-job-card relative ${
         isWeak ? 'matched-job-card--weak' : 'matched-job-card--recommended'
-      }${isNew ? ' matched-job-card--new' : ''} ${
+      }${isNew ? ' matched-job-card--new' : ''}${
+        isFavorite ? ' matched-job-card--favorite' : ''
+      } ${
         isHume
           ? `rounded-2xl border p-3 ${
-              isWeak
-                ? isNew
-                  ? 'border-[rgba(255,183,96,0.35)] bg-[var(--color-meringue)]'
-                  : 'border-[rgba(34,34,34,0.12)] bg-[var(--color-bone)] shadow-[0_1px_3px_rgba(34,34,34,0.06)]'
-                : isNew
-                  ? 'border-[rgba(192,148,228,0.35)] bg-[var(--color-rose-mist)]'
-                  : 'border-[rgba(34,34,34,0.12)] bg-[var(--color-bone)] shadow-[0_1px_3px_rgba(34,34,34,0.06)]'
+              isNew
+                ? 'border-[rgba(192,148,228,0.35)] bg-[var(--color-rose-mist)]'
+                : 'border-[rgba(34,34,34,0.12)] bg-[var(--color-bone)] shadow-[0_1px_3px_rgba(34,34,34,0.06)]'
             }`
           : `rounded-xl border p-3 ${
-              isWeak
-                ? isNew
-                  ? 'border-amber-400/45 ring-1 ring-amber-400/20 bg-white/[0.02]'
-                  : 'border-amber-900/40 bg-white/[0.02]'
-                : isNew
-                  ? 'border-emerald-400/55 ring-1 ring-emerald-400/25 bg-white/[0.03] shadow-[0_0_20px_rgba(52,211,153,0.12)]'
+              isNew
+                ? 'border-emerald-400/55 ring-1 ring-emerald-400/25 bg-white/[0.03] shadow-[0_0_20px_rgba(52,211,153,0.12)]'
+                : isWeak
+                  ? 'border-white/[0.1] bg-white/[0.02]'
                   : 'border-white/[0.12] bg-white/[0.03]'
             }`
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
+      {onToggleFavorite ? (
+        <button
+          type="button"
+          aria-label={favoriteAriaLabel}
+          aria-pressed={isFavorite}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleFavorite();
+          }}
+          className={
+            isHume
+              ? `absolute right-2.5 top-2.5 flex h-7 w-7 items-center justify-center rounded-full border border-transparent transition-colors ${
+                  isFavorite
+                    ? 'text-[var(--color-iris)] hover:bg-[var(--color-rose-mist)]'
+                    : 'text-[var(--color-smoke)] hover:border-[rgba(34,34,34,0.08)] hover:bg-[var(--color-paper)] hover:text-[var(--color-iris)]'
+                }`
+              : `absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
+                  isFavorite
+                    ? 'text-rose-400 hover:bg-rose-500/10'
+                    : 'text-slate-500 hover:bg-white/[0.06] hover:text-rose-300'
+                }`
+          }
+        >
+          {isFavorite ? (
+            <HeartFilled className="text-sm" aria-hidden />
+          ) : (
+            <HeartOutlined className="text-sm" aria-hidden />
+          )}
+        </button>
+      ) : null}
+
+      <div className={`flex items-start justify-between gap-2 ${onToggleFavorite ? 'pr-8' : ''}`}>
         <div
           className={
             isHume
@@ -91,12 +123,8 @@ export function MatchedJobCard({
             <span
               className={
                 isHume
-                  ? `hume-chip !text-[10px] ${
-                      isWeak ? '!bg-[var(--color-meringue)]' : '!bg-[var(--color-mint)]'
-                    } !border-transparent`
-                  : `rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                      isWeak ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
-                    }`
+                  ? 'hume-chip !text-[10px] !bg-[var(--color-mint)] !border-transparent'
+                  : 'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-emerald-500/20 text-emerald-300'
               }
             >
               Новая
@@ -105,7 +133,7 @@ export function MatchedJobCard({
           {isWeak ? (
             <span
               className={
-                isHume ? 'hume-label-sm !text-[9px]' : 'text-[10px] font-medium text-amber-500/80'
+                isHume ? 'hume-label-sm !text-[9px]' : 'text-[10px] font-medium text-slate-500'
               }
             >
               слабее

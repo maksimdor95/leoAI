@@ -3,6 +3,31 @@ import { AuthRequest } from '../middleware/auth';
 import pool from '../config/database';
 import { logger } from '../utils/logger';
 
+export async function getViewedJobIds(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const query = `
+      SELECT DISTINCT job_id
+      FROM recommendation_interactions
+      WHERE user_id = $1 AND interaction_type = 'view'
+    `;
+    const result = await pool.query(query, [userId]);
+    const jobIds = result.rows
+      .map((row: { job_id?: string }) => row.job_id)
+      .filter((id): id is string => typeof id === 'string');
+
+    res.json({ jobIds });
+  } catch (error: unknown) {
+    logger.error('Error getting viewed job ids:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 export async function recordInteraction(req: AuthRequest, res: Response): Promise<void> {
   try {
     const userId = req.user?.userId;

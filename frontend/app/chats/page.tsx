@@ -16,7 +16,7 @@ import { clearClientAuthState, isAuthenticated } from '@/lib/auth';
 import axios from 'axios';
 import Link from 'next/link';
 import { SupportWidget } from '@/components/support/SupportWidget';
-import { AppSettingsMenu } from '@/components/chat/AppSettingsMenu';
+import { ChatAppHeaderNav } from '@/components/chat/ChatAppHeaderNav';
 import { useAppSettings } from '@/contexts/AppSettingsContext';
 import {
   chatUi,
@@ -141,7 +141,7 @@ export default function ChatsPage() {
               </p>
             </div>
             <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-              <AppSettingsMenu />
+              <ChatAppHeaderNav showLogout={false} />
               <Link href="/chat?new=true">
                 <Button type="primary" icon={<PlusOutlined />} size="large" className={newChatButtonClass}>
                   {ui('newChat')}

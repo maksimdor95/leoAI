@@ -5,7 +5,7 @@ export default function OAuthCallbackPage() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen flex items-center justify-center bg-[#050913] text-slate-400">
+        <main className="min-h-screen flex items-center justify-center bg-[var(--color-bone)] text-[var(--color-smoke)]">
           Загрузка…
         </main>
       }
