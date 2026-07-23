@@ -244,7 +244,7 @@ export function resolveDisplayEnrichedProfile(
   return buildFallbackEnrichedProfile(collected);
 }
 
-export function hasCareerSnapshotData(view: EnrichedProfileView | null): boolean {
+export function hasCareerSnapshotData(view: EnrichedProfileView | null): view is EnrichedProfileView {
   if (!view) return false;
   return Boolean(
     view.job_preferences?.target_role ||

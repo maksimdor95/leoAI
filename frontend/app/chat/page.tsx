@@ -3696,7 +3696,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                 ? 'leo-profile-edit-btn'
                                 : '!text-slate-300 hover:!text-slate-100 hover:!bg-white/[0.06]'
                             }`}
-                            onClick={handleOpenProfileEdit}
+                            onClick={() => handleOpenProfileEdit()}
                             disabled={!connected || profileEditableRows.length === 0}
                           >
                             {ui('edit')}

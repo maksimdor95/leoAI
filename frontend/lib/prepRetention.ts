@@ -49,32 +49,32 @@ export function resolveStarBank(collected: Record<string, unknown>): StarBankEnt
   if (!Array.isArray(raw)) {
     return [];
   }
-  return raw
-    .map((entry, index) => {
-      if (entry == null || typeof entry !== 'object') return null;
-      const row = entry as Record<string, unknown>;
-      const userMessage =
-        typeof row.userMessage === 'string'
-          ? row.userMessage
-          : typeof row.action === 'string'
-            ? [row.situation, row.task, row.action, row.result].filter(Boolean).join('\n')
-            : '';
-      if (!userMessage.trim()) return null;
-      return {
-        id: typeof row.id === 'string' ? row.id : `star-${index}`,
-        sourceSessionId: typeof row.sourceSessionId === 'string' ? row.sourceSessionId : undefined,
-        role: typeof row.role === 'string' ? row.role : undefined,
-        roleTrack: typeof row.roleTrack === 'string' ? row.roleTrack : undefined,
-        userMessage: userMessage.trim(),
-        modelStructure: Array.isArray(row.modelStructure)
-          ? row.modelStructure.filter((item): item is string => typeof item === 'string')
-          : undefined,
-        overallScore: typeof row.overallScore === 'number' ? row.overallScore : undefined,
-        savedAt: typeof row.savedAt === 'string' ? row.savedAt : new Date().toISOString(),
-        source: typeof row.source === 'string' ? row.source : undefined,
-      } satisfies StarBankEntry;
-    })
-    .filter((entry): entry is StarBankEntry => entry !== null);
+  const result: StarBankEntry[] = [];
+  raw.forEach((entry, index) => {
+    if (entry == null || typeof entry !== 'object') return;
+    const row = entry as Record<string, unknown>;
+    const userMessage =
+      typeof row.userMessage === 'string'
+        ? row.userMessage
+        : typeof row.action === 'string'
+          ? [row.situation, row.task, row.action, row.result].filter(Boolean).join('\n')
+          : '';
+    if (!userMessage.trim()) return;
+    result.push({
+      id: typeof row.id === 'string' ? row.id : `star-${index}`,
+      sourceSessionId: typeof row.sourceSessionId === 'string' ? row.sourceSessionId : undefined,
+      role: typeof row.role === 'string' ? row.role : undefined,
+      roleTrack: typeof row.roleTrack === 'string' ? row.roleTrack : undefined,
+      userMessage: userMessage.trim(),
+      modelStructure: Array.isArray(row.modelStructure)
+        ? row.modelStructure.filter((item): item is string => typeof item === 'string')
+        : undefined,
+      overallScore: typeof row.overallScore === 'number' ? row.overallScore : undefined,
+      savedAt: typeof row.savedAt === 'string' ? row.savedAt : new Date().toISOString(),
+      source: typeof row.source === 'string' ? row.source : undefined,
+    });
+  });
+  return result;
 }
 
 export function formatPrepDate(value?: string): string {
