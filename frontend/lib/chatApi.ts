@@ -372,12 +372,16 @@ class ChatApiClient {
     }
 
     try {
+      const isFeedbackOnly =
+        Object.keys(collectedData).length === 1 && collectedData.vacancyFeedback != null;
       const response = await this.request<MergeCollectedResponse>(
         `/api/chat/session/${this.sessionId}/merge-collected`,
         {
           method: 'POST',
           body: JSON.stringify({ collectedData, ...this.buildClientPreferencesBody() }),
-        }
+        },
+        // Resume/import + enrichment может занимать >20s; свайпы — быстрый путь.
+        isFeedbackOnly ? 15000 : 60000
       );
 
       if (response.metadata) {

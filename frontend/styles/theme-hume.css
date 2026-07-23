@@ -826,9 +826,12 @@
   backdrop-filter: none;
 }
 
-[data-theme='hume'] .leo-product-selection--hume .hume-scenario-card:focus-visible {
-  outline: 2px solid rgba(192, 148, 228, 0.35);
-  outline-offset: 2px;
+/* No focus ring on click/keyboard — card already highlights via active styles + glow. */
+[data-theme='hume'] .leo-product-selection--hume .hume-scenario-card:focus,
+[data-theme='hume'] .leo-product-selection--hume .hume-scenario-card:focus-visible,
+[data-theme='hume'] .leo-product-selection--hume .hume-scenario-card:active {
+  outline: none !important;
+  box-shadow: none;
 }
 
 /* Preview chat bubbles */
@@ -957,6 +960,27 @@
   letter-spacing: -0.025em;
 }
 
+.app-settings-close-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-settings-close-btn:focus,
+.app-settings-close-btn:focus-visible,
+.app-settings-close-btn:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.app-settings-close-btn .anticon {
+  display: block;
+  line-height: 1;
+}
+
 [data-theme='hume'] .leo-product-selection--hume .hume-preview-panel {
   border-radius: var(--radius-card);
   box-shadow: none;
@@ -1064,11 +1088,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  max-height: 11rem;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  padding: 0.25rem;
+  overflow: visible;
+  padding: 0.5rem;
   border: 1px solid var(--color-border-hairline);
   border-radius: var(--radius-card);
   background: var(--color-bone);
@@ -1078,11 +1099,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  max-height: 11rem;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  padding: 0.25rem;
+  overflow: visible;
+  padding: 0.5rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 0.75rem;
   background: rgba(255, 255, 255, 0.04);
@@ -1090,8 +1108,8 @@
 
 .app-settings-voice-option {
   width: 100%;
-  min-height: 2.75rem;
-  padding: 0.5rem 0.75rem;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.75rem;
   border: 0;
   border-radius: var(--radius-pill);
   text-align: left;
@@ -1388,15 +1406,33 @@
 }
 
 [data-theme='hume'] .leo-chat-sidebar .matched-job-card:not(.matched-job-card--new) {
-  background: var(--color-bone) !important;
-  border: 1px solid rgba(34, 34, 34, 0.12) !important;
+  background: var(--color-paper) !important;
+  border: 1px solid rgba(34, 34, 34, 0.1) !important;
   border-radius: var(--radius-card) !important;
-  box-shadow: 0 1px 3px rgba(34, 34, 34, 0.06) !important;
+  box-shadow:
+    0 1px 2px rgba(34, 34, 34, 0.06),
+    0 4px 14px rgba(34, 34, 34, 0.08) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .matched-job-card:not(.matched-job-card--new):hover {
+  border-color: rgba(34, 34, 34, 0.16) !important;
+  box-shadow:
+    0 2px 4px rgba(34, 34, 34, 0.07),
+    0 8px 22px rgba(34, 34, 34, 0.12) !important;
 }
 
 [data-theme='hume'] .leo-chat-sidebar .matched-job-card--new {
-  border: 1px solid rgba(192, 148, 228, 0.35) !important;
+  border: 1px solid rgba(192, 148, 228, 0.4) !important;
   background: var(--color-rose-mist) !important;
+  box-shadow:
+    0 1px 2px rgba(34, 34, 34, 0.05),
+    0 4px 14px rgba(120, 80, 160, 0.1) !important;
+}
+
+[data-theme='hume'] .leo-chat-sidebar .matched-job-card--new:hover {
+  box-shadow:
+    0 2px 4px rgba(34, 34, 34, 0.06),
+    0 8px 22px rgba(120, 80, 160, 0.14) !important;
 }
 
 [data-theme='hume'] .leo-chat-sidebar .text-\[11px\].font-semibold.uppercase,

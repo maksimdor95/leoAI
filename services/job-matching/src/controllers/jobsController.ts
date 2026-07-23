@@ -31,6 +31,9 @@ import {
   jobNeedsHhMetaRefresh,
   refreshJobFromHh,
 } from '../services/jobDetailsService';
+import { ensureProfileEmbedding } from '../services/profileEmbedding';
+import { llmRerankRecommended } from '../services/llmRerank';
+import type { Job } from '../models/job';
 
 const CATALOG_MAX_LIMIT = 200;
 
@@ -104,6 +107,7 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         ? req.query.sessionId.trim()
         : undefined;
     const collectedData = await getCollectedDataWithFallback(userId, token, sessionId);
+    await ensureProfileEmbedding(collectedData, token);
 
     const effectiveProfile = normalizeForMatch(collectedData);
     const profileRoles = effectiveProfile
@@ -124,11 +128,32 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
 
     const jobsInDb = await jobRepository.count();
     const scanLimit = resolveMatchScanLimit(jobsInDb);
-    const allJobs = await jobRepository.findForMatch({
+    const familyJobs = await jobRepository.findForMatch({
       primaryFamily: profileRoles.primary,
       adjacentFamilies: profileRoles.adjacent,
       limit: scanLimit,
     });
+
+    // Layer 2: hybrid candidate set = family scan ∪ nearest by profile embedding
+    let allJobs: Job[] = familyJobs;
+    const profileEmbedding = collectedData?.embedding;
+    if (Array.isArray(profileEmbedding) && profileEmbedding.length > 0) {
+      const semanticJobs = await jobRepository.findNearestByEmbedding(
+        profileEmbedding,
+        Math.min(150, scanLimit)
+      );
+      if (semanticJobs.length > 0) {
+        const byId = new Map<string, Job>();
+        for (const job of familyJobs) byId.set(job.id, job);
+        for (const job of semanticJobs) {
+          if (!byId.has(job.id)) byId.set(job.id, job);
+        }
+        allJobs = [...byId.values()];
+        logger.info(
+          `Hybrid match candidates: family=${familyJobs.length}, semantic=${semanticJobs.length}, merged=${allJobs.length}`
+        );
+      }
+    }
 
     if (allJobs.length === 0) {
       res.json({
@@ -158,6 +183,34 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
 
     const { matches: matchedJobs, weakMatches, stats } = matchJobs(allJobs, collectedData, prefs);
 
+    const effectiveForSignals = normalizeForMatch(collectedData);
+    const missingSkillsTop = (() => {
+      const counts = new Map<string, number>();
+      for (const m of [...matchedJobs, ...weakMatches].slice(0, 20)) {
+        for (const skill of m.missingSkills ?? []) {
+          counts.set(skill, (counts.get(skill) ?? 0) + 1);
+        }
+      }
+      return [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([skill]) => skill);
+    })();
+
+    const profileSignals = {
+      role_family: stats.primaryFamily !== 'unknown' ? stats.primaryFamily : null,
+      seniority:
+        effectiveForSignals &&
+        typeof (effectiveForSignals as Record<string, unknown>).__enriched === 'object'
+          ? (
+              (effectiveForSignals as Record<string, unknown>).__enriched as {
+                seniority?: string;
+              }
+            ).seniority ?? null
+          : null,
+      missingSkillsTop,
+    };
+
     // Диагностика каталога: если пользователь классифицирован, а его семейство
     // и смежные занимают меньше HEALTHY_FAMILY_SHARE от всего каталога —
     // вероятнее всего scraper собран под другой профиль (например, dev-кейворды
@@ -178,10 +231,16 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       stats.primaryFamily
     );
 
+    const rerankedRecommended = await llmRerankRecommended(
+      prioritizedRecommended,
+      collectedData,
+      token
+    );
+
     if (
       !catalogWarning &&
       stats.primaryFamily === 'unknown' &&
-      prioritizedRecommended.length === 0 &&
+      rerankedRecommended.length === 0 &&
       matchedJobs.length > 0
     ) {
       catalogWarning = 'no_matches';
@@ -193,7 +252,7 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       catalogWarning
     );
 
-    const returnedJobs = prioritizedRecommended;
+    const returnedJobs = rerankedRecommended;
     const returnedWeak = prioritizedWeak;
 
     logger.info(
@@ -255,6 +314,7 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       familyCatalogCount: stats.familyCatalogCount,
       familyDistribution: stats.familyDistribution,
       catalogWarning,
+      profileSignals,
     });
   } catch (error: unknown) {
     logger.error('Error getting matched jobs:', error);

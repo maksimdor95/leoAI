@@ -144,3 +144,18 @@ Dialogue Engine (handleUserReply)
 2. Добавить роут в `ai-nlp/src/index.ts`
 3. Создать клиент в `conversation/src/services/aiClient.ts`
 4. Интегрировать в `conversation/src/services/dialogueEngine.ts`
+
+## Profile enrichment (Jack)
+
+После ключевых шагов `conversation` вызывает `profileEnrichmentService.enrichAndPersistProfile`:
+
+| Триггер | Когда |
+|---------|--------|
+| `profile_snapshot` | Пользователь нажал «Продолжить» на снимке профиля |
+| `desired_start` | Ответ на шаг готовности к старту |
+| `resume_ready` | Переход на экран после импорта резюме. Команды: `show_recommendations`, `fill_profile_gaps` (пустые поля профиля, без рестарта quick/detailed) |
+| `merge_collected` | Слияние collected data из API |
+
+Pipeline: `job-matching` derive-profile-signals → `ai-nlp` enrich-profile (phases 1–5) → `user-profile` `career_tracks.profile_data` + `collectedData.__enriched`.
+
+Fail-open: при ошибке enrichment диалог не блокируется; matcher использует inference без `__enriched`.

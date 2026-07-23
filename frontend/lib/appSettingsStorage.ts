@@ -20,6 +20,7 @@ export function readAppSettings(): AppSettings {
     return {
       locale,
       theme: parsed.theme === 'hume-light' ? 'hume-light' : 'leo-dark',
+      textOnlyReplies: parsed.textOnlyReplies === true,
       speechEnabled: parsed.speechEnabled !== false,
       ttsLang,
       ttsVoice: normalizeTtsVoice(ttsLang, parsed.ttsVoice),

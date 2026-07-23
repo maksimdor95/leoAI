@@ -3,6 +3,7 @@ import {
   collectVacancyIds,
   detectNewVacancyIds,
   ESTABLISHED_FEED_KNOWN_MIN,
+  filterJobsByDismissed,
   filterJobsByFavorite,
   filterJobsByNew,
   hasEstablishedVacancyFeedHistory,
@@ -21,6 +22,7 @@ export {
   collectVacancyIds,
   detectNewVacancyIds,
   ESTABLISHED_FEED_KNOWN_MIN,
+  filterJobsByDismissed,
   filterJobsByFavorite,
   filterJobsByNew,
   hasEstablishedVacancyFeedHistory,
@@ -29,12 +31,12 @@ export {
   shouldBaselineVacancyFeedLoad,
   syncVacancyListsFromApi,
 };
-
 export type VacancyFeedPersistedState = {
   viewedJobIds: string[];
   newJobIds: string[];
   knownJobIds: string[];
   favoriteJobIds: string[];
+  dismissedJobIds: string[];
 };
 
 const STORAGE_PREFIX = 'leo:vacancy-feed:';
@@ -44,6 +46,7 @@ const EMPTY_PERSISTED: VacancyFeedPersistedState = {
   newJobIds: [],
   knownJobIds: [],
   favoriteJobIds: [],
+  dismissedJobIds: [],
 };
 
 function uniqueStrings(values: Iterable<string>): string[] {
@@ -67,7 +70,10 @@ function normalizePersistedState(raw: unknown): VacancyFeedPersistedState {
   const favoriteJobIds = Array.isArray(record.favoriteJobIds)
     ? uniqueStrings(record.favoriteJobIds.filter((id): id is string => typeof id === 'string'))
     : [];
-  return { viewedJobIds, newJobIds, knownJobIds, favoriteJobIds };
+  const dismissedJobIds = Array.isArray(record.dismissedJobIds)
+    ? uniqueStrings(record.dismissedJobIds.filter((id): id is string => typeof id === 'string'))
+    : [];
+  return { viewedJobIds, newJobIds, knownJobIds, favoriteJobIds, dismissedJobIds };
 }
 
 export function vacancyFeedStorageKey(userId: string): string {
@@ -101,6 +107,7 @@ export function saveVacancyFeedState(userId: string, state: VacancyFeedPersisted
         newJobIds: uniqueStrings(state.newJobIds),
         knownJobIds: uniqueStrings(state.knownJobIds),
         favoriteJobIds: uniqueStrings(state.favoriteJobIds),
+        dismissedJobIds: uniqueStrings(state.dismissedJobIds),
       })
     );
   } catch {
@@ -150,16 +157,30 @@ export function toggleVacancyFavorite(jobId: string, favoriteIds: Set<string>): 
   return next;
 }
 
+export function addVacancyFavorite(jobId: string, favoriteIds: Set<string>): Set<string> {
+  const next = new Set(favoriteIds);
+  next.add(jobId);
+  return next;
+}
+
+export function dismissVacancy(jobId: string, dismissedIds: Set<string>): Set<string> {
+  const next = new Set(dismissedIds);
+  next.add(jobId);
+  return next;
+}
+
 export function toPersistedFeedState(
   newJobIds: Set<string>,
   viewedIds: Set<string>,
   knownIds: Set<string>,
-  favoriteIds: Set<string>
+  favoriteIds: Set<string>,
+  dismissedIds: Set<string> = new Set()
 ): VacancyFeedPersistedState {
   return {
     newJobIds: Array.from(newJobIds),
     viewedJobIds: Array.from(viewedIds),
     knownJobIds: Array.from(knownIds),
     favoriteJobIds: Array.from(favoriteIds),
+    dismissedJobIds: Array.from(dismissedIds),
   };
 }

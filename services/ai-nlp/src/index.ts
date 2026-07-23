@@ -30,7 +30,9 @@ import {
 import { enrichJob } from './controllers/enrichJobController';
 import { generateApplicationDraft } from './controllers/applicationDraftController';
 import { generateEmbedding } from './controllers/embeddingController';
+import { enrichProfile } from './controllers/profileEnrichmentController';
 import { generateAiReadiness } from './controllers/aiReadinessController';
+import { rerankMatchedJobs } from './controllers/matchRerankController';
 import { logger } from './utils/logger';
 import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -125,6 +127,8 @@ app.post('/api/ai/enrich-job', enrichJob);
 app.post('/api/ai/application-draft', generateApplicationDraft);
 app.post('/api/ai/embedding', generateEmbedding);
 app.post('/api/ai/readiness', generateAiReadiness);
+app.post('/api/ai/enrich-profile', enrichProfile);
+app.post('/api/ai/match-rerank', rerankMatchedJobs);
 
 // 404 handler (must be before error handler)
 app.use(notFoundHandler);

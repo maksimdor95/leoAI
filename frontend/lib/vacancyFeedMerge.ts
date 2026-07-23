@@ -173,3 +173,13 @@ export function filterJobsByFavorite<T extends MatchedJobItemLike>(
   }
   return jobs.filter((item) => favoriteJobIds.has(item.job.id));
 }
+
+export function filterJobsByDismissed<T extends MatchedJobItemLike>(
+  jobs: T[],
+  dismissedJobIds: Set<string>
+): T[] {
+  if (dismissedJobIds.size === 0) {
+    return jobs;
+  }
+  return jobs.filter((item) => !dismissedJobIds.has(item.job.id));
+}

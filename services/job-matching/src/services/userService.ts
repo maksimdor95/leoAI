@@ -8,6 +8,7 @@ import { logger } from '../utils/logger';
 import Redis from 'ioredis';
 import { ioredisTlsOptions } from '../utils/redisTls';
 import { classifyRoleFamily, keywordsForFamily } from './roleFamily';
+import { ENRICHED_COLLECTED_KEY } from '../types/enrichedProfile';
 
 const USER_PROFILE_SERVICE_URL = process.env.USER_PROFILE_SERVICE_URL || 'http://localhost:3001';
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
@@ -290,6 +291,28 @@ export async function getCollectedDataFromCareerProfile(
         if (inferred) {
           collected.desiredRole = inferred;
           collected.desired_role = inferred;
+        }
+      }
+    }
+
+    const profileData =
+      (trackFromList && typeof trackFromList === 'object'
+        ? (trackFromList as Record<string, unknown>).profile_data
+        : null) ??
+      (profile && typeof profile === 'object'
+        ? (profile as Record<string, unknown>).profile_data
+        : null);
+
+    if (profileData && typeof profileData === 'object') {
+      const pd = profileData as { enriched?: Record<string, unknown>; fields?: Record<string, unknown> };
+      if (pd.enriched && typeof pd.enriched === 'object') {
+        collected[ENRICHED_COLLECTED_KEY] = pd.enriched;
+      }
+      if (pd.fields && typeof pd.fields === 'object') {
+        for (const [key, value] of Object.entries(pd.fields)) {
+          if (collected[key] == null && value != null) {
+            collected[key] = value;
+          }
         }
       }
     }

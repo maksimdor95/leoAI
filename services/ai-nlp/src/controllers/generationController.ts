@@ -316,6 +316,25 @@ export async function generateResume(req: Request, res: Response) {
     const desiredLocation = collectedData.desired_location || collectedData.location || '';
     const desiredSalary = collectedData.desired_salary || collectedData.salaryExpectation || '';
 
+    const enrichedRaw = collectedData.__enriched;
+    let achievementsBlock = '';
+    if (enrichedRaw && typeof enrichedRaw === 'object') {
+      const achievements = (enrichedRaw as { achievements_with_metrics?: unknown[] })
+        .achievements_with_metrics;
+      if (Array.isArray(achievements) && achievements.length > 0) {
+        achievementsBlock = achievements
+          .map((a) => {
+            const item = a as Record<string, unknown>;
+            const text = String(item.achievement ?? '');
+            const before = item.metric_before ? String(item.metric_before) : '';
+            const after = item.metric_after ? String(item.metric_after) : '';
+            if (before && after) return `- ${text} (${before} → ${after})`;
+            return `- ${text}`;
+          })
+          .join('\n');
+      }
+    }
+
     const systemPrompt = buildSystemMessage({
       extraSections: [
         `# Роль: Генератор резюме
@@ -388,7 +407,10 @@ ${positions || 'не указаны'}
 
 Желаемая должность: ${desiredRole || 'не указана'}
 Локация: ${desiredLocation || 'не указана'}
-Ожидания по зарплате: ${desiredSalary || 'не указаны'}`);
+Ожидания по зарплате: ${desiredSalary || 'не указаны'}
+
+Структурированные достижения (приоритет для bullets):
+${achievementsBlock || 'не указаны'}`);
 
     const messages = [
       systemPrompt,

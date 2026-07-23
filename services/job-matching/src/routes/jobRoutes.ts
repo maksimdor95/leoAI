@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { requireJobCatalogAccess } from '../middleware/jobCatalogAuth';
 import * as jobsController from '../controllers/jobsController';
+import { deriveProfileSignalsHandler } from '../controllers/profileSignalsController';
 import { getViewedJobIds, recordInteraction } from '../controllers/telemetryController';
 
 const router = Router();
@@ -44,6 +45,12 @@ router.get(
  * Get matched jobs for a user
  */
 router.get('/match/:userId', authenticateToken, jobsController.getMatchedJobs);
+
+/**
+ * POST /api/jobs/derive-profile-signals
+ * Rule-based profile enrichment signals for conversation pipeline.
+ */
+router.post('/derive-profile-signals', authenticateToken, deriveProfileSignalsHandler);
 
 /**
  * GET /api/jobs/:jobId

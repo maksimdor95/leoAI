@@ -33,6 +33,11 @@ import {
 } from './roleFamily';
 import { enrichQuickPathCollectedData } from './quickPathEnrichment';
 import {
+  applyEnrichedToCollectedData,
+  inferUserSeniorityFromYears,
+} from './deriveProfileSignals';
+import { getEnrichedFromCollected } from '../types/enrichedProfile';
+import {
   matchHhExperienceFromMeta,
   matchHhVacancyConditions,
   resolveJobWorkMode,
@@ -45,6 +50,11 @@ import {
   demoteReasonLabels,
   isThinProfile,
 } from './matchNoise';
+import { findProfileCompanyExclusion, scoreDomainAffinity } from './preferenceSignals';
+import {
+  findVacancyFeedbackDemotion,
+  scoreVacancyFeedbackLike,
+} from './vacancyFeedbackSignals';
 
 /** Порог «Рекомендуем». */
 export const MATCH_SCORE_THRESHOLD = 45;
@@ -93,6 +103,8 @@ export interface MatchingScore {
   familyMatch: 'same' | 'adjacent' | 'unknown' | 'conflict';
   /** Причины понижения из «Рекомендуем» в слабый ярус (если были). */
   demoteReasons?: string[];
+  matchedSkills?: string[];
+  missingSkills?: string[];
 }
 
 export interface MatchJobsStats {
@@ -129,7 +141,8 @@ function jobRecencyTimestamp(job: Job): number {
 export function normalizeForMatch(raw: CollectedData | null): CollectedData | null {
   if (!raw) return null;
 
-  const enriched = enrichQuickPathCollectedData(raw);
+  const withEnriched = applyEnrichedToCollectedData(raw);
+  const enriched = enrichQuickPathCollectedData(withEnriched);
   const skillTokens = collectSkillStrings(enriched);
   if (skillTokens.length > 0) {
     const fromText = Array.isArray(enriched.skills) ? enriched.skills.map(String) : [];
@@ -145,12 +158,20 @@ export function normalizeForMatch(raw: CollectedData | null): CollectedData | nu
 type SeniorityLevel = 'intern' | 'junior' | 'middle' | 'senior' | 'lead';
 
 function inferUserSeniority(totalExperience: number | undefined): SeniorityLevel | null {
-  if (totalExperience == null || totalExperience <= 0) return null;
-  if (totalExperience < 1) return 'intern';
-  if (totalExperience < 3) return 'junior';
-  if (totalExperience < 6) return 'middle';
-  if (totalExperience < 10) return 'senior';
-  return 'lead';
+  return inferUserSeniorityFromYears(totalExperience);
+}
+
+function resolveUserSeniority(
+  effective: CollectedData | null,
+  storedSeniority?: SeniorityLevel | null
+): SeniorityLevel | null {
+  if (storedSeniority) return storedSeniority;
+  if (!effective || effective.totalExperience == null) return null;
+  const years =
+    typeof effective.totalExperience === 'number'
+      ? effective.totalExperience
+      : parseFloat(String(effective.totalExperience).replace(/,/g, '.')) || 0;
+  return inferUserSeniority(years);
 }
 
 const SENIORITY_RANK: Record<string, number> = {
@@ -162,6 +183,11 @@ const SENIORITY_RANK: Record<string, number> = {
 };
 
 function collectSkillStrings(raw: CollectedData): string[] {
+  const enrichedProfile = getEnrichedFromCollected(raw as Record<string, unknown>);
+  if (enrichedProfile?.normalized_skills?.length) {
+    return enrichedProfile.normalized_skills.map((s) => s.name);
+  }
+
   const out: string[] = [];
   const addFrom = (s: unknown) => {
     if (typeof s !== 'string' || !s.trim()) return;
@@ -227,8 +253,11 @@ export function matchJobs(
   }
 ): MatchJobsResult {
   const effective = normalizeForMatch(collectedData);
+  const storedEnriched = effective
+    ? getEnrichedFromCollected(effective as Record<string, unknown>)
+    : null;
 
-  const classification = effective
+  const inferredClassification = effective
     ? classifyProfileRoles({
         desiredRole: effective.desiredRole || (effective.desired_role as string | undefined),
         positionRoles: profilePositionRoles(effective),
@@ -237,8 +266,9 @@ export function matchJobs(
       })
     : { primary: 'unknown' as RoleFamily, adjacent: [] as RoleFamily[], detected: [] as RoleFamily[] };
 
-  const primaryFamily = classification.primary;
-  const adjacentSet = new Set<RoleFamily>(classification.adjacent);
+  const primaryFamily =
+    (storedEnriched?.role_family as RoleFamily | undefined) ?? inferredClassification.primary;
+  const adjacentSet = new Set<RoleFamily>(inferredClassification.adjacent);
 
   const recommended: MatchingScore[] = [];
   const weakPool: MatchingScore[] = [];
@@ -275,14 +305,7 @@ export function matchJobs(
 
     if (finalScore > maxScore) maxScore = finalScore;
 
-    const userLevel =
-      effective && effective.totalExperience != null
-        ? inferUserSeniority(
-            typeof effective.totalExperience === 'number'
-              ? effective.totalExperience
-              : parseFloat(String(effective.totalExperience).replace(/,/g, '.')) || 0
-          )
-        : null;
+    const userLevel = resolveUserSeniority(effective, storedEnriched?.seniority);
     const jobLevel = job.experience_level || inferLevelFromTitle(job.title);
     const thinProfile = effective ? isThinProfile(effective) : false;
     const demoteCodes =
@@ -308,6 +331,8 @@ export function matchJobs(
       jobFamily,
       familyMatch,
       demoteReasons: demote ? demoteReasonLabels(demoteCodes) : undefined,
+      matchedSkills: raw.matchedSkills,
+      missingSkills: raw.missingSkills,
     };
 
     if (finalScore >= MATCH_SCORE_THRESHOLD) {
@@ -422,7 +447,13 @@ function calculateRawScore(
     location?: string[];
     workMode?: string;
   }
-): { score: number; reasons: string[]; salaryHardMismatch: boolean } {
+): {
+  score: number;
+  reasons: string[];
+  salaryHardMismatch: boolean;
+  matchedSkills?: string[];
+  missingSkills?: string[];
+} {
   let score = 0;
   const reasons: string[] = [];
   let salaryHardMismatch = false;
@@ -460,6 +491,30 @@ function calculateRawScore(
   if (salaryScore.reason) reasons.push(salaryScore.reason);
   salaryHardMismatch = salaryScore.hardMismatch;
 
+  const exclusion = findProfileCompanyExclusion(job, collectedData);
+  if (exclusion) {
+    score -= 45;
+    reasons.push(`Исключено по вашему запросу: не рассматриваете «${exclusion.label}»`);
+  }
+
+  const swipeDemotion = findVacancyFeedbackDemotion(job, collectedData);
+  if (swipeDemotion) {
+    score -= 45;
+    reasons.push(
+      swipeDemotion.kind === 'job'
+        ? 'Вы отметили эту вакансию как неподходящую'
+        : `Компания отмечена как неподходящая: «${swipeDemotion.label}»`
+    );
+  }
+
+  const likeBoost = scoreVacancyFeedbackLike(job, collectedData);
+  score += likeBoost.points;
+  if (likeBoost.reason) reasons.push(likeBoost.reason);
+
+  const domainScore = scoreDomainAffinity(job, collectedData);
+  score += domainScore.points;
+  if (domainScore.reason) reasons.push(domainScore.reason);
+
   // Multi-signal bonus: reward jobs that match on 3+ factors well
   const strongFactors = [
     locationScore.points >= 16,
@@ -489,7 +544,13 @@ function calculateRawScore(
     score += 1;
   }
 
-  return { score: Math.min(100, Math.round(score)), reasons, salaryHardMismatch };
+  return {
+    score: Math.min(100, Math.round(score)),
+    reasons,
+    salaryHardMismatch,
+    matchedSkills: skillsScore.matchedSkills,
+    missingSkills: skillsScore.missingSkills,
+  };
 }
 
 // ---------- частные факторы ----------
@@ -595,11 +656,12 @@ function matchExperience(
 
   const seniorityReason = seniorityMismatchReason(userSeniority, jobLevel);
   if (seniorityReason && rankGap >= 2) {
-    const penalty = rankGap >= 3 ? -10 : -6;
+    // lead/senior → junior/intern: сильный штраф, чтобы не держать в топе «Рекомендуем»
+    const penalty = rankGap >= 3 ? -14 : -10;
     return { points: penalty, reason: seniorityReason };
   }
   if (seniorityReason && userRank >= 3 && jobRank <= 1) {
-    return { points: -8, reason: seniorityReason };
+    return { points: -12, reason: seniorityReason };
   }
 
   if (diff === 0) {
@@ -644,47 +706,83 @@ function cosineSimilarity(vecA: number[], vecB: number[]): number {
 function matchSkills(
   job: Job,
   collectedData: CollectedData
-): { points: number; reason?: string } {
-  // Use semantic search if embeddings are available
-  if (collectedData.embedding && job.embedding) {
+): {
+  points: number;
+  reason?: string;
+  matchedSkills?: string[];
+  missingSkills?: string[];
+} {
+  const enrichedProfile = getEnrichedFromCollected(collectedData as Record<string, unknown>);
+  const skillLevelWeight = (name: string): number => {
+    const found = enrichedProfile?.normalized_skills?.find(
+      (s) => s.name.toLowerCase() === name.toLowerCase()
+    );
+    if (!found?.level) return 1;
+    if (found.level === 'expert') return 1.45;
+    if (found.level === 'advanced') return 1.25;
+    if (found.level === 'intermediate') return 1;
+    return 0.55; // beginner
+  };
+
+  // Semantic bonus — не заменяет keyword match, а дополняет
+  let semanticBonus = 0;
+  let semanticReason: string | undefined;
+  if (
+    Array.isArray(collectedData.embedding) &&
+    collectedData.embedding.length > 0 &&
+    Array.isArray(job.embedding) &&
+    job.embedding.length > 0
+  ) {
     const similarity = cosineSimilarity(collectedData.embedding, job.embedding);
-    // Similarity is usually between 0 and 1 for positive embeddings, or -1 to 1.
-    // We map similarity > 0.5 to points up to 25.
-    if (similarity > 0.5) {
-      const points = Math.min(25, Math.round((similarity - 0.5) * 2 * 25));
-      return {
-        points,
-        reason: `Семантическое совпадение навыков (score: ${similarity.toFixed(2)})`,
-      };
+    if (similarity > 0.45) {
+      semanticBonus = Math.min(10, Math.round((similarity - 0.45) * 2 * 10));
+      semanticReason = `Семантическая близость профиля (${similarity.toFixed(2)})`;
     }
   }
 
   // Fallback to text-based matching
-  const userSkills = Array.isArray(collectedData.skills) ? collectedData.skills : [];
+  const userSkills = collectSkillStrings(collectedData);
   const jobText = `${job.title} ${job.description} ${job.requirements}`.toLowerCase();
 
   if (userSkills.length === 0) {
+    if (semanticBonus > 0) {
+      return {
+        points: Math.min(25, 3 + semanticBonus),
+        reason: semanticReason,
+      };
+    }
     return { points: 3, reason: 'Навыки не указаны' };
   }
 
   const userSkillsLower = userSkills.map((skill: string) => skill.toLowerCase());
 
   let textHits = 0;
+  let textHitWeight = 0;
   const matchedText = new Set<string>();
   for (const userSkill of userSkillsLower) {
     if (userSkill.length > 2 && jobText.includes(userSkill)) {
       textHits++;
+      textHitWeight += skillLevelWeight(userSkill);
       matchedText.add(userSkill);
     }
   }
 
   if (job.skills.length === 0) {
     if (textHits > 0) {
-      const points = Math.min(18, 5 + textHits * 3);
+      const points = Math.min(25, Math.round(4 + textHitWeight * 3) + semanticBonus);
       return {
         points,
-        reason: `Навыки найдены в тексте вакансии (${textHits})`,
+        reason: [
+          `Навыки найдены в тексте вакансии (${textHits})`,
+          semanticReason,
+        ]
+          .filter(Boolean)
+          .join('; '),
+        matchedSkills: [...matchedText].slice(0, 3),
       };
+    }
+    if (semanticBonus > 0) {
+      return { points: Math.min(25, 3 + semanticBonus), reason: semanticReason };
     }
     return { points: 3, reason: 'В вакансии не выделены теги навыков' };
   }
@@ -692,32 +790,53 @@ function matchSkills(
   const jobSkillsLower = job.skills.map((skill: string) => skill.toLowerCase());
 
   const matchingSkills: string[] = [];
+  const missingSkills: string[] = [];
   for (const jobSkill of jobSkillsLower) {
+    let matched = false;
     for (const userSkill of userSkillsLower) {
       if (jobSkill.includes(userSkill) || userSkill.includes(jobSkill)) {
         matchingSkills.push(jobSkill);
+        matched = true;
         break;
       }
     }
+    if (!matched) missingSkills.push(jobSkill);
   }
 
   const textBonus = Math.min(6, textHits * 2);
-  const matchRatio = matchingSkills.length / Math.max(jobSkillsLower.length, 1);
-  let points = Math.round(matchRatio * 25) + textBonus;
+  const weightedMatches = matchingSkills.reduce((sum, skill) => {
+    const userSkill = userSkillsLower.find(
+      (u) => skill.includes(u) || u.includes(skill)
+    );
+    return sum + (userSkill ? skillLevelWeight(userSkill) : 1);
+  }, 0);
+  const matchRatio = weightedMatches / Math.max(jobSkillsLower.length, 1);
+  let points = Math.round(matchRatio * 25) + textBonus + semanticBonus;
   points = Math.min(25, points);
+
+  const withSemantic = (base: string) =>
+    [base, semanticReason].filter(Boolean).join('; ');
 
   if (matchingSkills.length > 0) {
     return {
       points,
-      reason: `Совпадающие навыки: ${matchingSkills.slice(0, 3).join(', ')}`,
+      reason: withSemantic(`Совпадающие навыки: ${matchingSkills.slice(0, 3).join(', ')}`),
+      matchedSkills: matchingSkills.slice(0, 5),
+      missingSkills: missingSkills.slice(0, 3),
     };
   }
 
   if (textHits > 0) {
     return {
-      points: Math.min(25, Math.max(points, 5 + textHits * 2)),
-      reason: `Навыки встречаются в описании вакансии (${textHits})`,
+      points: Math.min(25, Math.max(points, 5 + textHits * 2 + semanticBonus)),
+      reason: withSemantic(`Навыки встречаются в описании вакансии (${textHits})`),
+      matchedSkills: [...matchedText].slice(0, 3),
+      missingSkills: missingSkills.slice(0, 3),
     };
+  }
+
+  if (semanticBonus > 0) {
+    return { points: Math.min(25, semanticBonus), reason: semanticReason };
   }
 
   return { points: 0, reason: 'Нет совпадающих навыков' };

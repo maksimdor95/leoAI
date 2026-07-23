@@ -17,6 +17,7 @@ import {
   LearningStep,
   CreateCareerTrackInput,
   UpdateCareerTrackInput,
+  ProfileDataPayload,
 } from '../models/CareerProfile';
 
 type PostgresError = {
@@ -258,7 +259,10 @@ export class CareerService {
             END IF;
         END $$;
       `);
-      
+      await pool.query(
+        `ALTER TABLE jack.career_tracks ADD COLUMN IF NOT EXISTS profile_data JSONB DEFAULT '{}'::jsonb`
+      );
+
       await CareerService.migrateLegacyCareerData();
       logger.info('✅ Career tracks and Resume tables checked/created successfully');
     } catch (error: unknown) {
@@ -500,6 +504,55 @@ export class CareerService {
       vals
     );
     return result.rows[0] ? rowToTrack(result.rows[0]) : null;
+  }
+
+  static async getProfileData(
+    userId: string,
+    trackId: string
+  ): Promise<{ track: CareerTrack; profile_data: ProfileDataPayload } | null> {
+    const track = await CareerService.getTrackById(userId, trackId);
+    if (!track) return null;
+    const raw = track.profile_data;
+    const profile_data: ProfileDataPayload =
+      raw && typeof raw === 'object' ? (raw as ProfileDataPayload) : {};
+    return { track, profile_data };
+  }
+
+  static async upsertProfileData(
+    userId: string,
+    trackId: string,
+    payload: ProfileDataPayload
+  ): Promise<{ track: CareerTrack; profile_data: ProfileDataPayload } | null> {
+    const track = await CareerService.getTrackById(userId, trackId);
+    if (!track) return null;
+
+    const existing: ProfileDataPayload =
+      track.profile_data && typeof track.profile_data === 'object'
+        ? (track.profile_data as ProfileDataPayload)
+        : {};
+
+    const merged: ProfileDataPayload = {
+      fields: { ...(existing.fields ?? {}), ...(payload.fields ?? {}) },
+      enriched: {
+        ...(existing.enriched ?? { version: 1 as const, enrichedAt: new Date().toISOString(), source: 'jack-profile-v2' as const }),
+        ...(payload.enriched ?? {}),
+        version: 1,
+        enrichedAt: payload.enriched?.enrichedAt ?? new Date().toISOString(),
+      },
+    };
+
+    const result = await pool.query<CareerTrack>(
+      `UPDATE jack.career_tracks SET profile_data = $1::jsonb, updated_at = NOW()
+       WHERE id = $2 AND user_id = $3
+       RETURNING *`,
+      [JSON.stringify(merged), trackId, userId]
+    );
+    const updated = result.rows[0];
+    if (!updated) return null;
+    return {
+      track: rowToTrack(updated),
+      profile_data: merged,
+    };
   }
 
   static async setDefaultTrack(userId: string, trackId: string): Promise<CareerTrack | null> {

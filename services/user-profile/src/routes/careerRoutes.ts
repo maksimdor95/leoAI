@@ -22,6 +22,8 @@ router.get('/tracks', authenticateToken, CareerController.listTracks);
 router.post('/tracks', authenticateToken, CareerController.createTrack);
 router.patch('/tracks/:trackId', authenticateToken, CareerController.updateTrack);
 router.post('/tracks/:trackId/set-default', authenticateToken, CareerController.setDefaultTrack);
+router.get('/tracks/:trackId/profile-data', authenticateToken, CareerController.getProfileData);
+router.put('/tracks/:trackId/profile-data', authenticateToken, CareerController.upsertProfileData);
 
 // Minimal Stage 1 API
 router.post('/profile', authenticateToken, CareerController.upsertProfile);

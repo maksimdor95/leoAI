@@ -25,13 +25,16 @@ const copy = {
     autoUpdateHint: 'Отвечайте в диалоге — подбор вакансий обновится автоматически.',
     wannanewNoJobs: 'Для продукта wannanew вакансии не подбираются.',
     newBadgeTooltip: 'Новые вакансии с последнего обновления. Нажмите, чтобы отфильтровать. Статус снимается после «Открыть вакансию».',
-    newFilterActive: 'Показаны только новые',
     newFilterEmpty: 'Все новые вакансии просмотрены.',
     favoriteBadgeTooltip: 'Показать только избранные вакансии',
-    favoriteFilterActive: 'Показано избранное',
     favoriteFilterEmpty: 'В избранном пока нет вакансий из текущего списка.',
     addToFavorites: 'Добавить в избранное',
     removeFromFavorites: 'Убрать из избранного',
+    swipeLike: 'Подходит',
+    swipeDislike: 'Не подходит',
+    swipeTapHint: 'Нажмите на карточку, чтобы оценить',
+    showWeakMatches: 'Показать слабые совпадения',
+    hideWeakMatches: 'Скрыть слабые совпадения',
     showAllVacancies: 'Показать все',
     emptyCatalog:
       'Каталог ещё пустой. Нажмите кнопку обновления ↻, чтобы запустить сбор под ваш профиль.',
@@ -58,13 +61,16 @@ const copy = {
     autoUpdateHint: 'Keep chatting — job matches update automatically.',
     wannanewNoJobs: 'WannaNew does not include job matching.',
     newBadgeTooltip: 'Jobs added since your last review. Click to filter. Cleared after “Open vacancy”.',
-    newFilterActive: 'Showing new only',
     newFilterEmpty: 'You have reviewed all new jobs.',
     favoriteBadgeTooltip: 'Show only favorited jobs',
-    favoriteFilterActive: 'Showing favorites',
     favoriteFilterEmpty: 'No favorited jobs in the current list.',
     addToFavorites: 'Add to favorites',
     removeFromFavorites: 'Remove from favorites',
+    swipeLike: 'Good match',
+    swipeDislike: 'Not a match',
+    swipeTapHint: 'Tap the card to rate this job',
+    showWeakMatches: 'Show weak matches',
+    hideWeakMatches: 'Hide weak matches',
     showAllVacancies: 'Show all',
     emptyCatalog:
       'The catalog is still empty. Click refresh ↻ to start collecting jobs for your profile.',
@@ -104,6 +110,10 @@ export function buildVacanciesInsightReasons(
     if (meta.weakTierTotal === 0 && meta.jobsInDb > 0) {
       reasons.push('Profile is still too brief — detailed analysis helps matching.');
     }
+    const missingSkills = meta.profileSignals?.missingSkillsTop;
+    if (missingSkills?.length) {
+      reasons.push(`LEO often sees missing skills: ${missingSkills.slice(0, 3).join(', ')}.`);
+    }
     if (meta.catalogWarning === 'no_matches' && reasons.length < 3) {
       reasons.push('No direct matches yet — common for niche or non-IT roles.');
     }
@@ -133,6 +143,10 @@ export function buildVacanciesInsightReasons(
   }
   if (meta.weakTierTotal === 0 && meta.jobsInDb > 0) {
     reasons.push('Профиль пока слишком краткий — для точного подбора нужен детальный анализ.');
+  }
+  const missingSkillsRu = meta.profileSignals?.missingSkillsTop;
+  if (missingSkillsRu?.length) {
+    reasons.push(`LEO часто не видит навыки: ${missingSkillsRu.slice(0, 3).join(', ')}.`);
   }
   if (meta.catalogWarning === 'no_matches' && reasons.length < 3) {
     reasons.push('Прямых совпадений нет — это нормально для нишевых или не-IT ролей.');

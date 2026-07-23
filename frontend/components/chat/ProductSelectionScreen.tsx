@@ -90,7 +90,7 @@ const ACCENT_STYLES: Record<
     orb: 'bg-green-500/20',
     icon: 'border-green-500/35 bg-gradient-to-br from-green-500/25 to-green-600/15 text-green-300 group-hover:from-green-500/35 group-hover:to-green-600/25',
     border: 'border-white/10 hover:border-green-500/35',
-    borderActive: 'border-green-400/50 shadow-[0_0_0_1px_rgba(74,222,128,0.25),0_20px_50px_-20px_rgba(34,197,94,0.35)]',
+    borderActive: 'border-green-400/55 shadow-[0_16px_40px_-24px_rgba(34,197,94,0.45)]',
     glow: 'from-green-500/10',
     shadow: 'shadow-green-500/15',
     chip: 'border-green-500/25 bg-green-500/10 text-green-200/90',
@@ -100,7 +100,7 @@ const ACCENT_STYLES: Record<
     orb: 'bg-amber-500/20',
     icon: 'border-amber-500/35 bg-gradient-to-br from-amber-500/25 to-amber-600/15 text-amber-200 group-hover:from-amber-500/35 group-hover:to-amber-600/25',
     border: 'border-white/10 hover:border-amber-500/35',
-    borderActive: 'border-amber-400/50 shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_20px_50px_-20px_rgba(245,158,11,0.35)]',
+    borderActive: 'border-amber-400/55 shadow-[0_16px_40px_-24px_rgba(245,158,11,0.4)]',
     glow: 'from-amber-500/10',
     shadow: 'shadow-amber-500/15',
     chip: 'border-amber-500/25 bg-amber-500/10 text-amber-100/90',
@@ -125,7 +125,7 @@ const HUME_ACCENT_STYLES: Record<
     orb: 'bg-[#daf7ee]/70',
     icon: 'border-[rgba(34,34,34,0.08)] bg-[#daf7ee] text-[#222222]',
     border: 'border-[rgba(34,34,34,0.08)] hover:border-[rgba(34,34,34,0.14)]',
-    borderActive: 'border-[rgba(34,34,34,0.12)] ring-1 ring-[#daf7ee]',
+    borderActive: 'border-[rgba(34,34,34,0.14)]',
     glow: 'from-[#daf7ee]/80',
     chip: 'border-[rgba(34,34,34,0.08)] bg-[#fff9f3] text-[#574853]',
     previewBadge: 'border-[rgba(34,34,34,0.08)] bg-[#daf7ee] text-[#222222]',
@@ -135,7 +135,7 @@ const HUME_ACCENT_STYLES: Record<
     orb: 'bg-[#ffe9cf]/75',
     icon: 'border-[rgba(34,34,34,0.08)] bg-[#ffe9cf] text-[#222222]',
     border: 'border-[rgba(34,34,34,0.08)] hover:border-[rgba(34,34,34,0.14)]',
-    borderActive: 'border-[rgba(34,34,34,0.12)] ring-1 ring-[#ffe9cf]',
+    borderActive: 'border-[rgba(34,34,34,0.14)]',
     glow: 'from-[#ffe9cf]/80',
     chip: 'border-[rgba(34,34,34,0.08)] bg-[#fff9f3] text-[#574853]',
     previewBadge: 'border-[rgba(34,34,34,0.08)] bg-[#ffe9cf] text-[#222222]',
@@ -509,7 +509,7 @@ export function ProductSelectionScreen({ onSelect }: ProductSelectionScreenProps
 
         {/* Split: cards + preview */}
         <div className="grid min-h-0 grid-cols-1 gap-4 sm:gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-start lg:gap-5 lg:overflow-hidden">
-          <div className="flex min-h-0 flex-col gap-3 sm:gap-4 lg:gap-3 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-0.5">
+          <div className="flex min-h-0 flex-col gap-3 py-0.5 sm:gap-4 lg:gap-3 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-0.5">
             {productScenarios.map((scenario, index) => {
               const darkStyles = ACCENT_STYLES[scenario.accent];
               const humeStyles = HUME_ACCENT_STYLES[scenario.accent];
@@ -529,19 +529,15 @@ export function ProductSelectionScreen({ onSelect }: ProductSelectionScreenProps
                   }}
                   onMouseEnter={canHover ? () => activateScenario(scenario.product) : undefined}
                   onFocus={() => activateScenario(scenario.product)}
-                  className={`group relative cursor-pointer overflow-hidden p-5 text-left transition-all duration-300 animate-fadeIn focus:outline-none sm:p-6 lg:p-4 hume-scenario-card ${
+                  className={`group relative cursor-pointer overflow-hidden p-5 text-left transition-[background-color,border-color,box-shadow] duration-300 animate-fadeIn focus:outline-none focus-visible:outline-none sm:p-6 lg:p-4 hume-scenario-card ${
                     isHume
-                      ? `hume-card ${
-                          isActive ? 'hume-card-active ring-1 ring-[rgba(34,34,34,0.06)]' : ''
-                        }`
+                      ? `hume-card ${isActive ? 'hume-card-active' : ''}`
                       : `rounded-2xl border sm:rounded-3xl bg-white/[0.04] backdrop-blur focus-visible:ring-2 focus-visible:ring-green-400/45 ${
                           isActive
-                            ? `${darkStyles.borderActive} scale-[1.01] bg-white/[0.07]`
-                            : `${darkStyles.border} hover:scale-[1.01] hover:bg-white/[0.07] hover:shadow-xl ${darkStyles.shadow}`
+                            ? `${darkStyles.borderActive} bg-white/[0.07]`
+                            : `${darkStyles.border} hover:bg-white/[0.07] hover:shadow-xl ${darkStyles.shadow}`
                         }`
-                  } ${!isHume ? 'rounded-2xl border sm:rounded-3xl' : ''} ${
-                    isHume && isActive ? 'scale-[1.005]' : !isHume && isActive ? 'scale-[1.01]' : ''
-                  }`}
+                  } ${!isHume ? 'rounded-2xl border sm:rounded-3xl' : ''}`}
                   style={{ animationDelay: `${0.45 + index * 0.1}s` }}
                 >
                   <div

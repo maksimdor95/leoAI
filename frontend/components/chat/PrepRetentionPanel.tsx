@@ -23,6 +23,7 @@ export function PrepRetentionPanel({ collectedData, compact }: PrepRetentionPane
   const isHume = useHumeTheme();
   const retention = resolvePrepRetention(collectedData);
   const starBank = resolveStarBank(collectedData);
+  const profileStarCount = starBank.filter((entry) => entry.source === 'profile_enrichment').length;
 
   if (!retention) {
     return null;
@@ -110,7 +111,11 @@ export function PrepRetentionPanel({ collectedData, compact }: PrepRetentionPane
                 : 'text-[10px] uppercase tracking-wide text-slate-400'
             }
           >
-            Банк STAR ({starBank.length})
+            Банк STAR ({starBank.length}
+            {profileStarCount > 0
+              ? `, ${profileStarCount} ${profileStarCount === 1 ? 'история' : profileStarCount < 5 ? 'истории' : 'историй'} из профиля`
+              : ''}
+            )
           </div>
           <ul className="space-y-1.5">
             {starBank.slice(0, 3).map((entry) => (

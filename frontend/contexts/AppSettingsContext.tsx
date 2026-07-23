@@ -28,6 +28,7 @@ type AppSettingsContextValue = {
   settings: AppSettings;
   setLocale: (locale: AppLocale) => void;
   setTheme: (theme: AppTheme) => void;
+  setTextOnlyReplies: (enabled: boolean) => void;
   setSpeechEnabled: (enabled: boolean) => void;
   setTtsVoice: (voice: string) => void;
 };
@@ -59,6 +60,7 @@ export function AppSettingsProvider({
       const unchanged =
         prev.locale === stored.locale &&
         prev.theme === stored.theme &&
+        prev.textOnlyReplies === stored.textOnlyReplies &&
         prev.speechEnabled === stored.speechEnabled &&
         prev.ttsLang === stored.ttsLang &&
         prev.ttsVoice === stored.ttsVoice;
@@ -99,6 +101,13 @@ export function AppSettingsProvider({
     [persist]
   );
 
+  const setTextOnlyReplies = useCallback(
+    (textOnlyReplies: boolean) => {
+      persist((prev) => ({ ...prev, textOnlyReplies }));
+    },
+    [persist]
+  );
+
   const setSpeechEnabled = useCallback(
     (speechEnabled: boolean) => {
       persist((prev) => ({ ...prev, speechEnabled }));
@@ -121,10 +130,11 @@ export function AppSettingsProvider({
       settings,
       setLocale,
       setTheme,
+      setTextOnlyReplies,
       setSpeechEnabled,
       setTtsVoice,
     }),
-    [settings, setLocale, setTheme, setSpeechEnabled, setTtsVoice]
+    [settings, setLocale, setTheme, setTextOnlyReplies, setSpeechEnabled, setTtsVoice]
   );
 
   return <AppSettingsContext.Provider value={value}>{children}</AppSettingsContext.Provider>;

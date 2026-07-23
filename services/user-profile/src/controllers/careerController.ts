@@ -28,6 +28,16 @@ const updateTrackSchema = z.object({
   experience_years: z.number().int().min(0).max(50).nullable().optional(),
 });
 
+const profileDataSchema = z.object({
+  profile_data: z
+    .object({
+      enriched: z.record(z.unknown()).optional(),
+      fields: z.record(z.unknown()).optional(),
+    })
+    .optional(),
+  fields: z.record(z.unknown()).optional(),
+});
+
 export class CareerController {
   static async listTracks(req: AuthRequest, res: Response) {
     try {
@@ -99,6 +109,59 @@ export class CareerController {
       return res.status(200).json({ track });
     } catch (error: unknown) {
       logger.error('Error in setDefaultTrack:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  static async getProfileData(req: AuthRequest, res: Response) {
+    try {
+      if (!req.userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      const { trackId } = req.params;
+      if (!trackId || !z.string().uuid().safeParse(trackId).success) {
+        return res.status(400).json({ error: 'Invalid track id' });
+      }
+      const result = await CareerService.getProfileData(req.userId, trackId);
+      if (!result) {
+        return res.status(404).json({ error: 'Track not found' });
+      }
+      return res.status(200).json(result);
+    } catch (error: unknown) {
+      logger.error('Error in getProfileData:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  static async upsertProfileData(req: AuthRequest, res: Response) {
+    try {
+      if (!req.userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      const { trackId } = req.params;
+      if (!trackId || !z.string().uuid().safeParse(trackId).success) {
+        return res.status(400).json({ error: 'Invalid track id' });
+      }
+      const parsed = profileDataSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid payload', details: parsed.error.flatten() });
+      }
+      const body = parsed.data;
+      const payload = {
+        enriched: body.profile_data?.enriched as Record<string, unknown> | undefined,
+        fields: body.fields ?? body.profile_data?.fields,
+      };
+      const result = await CareerService.upsertProfileData(req.userId, trackId, payload);
+      if (!result) {
+        return res.status(404).json({ error: 'Track not found' });
+      }
+      return res.status(200).json({
+        message: 'Profile data updated',
+        track: result.track,
+        profile_data: result.profile_data,
+      });
+    } catch (error: unknown) {
+      logger.error('Error in upsertProfileData:', error);
       return res.status(500).json({ error: 'Internal server error' });
     }
   }

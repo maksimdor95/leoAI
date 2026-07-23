@@ -11,6 +11,7 @@ import { ProfileCompletionCards } from '@/components/chat/ProfileCompletionCards
 import { InterviewPrepInfoOverview } from '@/components/chat/InterviewPrepInfoOverview';
 import { PrepPackStageCard } from '@/components/chat/PrepPackStageCard';
 import type { PrepPackType } from '@/types/chat';
+import type { PrepProgress } from '@/lib/prepActivities';
 import { useHumeTheme } from '@/lib/useHumeTheme';
 
 const VACANCY_PROFILE_CARD_TITLE = 'Профиль вакансии и план подготовки';
@@ -52,6 +53,8 @@ type StagePanelProps = {
     onGenerateResume: () => void;
     onSendResumeEmail: (email?: string) => void;
     onGenerateSummary?: () => void;
+    missingFields?: string[];
+    profileCompleteness?: number;
   };
   /** Зона загрузки резюме под текстом вопроса (не в строке ввода) */
   resumeUpload?: {
@@ -64,6 +67,9 @@ type StagePanelProps = {
   onQuickReply?: (value: string) => void;
   /** Прогресс детального пути Jack: «Вопрос 12 из 36». */
   detailedProgressLabel?: string | null;
+  /** Interview Prep: прогресс маршрута для CTA «Начать подготовку» */
+  prepProgress?: PrepProgress | null;
+  prepCollectedData?: Record<string, unknown>;
 };
 
 export function StagePanel({
@@ -80,6 +86,8 @@ export function StagePanel({
   quickReplies,
   onQuickReply,
   detailedProgressLabel,
+  prepProgress,
+  prepCollectedData,
 }: StagePanelProps) {
   const isHume = useHumeTheme();
   const hasQuestion = Boolean(question);
@@ -125,6 +133,8 @@ export function StagePanel({
           onGenerateResume={profileCompletion.onGenerateResume}
           onSendResumeEmail={profileCompletion.onSendResumeEmail}
           onGenerateSummary={profileCompletion.onGenerateSummary}
+          missingFields={profileCompletion.missingFields}
+          profileCompleteness={profileCompletion.profileCompleteness}
         />
       ) : showInfoCard && infoCard ? (
         <InterviewPrepInfoOverview
@@ -134,6 +144,8 @@ export function StagePanel({
           commands={hasCommands ? commands : undefined}
           onCommandSelect={onCommandSelect}
           onContinue={onContinue}
+          prepProgress={isVacancyProfileCard ? prepProgress : undefined}
+          collectedData={isVacancyProfileCard ? prepCollectedData : undefined}
         />
       ) : showQuestion && question ? (
         <Fragment>
@@ -225,7 +237,7 @@ export function StagePanel({
                   onClick={interviewPrepOnOpenOverview}
                   className="!h-auto !p-0 !text-amber-300/95 hover:!text-amber-200 !text-xs sm:!text-sm"
                 >
-                  Профиль вакансии и план подготовки →
+                  Профиль вакансии →
                 </Button>
               </div>
             ) : null}
@@ -318,7 +330,7 @@ export function StagePanel({
                   onClick={interviewPrepOnOpenOverview}
                   className="!h-auto !p-0 !text-amber-300/95 hover:!text-amber-200 !text-xs sm:!text-sm"
                 >
-                  Профиль вакансии и план подготовки →
+                  Профиль вакансии →
                 </Button>
               </div>
             ) : null}
@@ -326,8 +338,15 @@ export function StagePanel({
         </Fragment>
       ) : null}
 
-      {/* Команды без центрального info_card (например только COMMAND в истории) */}
-      {hasCommands && commands && !showInfoCard && !showInterviewReport && !showJackCompletion ? (
+      {/* Команды без центрального info_card (например только COMMAND в истории).
+          Не показываем во время активного вопроса — иначе кнопки resume_ready
+          («Показать рекомендации» / «Заполнить пробелы») перекрывают ответ. */}
+      {hasCommands &&
+      commands &&
+      !showQuestion &&
+      !showInfoCard &&
+      !showInterviewReport &&
+      !showJackCompletion ? (
         <CommandBar commands={commands} onSelect={onCommandSelect} />
       ) : null}
     </div>

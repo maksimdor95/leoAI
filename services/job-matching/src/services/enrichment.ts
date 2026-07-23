@@ -37,9 +37,18 @@ export async function enrichJobWithLLM(job: JobInput): Promise<JobInput> {
   return job;
 }
 
-export async function getEmbedding(text: string): Promise<number[]> {
+export async function getEmbedding(text: string, authToken?: string): Promise<number[]> {
   try {
-    const response = await axios.post(`${AI_NLP_URL}/api/ai/embedding`, { text }, { timeout: 15000 });
+    const response = await axios.post(
+      `${AI_NLP_URL}/api/ai/embedding`,
+      { text },
+      {
+        timeout: 15000,
+        headers: authToken
+          ? { Authorization: authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}` }
+          : undefined,
+      }
+    );
     return response.data?.embedding || [];
   } catch (error) {
     logger.error(`Failed to get embedding:`, error instanceof Error ? error.message : String(error));

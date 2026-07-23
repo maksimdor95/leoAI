@@ -290,10 +290,10 @@ export function VacancyPreviewDrawer({
         }}
         className={
           isHume
-            ? `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent transition-colors ${
+            ? `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[rgba(34,34,34,0.08)] !bg-[var(--color-paper)] transition-colors ${
                 isFavorite
-                  ? 'text-[var(--color-iris)] hover:bg-[var(--color-rose-mist)]'
-                  : 'text-[var(--color-smoke)] hover:border-[rgba(34,34,34,0.08)] hover:bg-[var(--color-paper)] hover:text-[var(--color-iris)]'
+                  ? 'text-[var(--color-iris)] hover:!bg-[var(--color-rose-mist)]'
+                  : 'text-[var(--color-smoke)] hover:border-[rgba(34,34,34,0.12)] hover:!bg-[var(--color-rose-mist)] hover:text-[var(--color-iris)]'
               }`
             : `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${
                 isFavorite

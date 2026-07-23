@@ -89,6 +89,7 @@ import { appendUserStarBankEntry, loadUserStarBank, saveUserStarBank } from './p
 import { getUserSessions } from './sessionService';
 import { logger } from '../utils/logger';
 import { triggerProfileDrivenScrape } from './integrationService';
+import { enrichAndPersistProfile } from './profileEnrichmentService';
 
 // ============================================
 // РЕГИСТР СЦЕНАРИЕВ
@@ -276,6 +277,58 @@ export function findFirstIncompleteStepIdAfterImport(
   }
   return null;
 }
+
+const PROFILE_GAP_ALWAYS_SKIP = new Set([
+  'greeting',
+  'resume_upload',
+  'pause_reminder',
+  'privacy_info',
+  'clarify',
+  'completion_gap',
+]);
+
+function hasCareerNarrativeForGapSkip(collected: Record<string, unknown>): boolean {
+  if (typeof collected.careerSummary === 'string' && collected.careerSummary.trim().length > 10) {
+    return true;
+  }
+  return isCollectedFilledForImport(collected.position_1_role);
+}
+
+/** Шаги, которые не спрашиваем в режиме «Заполнить пробелы». */
+export function shouldSkipStepForProfileGaps(
+  step: ScenarioStep,
+  collected: Record<string, unknown>
+): boolean {
+  if (shouldSkipStepOnResumeImport(step, collected)) return true;
+  if (PROFILE_GAP_ALWAYS_SKIP.has(step.id)) return true;
+  // После резюме с карьерным описанием не гоняем по блоку позиций заново
+  if (hasCareerNarrativeForGapSkip(collected)) {
+    if (step.id === 'positions_count' || step.id.startsWith('position_')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Первый пустой вопрос профиля (без info_card / рестарта сценария).
+ * Для кнопки «Заполнить пробелы» после resume_ready / quick_ready.
+ */
+export function findFirstProfileGapStepId(
+  scenario: ScenarioDefinition,
+  collected: Record<string, unknown>
+): string | null {
+  for (const step of scenario.steps) {
+    if (step.type !== 'question' || !step.collectKey) continue;
+    if (shouldSkipStepForProfileGaps(step, collected)) continue;
+    if (!isCollectedFilledForImport(collected[step.collectKey])) {
+      return step.id;
+    }
+  }
+  return null;
+}
+
+const FILL_PROFILE_GAPS_FLAG = 'fillProfileGaps';
 
 /**
  * Объединяет импортированные поля в collectedData, пересчитывает шаги и формирует следующее сообщение ассистента.
@@ -874,7 +927,8 @@ function buildInfoCardMessage(
       timestamp: new Date().toISOString(),
       sessionId: session.id,
       title: step.title,
-      description: step.description,
+      description:
+        `${step.description}\n\nПосле «Продолжить» LEO проанализирует профиль и обновит карьерный снимок.`,
       cards:
         cards.length > 0 ? cards : [{ title: 'Профиль', content: 'Пока нет собранных данных' }],
     };
@@ -1099,15 +1153,78 @@ function buildQuickReadyDetailedAnalysisTransition(
   return metadataUpdates;
 }
 
+async function handleFillProfileGapsCommand(
+  session: ConversationSession,
+  scenarioId: string,
+  scenarioUpdates: PreparedStepResult['metadataUpdates'],
+  fallbackStepId: string | null | undefined
+): Promise<PreparedStepResult> {
+  const effectiveScenarioId = scenarioId || DEFAULT_SCENARIO_ID;
+  const scenario = getScenario(effectiveScenarioId);
+  const completed = Array.from(
+    new Set([...(session.metadata.completedSteps || []), 'resume_ready', 'quick_ready'])
+  );
+  session.metadata.completedSteps = completed;
+
+  const gapStepId = findFirstProfileGapStepId(scenario, session.metadata.collectedData);
+  if (!gapStepId) {
+    const stayOn = fallbackStepId || 'resume_ready';
+    session.metadata.flags = {
+      ...(session.metadata.flags || {}),
+      [FILL_PROFILE_GAPS_FLAG]: false,
+    };
+    return {
+      message: {
+        id: uuidv4(),
+        type: MessageType.TEXT,
+        role: MessageRole.ASSISTANT,
+        timestamp: new Date().toISOString(),
+        sessionId: session.id,
+        content:
+          'Ключевые поля профиля уже заполнены. Нажмите «Показать рекомендации», чтобы открыть подбор вакансий. Поправить данные можно во вкладке «Профиль».',
+      },
+      metadataUpdates: {
+        ...scenarioUpdates,
+        completedSteps: completed,
+        currentStepId: stayOn,
+        flags: {
+          ...(scenarioUpdates?.flags || {}),
+          [FILL_PROFILE_GAPS_FLAG]: false,
+        },
+      },
+      nextStepId: stayOn,
+    };
+  }
+
+  logger.info(`fill_profile_gaps: starting from ${gapStepId}`);
+  session.metadata.flags = {
+    ...(session.metadata.flags || {}),
+    [FILL_PROFILE_GAPS_FLAG]: true,
+  };
+  return prepareAssistantMessageForStepId(session, effectiveScenarioId, gapStepId, {
+    ...scenarioUpdates,
+    completedSteps: completed,
+    flags: {
+      ...(scenarioUpdates?.flags || {}),
+      ...(session.metadata.flags || {}),
+      [FILL_PROFILE_GAPS_FLAG]: true,
+    },
+  });
+}
+
 async function handleResumeReadyReply(
   session: ConversationSession,
   scenarioId: string,
   userMessageContent: string,
   scenarioUpdates: PreparedStepResult['metadataUpdates']
 ): Promise<PreparedStepResult> {
-  if (wantsDetailedProfileAnalysis(userMessageContent)) {
-    const metadataUpdates = buildQuickReadyDetailedAnalysisTransition(session, scenarioUpdates);
-    return prepareAssistantMessageForStepId(session, scenarioId, 'career_overview', metadataUpdates);
+  const lower = userMessageContent.toLowerCase();
+  if (
+    wantsDetailedProfileAnalysis(userMessageContent) ||
+    lower.includes('пробел') ||
+    lower.includes('заполнить')
+  ) {
+    return handleFillProfileGapsCommand(session, scenarioId, scenarioUpdates, 'resume_ready');
   }
 
   return {
@@ -1118,7 +1235,7 @@ async function handleResumeReadyReply(
       timestamp: new Date().toISOString(),
       sessionId: session.id,
       content:
-        'Нажмите «Показать рекомендации», чтобы открыть подбор вакансий. Чтобы поправить данные — вкладка «Профиль».',
+        'Нажмите «Показать рекомендации», чтобы открыть подбор вакансий, или «Заполнить пробелы» — уточним только пустые поля. Поправить данные — вкладка «Профиль».',
     },
     metadataUpdates: scenarioUpdates,
     nextStepId: null,
@@ -1195,6 +1312,7 @@ async function prepareAssistantMessageForStepId(
     };
     session.metadata.flags = {
       ...(session.metadata.flags || {}),
+      ...(metadataUpdates.flags || {}),
       [sentFlagKey]: true,
     };
     return { message, metadataUpdates, nextStepId };
@@ -1209,6 +1327,7 @@ async function prepareAssistantMessageForStepId(
     };
     session.metadata.flags = {
       ...(session.metadata.flags || {}),
+      ...(metadataUpdates.flags || {}),
       [sentFlagKey]: true,
     };
     if (nextStep.id === 'profile_snapshot') {
@@ -1231,6 +1350,7 @@ async function prepareAssistantMessageForStepId(
     };
     session.metadata.flags = {
       ...(session.metadata.flags || {}),
+      ...(metadataUpdates.flags || {}),
       [sentFlagKey]: true,
     };
     return { message, metadataUpdates, nextStepId };
@@ -1372,7 +1492,7 @@ function buildVacancyProfileCard(
     title: 'Профиль вакансии и план подготовки',
     description: [
       retentionWelcome,
-      'Я выделил ключевые ожидания по роли. Если где-то данных мало, считаю это предположением и буду уточнять в подготовке.',
+      'Маршрут из коротких шагов в чате (~3 ч). Начните с «Следующего шага» во вкладке «Подготовка» — LEO сам откроет нужный режим. Полный разбор вакансии — справочно, ниже.',
     ]
       .filter(Boolean)
       .join('\n\n'),
@@ -2734,6 +2854,9 @@ export async function handleUserReply(
 
       if (isContinueCommand) {
         logger.info(`✅ User clicked continue on profile_snapshot, advancing to next step`);
+        if (authToken) {
+          await enrichAndPersistProfile(session, authToken, 'profile_snapshot');
+        }
         // User wants to continue - advance to next step
         const nextStepId = resolveNextStep(currentStep.next, session.metadata.collectedData);
         logger.info(`📍 Next step after profile_snapshot: ${nextStepId}`);
@@ -3302,6 +3425,16 @@ export async function handleUserReply(
           logger.warn(`Profile-driven scrape trigger failed: ${String(err)}`);
         });
       }
+
+      if (currentStep.collectKey === 'desired_start' && authToken) {
+        const enriched = await enrichAndPersistProfile(session, authToken, 'desired_start');
+        if (enriched) {
+          metadataUpdates.collectedData = {
+            ...(metadataUpdates.collectedData || {}),
+            __enriched: enriched,
+          };
+        }
+      }
     }
   }
 
@@ -3340,6 +3473,32 @@ export async function handleUserReply(
     `Resolved next step for ${currentStep.id}: ${nextStepId} (collectedData: ${JSON.stringify(session.metadata.collectedData)})`
   );
 
+  // Режим «Заполнить пробелы»: прыгаем только на пустые поля, без линейного прогона уже заполненных
+  if (session.metadata.flags?.[FILL_PROFILE_GAPS_FLAG] === true) {
+    const gapId = findFirstProfileGapStepId(
+      getScenario(scenarioId),
+      session.metadata.collectedData
+    );
+    if (gapId) {
+      nextStepId = gapId;
+      logger.info(`fillProfileGaps: next gap step ${gapId}`);
+    } else {
+      const readyStep = isResumePathMode(session.metadata.collectedData)
+        ? 'resume_ready'
+        : 'quick_ready';
+      nextStepId = readyStep;
+      metadataUpdates.flags = {
+        ...(metadataUpdates.flags || {}),
+        [FILL_PROFILE_GAPS_FLAG]: false,
+      };
+      session.metadata.flags = {
+        ...(session.metadata.flags || {}),
+        [FILL_PROFILE_GAPS_FLAG]: false,
+      };
+      logger.info(`fillProfileGaps: done, returning to ${readyStep}`);
+    }
+  }
+
   if (nextStepId === 'quick_ready') {
     const enriched = enrichQuickPathCollectedData(
       session.metadata.collectedData as Record<string, unknown>
@@ -3362,6 +3521,15 @@ export async function handleUserReply(
       ...enriched,
     };
     logger.info('Enriched resume-path collectedData before resume_ready screen');
+    if (authToken) {
+      const enrichedProfile = await enrichAndPersistProfile(session, authToken, 'resume_ready');
+      if (enrichedProfile) {
+        metadataUpdates.collectedData = {
+          ...(metadataUpdates.collectedData || {}),
+          __enriched: enrichedProfile,
+        };
+      }
+    }
   }
 
   metadataUpdates.currentStepId = nextStepId ?? undefined;
@@ -3863,6 +4031,15 @@ export async function handleCommand(
       };
     }
 
+    case 'fill_profile_gaps': {
+      return handleFillProfileGapsCommand(
+        session,
+        scenarioId || DEFAULT_SCENARIO_ID,
+        scenarioUpdates,
+        currentStepId
+      );
+    }
+
     case 'resume_start_quick': {
       const effectiveScenarioId = scenarioId || DEFAULT_SCENARIO_ID;
       session.metadata.collectedData = {
@@ -3891,7 +4068,16 @@ export async function handleCommand(
     }
 
     case 'start_detailed_analysis': {
-      if (currentStepId === 'quick_ready' || currentStepId === 'resume_ready') {
+      // С resume_ready больше не рестартуем детальный путь — только пробелы
+      if (currentStepId === 'resume_ready') {
+        return handleFillProfileGapsCommand(
+          session,
+          scenarioId || DEFAULT_SCENARIO_ID,
+          scenarioUpdates,
+          currentStepId
+        );
+      }
+      if (currentStepId === 'quick_ready') {
         logger.info(`User chose detailed analysis command from ${currentStepId}`);
         const metadataUpdates = buildQuickReadyDetailedAnalysisTransition(session, scenarioUpdates);
         const effectiveScenarioId = scenarioId || DEFAULT_SCENARIO_ID;

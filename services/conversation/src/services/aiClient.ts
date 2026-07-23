@@ -239,6 +239,49 @@ export async function analyzeProfile(
   }
 }
 
+interface EnrichProfileRequest {
+  collectedData?: Record<string, unknown>;
+  ruleSignals?: Record<string, unknown>;
+  phase?: 1 | 4 | 5 | 'all';
+  completedSteps?: string[];
+  currentStepId?: string;
+  marketContext?: { missingSkillsTop?: string[]; role_family?: string | null };
+  source?: 'jack-profile-v2' | 'resume_import' | 'manual';
+}
+
+interface EnrichProfileResponse {
+  status: 'success';
+  enriched: Record<string, unknown>;
+}
+
+export async function enrichProfile(
+  params: EnrichProfileRequest,
+  authToken?: string
+): Promise<Record<string, unknown>> {
+  try {
+    const headers =
+      authToken && authToken.trim()
+        ? {
+            Authorization: authToken.startsWith('Bearer ')
+              ? authToken
+              : `Bearer ${authToken}`,
+          }
+        : undefined;
+    const response = await axios.post<EnrichProfileResponse>(
+      `${AI_SERVICE_URL}/api/ai/enrich-profile`,
+      params,
+      { timeout: 45000, headers }
+    );
+    if (response.data.status !== 'success') {
+      throw new Error('AI enrich-profile returned non-success status');
+    }
+    return response.data.enriched;
+  } catch (error: unknown) {
+    logger.warn('Error enriching profile (fail-open):', error);
+    throw error;
+  }
+}
+
 interface CheckContextRequest {
   conversationHistory?: Array<{
     role: 'user' | 'assistant' | 'system';

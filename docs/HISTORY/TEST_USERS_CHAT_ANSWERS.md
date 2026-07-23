@@ -9,7 +9,7 @@
 - На info-карточках **position_intro** и **profile_snapshot** отправь «продолжить» (или кнопку «Продолжить»).
 - Для `Jack` в примерах указан `positionsCount = 2` (быстрее прогон).
 - В ответе на **карьерный путь** не указывай «N лет» отдельной фразой — стаж спрашивается на следующем шаге.
-- Путь **«Проанализировать готовое резюме»**: на greeting выбрать третью кнопку → загрузить PDF/DOCX → «Показать рекомендации». Без роли в резюме — fallback на быстрый подбор (вопрос о роли).
+- Путь **«Проанализировать готовое резюме»**: на greeting выбрать третью кнопку → загрузить PDF/DOCX → на `resume_ready` только «Показать рекомендации» / «Заполнить пробелы» (без рестарта быстрого/детального сценария). Без роли в резюме — fallback на быстрый подбор (вопрос о роли).
 - Для `WannaNew` ответы на интервью сделаны развернутыми.
 
 ---
@@ -163,4 +163,15 @@
 - `desired_salary`: `от 350000 net`
 - `targetRole` (WannaNew): `Middle PM`
 - `targetProductType`: `B2B SaaS`
+
+### Enriched profile (после `profile_snapshot` / `desired_start`)
+
+После enrichment в `collectedData.__enriched` ожидаются:
+
+- `role_family`: `product`
+- `seniority`: `middle`
+- `normalized_skills`: навыки из lexicon
+- `profile_completeness`: ~0.7–0.9 для полной персоны Ivan
+- `market_fit_summary`: текстовый обзор рынка
+- `achievements_with_metrics`: 1–3 достижения с метриками
 

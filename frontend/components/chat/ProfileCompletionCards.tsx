@@ -13,6 +13,8 @@ type ProfileCompletionCardsProps = {
   emailLoading?: boolean;
   summaryLoading?: boolean;
   userEmail?: string;
+  missingFields?: string[];
+  profileCompleteness?: number;
 };
 
 function stripIconPrefix(title: string, icon?: string): string {
@@ -38,6 +40,8 @@ export function ProfileCompletionCards({
   emailLoading = false,
   summaryLoading = false,
   userEmail = '',
+  missingFields,
+  profileCompleteness,
 }: ProfileCompletionCardsProps) {
   const [customEmail, setCustomEmail] = useState(userEmail);
 
@@ -68,6 +72,27 @@ export function ProfileCompletionCards({
         </h2>
         {infoCard.description ? (
           <p className="mt-1 text-xs text-slate-400 leading-relaxed">{infoCard.description}</p>
+        ) : null}
+        {typeof profileCompleteness === 'number' ? (
+          <div className="mt-3 space-y-2">
+            <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
+              <span>Полнота профиля</span>
+              <span className="tabular-nums text-slate-200">
+                {Math.round(profileCompleteness * 100)}%
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-500"
+                style={{ width: `${Math.round(profileCompleteness * 100)}%` }}
+              />
+            </div>
+            {missingFields?.length ? (
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Можно усилить: {missingFields.slice(0, 3).join(', ')} — вернитесь в чат или откройте вкладку «Профиль».
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

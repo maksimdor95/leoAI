@@ -297,6 +297,34 @@ export class JobRepository {
     return total;
   }
 
+  /**
+   * Ближайшие вакансии по embedding (pgvector cosine distance).
+   * Fail-open: пустой массив при ошибке / отсутствии вектора.
+   */
+  async findNearestByEmbedding(embedding: number[], limit = 150): Promise<Job[]> {
+    if (!embedding.length || limit <= 0) return [];
+
+    const vectorLiteral = `[${embedding.join(',')}]`;
+    const query = `
+      SELECT * FROM jobs
+      WHERE embedding IS NOT NULL
+      ORDER BY embedding <=> $1::vector
+      LIMIT $2
+    `;
+
+    try {
+      const result = await pool.query(query, [vectorLiteral, limit]);
+      return result.rows.map((row) => this.mapRowToJob(row));
+    } catch (error: unknown) {
+      logger.warn(
+        `findNearestByEmbedding failed (fail-open): ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return [];
+    }
+  }
+
   private async findRecentExcluding(excludeIds: string[], limit: number): Promise<Job[]> {
     if (limit <= 0) return [];
 

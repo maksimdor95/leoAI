@@ -113,7 +113,7 @@ function checkPositionsCompleteness(collectedData: Record<string, unknown>): {
   return { positionsCount, filledPositions, positionGaps };
 }
 
-function getFieldDisplayName(field: string): string {
+export function getFieldDisplayName(field: string): string {
   const fieldNames: Record<string, string> = {
     // Новые поля
     careerSummary: 'обзор карьеры',
@@ -313,35 +313,36 @@ function parseProfileAnalysisResponse(text: string): ProfileAnalysisResult {
   };
 }
 
-export async function analyzeProfile(req: Request, res: Response) {
-  try {
-    const parsed = analyzeProfileSchema.parse(req.body);
-    const { collectedData = {}, completedSteps = [], currentStepId } = parsed;
+export async function runProfileAnalysis(params: {
+  collectedData?: Record<string, unknown>;
+  completedSteps?: string[];
+  currentStepId: string;
+}): Promise<ProfileAnalysisResult> {
+  const collectedData = params.collectedData ?? {};
+  const completedSteps = params.completedSteps ?? [];
+  const { currentStepId } = params;
 
-    // Build context about collected fields (only relevant values)
-    // Фильтруем нерелевантные значения (например, "нерелевантно", "не знаю")
-    const collectedFields = Object.keys(collectedData).filter((key) =>
-      isRelevantValue(collectedData[key])
-    );
+  const collectedFields = Object.keys(collectedData).filter((key) =>
+    isRelevantValue(collectedData[key])
+  );
 
-    // Создаем очищенную версию collectedData для анализа (без нерелевантных значений)
-    const cleanedCollectedData: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(collectedData)) {
-      if (isRelevantValue(value)) {
-        cleanedCollectedData[key] = value;
-      }
+  const cleanedCollectedData: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(collectedData)) {
+    if (isRelevantValue(value)) {
+      cleanedCollectedData[key] = value;
     }
+  }
 
-    const missingCriticalFields = CRITICAL_FIELDS.filter(
-      (field) => !collectedFields.includes(field)
-    );
-    const missingImportantFields = IMPORTANT_FIELDS.filter(
-      (field) => !collectedFields.includes(field)
-    );
+  const missingCriticalFields = CRITICAL_FIELDS.filter(
+    (field) => !collectedFields.includes(field)
+  );
+  const missingImportantFields = IMPORTANT_FIELDS.filter(
+    (field) => !collectedFields.includes(field)
+  );
 
-    const systemPrompt = buildSystemMessage({
-      extraSections: [
-        `# Роль: Аналитик профиля кандидата
+  const systemPrompt = buildSystemMessage({
+    extraSections: [
+      `# Роль: Аналитик профиля кандидата
 Ты анализируешь полноту профиля кандидата в диалоге с HR-ассистентом LEO.
 Твоя задача — определить готовность профиля для подбора вакансий (matching).
 
@@ -404,24 +405,22 @@ ${IMPORTANT_FIELDS.map((f) => `- ${f} (${getFieldDisplayName(f)})`).join('\n')}
   "contradictions": ["описание противоречия 1", "описание противоречия 2"],
   "readyForMatching": true/false
 }`,
-      ],
-    });
+    ],
+  });
 
-    // Показываем как исходные данные, так и очищенные (для понимания контекста)
-    const collectedDataText =
-      Object.keys(collectedData).length > 0
-        ? `Собранные данные (включая нерелевантные значения):\n${JSON.stringify(collectedData, null, 2)}\n\nОчищенные данные (только релевантные значения):\n${JSON.stringify(cleanedCollectedData, null, 2)}`
-        : 'Собранные данные отсутствуют.';
+  const collectedDataText =
+    Object.keys(collectedData).length > 0
+      ? `Собранные данные (включая нерелевантные значения):\n${JSON.stringify(collectedData, null, 2)}\n\nОчищенные данные (только релевантные значения):\n${JSON.stringify(cleanedCollectedData, null, 2)}`
+      : 'Собранные данные отсутствуют.';
 
-    const completedStepsText =
-      completedSteps.length > 0
-        ? `Завершенные шаги: ${completedSteps.join(', ')}`
-        : 'Завершенные шаги отсутствуют.';
+  const completedStepsText =
+    completedSteps.length > 0
+      ? `Завершенные шаги: ${completedSteps.join(', ')}`
+      : 'Завершенные шаги отсутствуют.';
 
-    // Проверяем полноту позиций
-    const positionsCheck = checkPositionsCompleteness(collectedData);
+  const positionsCheck = checkPositionsCompleteness(collectedData);
 
-    const userMessage = buildUserMessage(`
+  const userMessage = buildUserMessage(`
 Текущий шаг: ${currentStepId}
 ${completedStepsText}
 
@@ -440,19 +439,30 @@ ${collectedDataText}
 Учитывай, что для качественного профиля нужно минимум 1 заполненная позиция с достижениями.
 Верни оценку в формате JSON.`);
 
-    const aiResponse = await callYandexModel({
-      sessionId: `profile-analysis-${currentStepId}`,
-      userId: 'profile-analyst',
-      messages: [systemPrompt, userMessage],
-      completionOptions: {
-        temperature: 0.2, // Low temperature for more deterministic analysis
-        maxTokens: 500,
-      },
+  const aiResponse = await callYandexModel({
+    sessionId: `profile-analysis-${currentStepId}`,
+    userId: 'profile-analyst',
+    messages: [systemPrompt, userMessage],
+    completionOptions: {
+      temperature: 0.2,
+      maxTokens: 500,
+    },
+  });
+
+  return parseProfileAnalysisResponse(aiResponse.message.text);
+}
+
+export async function analyzeProfile(req: Request, res: Response) {
+  try {
+    const parsed = analyzeProfileSchema.parse(req.body);
+    const { collectedData = {}, completedSteps = [], currentStepId } = parsed;
+
+    const analysis = await runProfileAnalysis({
+      collectedData,
+      completedSteps,
+      currentStepId,
     });
 
-    const analysis = parseProfileAnalysisResponse(aiResponse.message.text);
-
-    // Логируем детальную информацию для отладки
     logger.info(
       `Profile analysis for step ${currentStepId}: completeness=${analysis.completeness}, hasGaps=${analysis.hasGaps}, readyForMatching=${analysis.readyForMatching}`
     );
@@ -462,6 +472,13 @@ ${collectedDataText}
     if (analysis.missingFields.length > 0) {
       logger.info(`  Missing fields: ${analysis.missingFields.join(', ')}`);
     }
+
+    const collectedFields = Object.keys(collectedData).filter((key) =>
+      isRelevantValue(collectedData[key])
+    );
+    const missingCriticalFields = CRITICAL_FIELDS.filter(
+      (field) => !collectedFields.includes(field)
+    );
     logger.info(`  Collected fields (relevant only): ${collectedFields.join(', ') || 'none'}`);
     logger.info(`  Missing critical fields: ${missingCriticalFields.join(', ') || 'none'}`);
 
@@ -472,7 +489,6 @@ ${collectedDataText}
   } catch (error: unknown) {
     logger.error('Failed to analyze profile:', error);
 
-    // Fallback to incomplete profile on error
     res.json({
       status: 'success',
       analysis: {

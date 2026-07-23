@@ -124,3 +124,19 @@ docker exec -it leoai-redis-1 redis-cli DEL session:{id}
 
 ### Роль "jack_user" does not exist
 Эта ошибка возникает при `init:db`, если `DB_USER` отличается от `jack_user`. Исправлено: SQL использует `CURRENT_USER` вместо hardcoded имени.
+
+---
+
+## `jack.career_tracks.profile_data`
+
+JSONB-снимок карьерного профиля на треке Jack:
+
+```json
+{
+  "enriched": { "role_family": "product", "seniority": "middle", "profile_completeness": 0.82 },
+  "fields": { "desired_role": "Product Manager" }
+}
+```
+
+- API: `GET/PUT /api/career/tracks/:trackId/profile-data` (user-profile)
+- Дублируется в сессии как `collectedData.__enriched` для matcher и UI

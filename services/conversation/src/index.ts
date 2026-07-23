@@ -58,6 +58,7 @@ import {
   type ProfileSummaryExport,
 } from './services/summaryExport';
 import { handleConversationCompletion, triggerProfileDrivenScrape } from './services/integrationService';
+import { enrichAndPersistProfile } from './services/profileEnrichmentService';
 import { createApplicationDraft } from './controllers/applicationDraftController';
 import { validateAndLogConfig } from './utils/configValidator';
 import { getHealthStatus } from './utils/healthCheck';
@@ -700,8 +701,15 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
     const requestTtsPrefs = parseTtsPreferences(ttsPreferences);
 
     const result = await applyImportedCollectedData(sessionForReply, collectedData);
-    await updateSession(sessionForReply);
     const token = extractRequestAccessToken(req);
+    /** Свайпы вакансий — только vacancyFeedback; LLM enrichment не нужен и часто >20s (клиентский abort). */
+    const mergeKeys = Object.keys(collectedData);
+    const isVacancyFeedbackOnly =
+      mergeKeys.length === 1 && mergeKeys[0] === 'vacancyFeedback';
+    if (token && !isVacancyFeedbackOnly) {
+      await enrichAndPersistProfile(sessionForReply, token, 'merge_collected');
+    }
+    await updateSession(sessionForReply);
 
     const mergedRole =
       (result.metadataUpdates?.collectedData?.desired_role as string | undefined) ||

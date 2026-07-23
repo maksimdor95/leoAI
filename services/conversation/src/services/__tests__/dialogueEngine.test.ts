@@ -2,6 +2,7 @@ import {
   applyImportedCollectedData,
   detectInterviewModeCommandFromUserText,
   evaluateCondition,
+  findFirstProfileGapStepId,
   getScenarioIdByProduct,
   hasDesiredRoleInCollected,
   isResumePathMode,
@@ -10,6 +11,7 @@ import {
   tagUserMessageWithInterviewMode,
   wantsDetailedProfileAnalysis,
 } from '../dialogueEngine';
+import { JACK_SCENARIO } from '../../scenario/jackScenario';
 import { MessageRole, MessageType } from '../../types/message';
 import { ConversationSession } from '../../types/session';
 import { ScenarioNextValue } from '../../types/scenario';
@@ -228,6 +230,46 @@ describe('dialogueEngine', () => {
       expect(session.metadata.collectedData?.desired_role).toBe('Product Manager');
       expect(session.metadata.currentStepId).toBe('resume_ready');
       expect(session.metadata.completedSteps).toContain('resume_upload');
+    });
+
+    it('finds first empty profile gap after resume without restarting scenarios', () => {
+      const collected = {
+        scenarioMode: 'готовое резюме',
+        desired_role: 'Head of Product',
+        careerSummary: '15 лет в продукте, HeadHunter, Google, MTS',
+        skills_hard: 'Product Management, SQL, Agile',
+        desired_location: 'Москва',
+        totalExperience: 15,
+      };
+      const gapId = findFirstProfileGapStepId(JACK_SCENARIO, collected);
+      // позиции пропускаем — есть careerSummary; ждём первый реально пустой вопрос
+      expect(gapId).toBeTruthy();
+      expect(gapId).not.toBe('positions_count');
+      expect(gapId).not.toMatch(/^position_/);
+      expect(gapId).not.toBe('quick_role');
+      expect(['education_main', 'education_additional', 'skills_soft', 'skills_languages', 'desired_salary', 'desired_culture', 'desired_start', 'additional']).toContain(
+        gapId
+      );
+    });
+
+    it('returns null when matching-critical and follow-up fields are filled', () => {
+      const collected = {
+        scenarioMode: 'готовое резюме',
+        desired_role: 'PM',
+        careerSummary: '5 лет в продукте',
+        totalExperience: 5,
+        desired_location: 'Москва',
+        education_main: 'МГУ',
+        education_additional: 'нет',
+        skills_hard: 'SQL',
+        skills_soft: 'лидерство',
+        skills_languages: 'английский B2',
+        desired_salary: '400000',
+        desired_culture: 'продуктовая',
+        desired_start: 'сразу',
+        additional_info: 'нет',
+      };
+      expect(findFirstProfileGapStepId(JACK_SCENARIO, collected)).toBeNull();
     });
   });
 

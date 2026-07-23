@@ -108,6 +108,15 @@ const CATALOG_MIXED: Job[] = [
     work_mode: 'hybrid',
   }),
   mkJob({
+    id: 'pm-junior',
+    title: 'Junior Product Manager',
+    description: 'Старт в продуктовом менеджменте, e-commerce',
+    requirements: 'SQL, Jira, базовый product discovery',
+    skills: ['SQL', 'Jira', 'Product Management'],
+    experience_level: 'junior',
+    work_mode: 'hybrid',
+  }),
+  mkJob({
     id: 'pa-middle',
     title: 'Продуктовый аналитик',
     description: 'Анализ продуктовых метрик',
@@ -188,6 +197,17 @@ describe('matchJobs — Senior PM', () => {
   it('surface max score near top for the best PM role', () => {
     const topScore = res.matches[0]?.score ?? 0;
     expect(topScore).toBeGreaterThanOrEqual(MATCH_SCORE_THRESHOLD);
+  });
+
+  it('does not keep Junior Product Manager in recommended for senior/lead profile', () => {
+    const juniorInRecommended = res.matches.find((m) => m.job.id === 'pm-junior');
+    expect(juniorInRecommended).toBeUndefined();
+    const juniorWeak = res.weakMatches.find((m) => m.job.id === 'pm-junior');
+    if (juniorWeak) {
+      expect(juniorWeak.demoteReasons ?? []).toEqual(
+        expect.arrayContaining([expect.stringMatching(/грейд|уровн/i)])
+      );
+    }
   });
 
   it('returns family distribution including dev families', () => {
@@ -391,5 +411,31 @@ describe('matchJobs — stored role_family', () => {
     const entry = [...res.matches, ...res.weakMatches][0];
     expect(entry?.jobFamily).toBe('product');
     expect(entry?.familyMatch).toBe('same');
+  });
+});
+
+describe('matchJobs — stored __enriched', () => {
+  it('prefers role_family and seniority from collectedData.__enriched', () => {
+    const profile = {
+      ...SENIOR_PM,
+      __enriched: {
+        role_family: 'product',
+        seniority: 'senior',
+        normalized_skills: [
+          { name: 'SQL', source: 'chat' },
+          { name: 'Product Discovery', source: 'chat' },
+        ],
+      },
+    } as CollectedData & { __enriched: Record<string, unknown> };
+
+    const res = matchJobs(CATALOG_MIXED, profile);
+    const pmMatch =
+      res.matches.find((m) => m.job.id === 'pm-senior') ??
+      res.weakMatches.find((m) => m.job.id === 'pm-senior');
+
+    expect(pmMatch).toBeDefined();
+    expect(pmMatch?.jobFamily).toBe('product');
+    expect(pmMatch?.familyMatch).toBe('same');
+    expect(pmMatch?.matchedSkills?.length).toBeGreaterThan(0);
   });
 });

@@ -9,18 +9,18 @@ export type TtsVoiceOption = {
 /** Голоса SpeechKit API v1 (`speech/v1/tts:synthesize`). v3-only (dasha, julia, lera, alexander, madi) не включаем. */
 export const TTS_VOICES: Record<TtsLang, TtsVoiceOption[]> = {
   'ru-RU': [
+    { id: 'ermil', labelRu: 'Ермил', labelEn: 'Ermil' },
     { id: 'filipp', labelRu: 'Филипп', labelEn: 'Filipp' },
     { id: 'jane', labelRu: 'Джейн', labelEn: 'Jane' },
     { id: 'omazh', labelRu: 'Омаж', labelEn: 'Omazh' },
-    { id: 'ermil', labelRu: 'Ермил', labelEn: 'Ermil' },
     { id: 'zahar', labelRu: 'Захар', labelEn: 'Zahar' },
     { id: 'marina', labelRu: 'Марина', labelEn: 'Marina' },
   ],
   'en-US': [
+    { id: 'ermil', labelRu: 'Ермил', labelEn: 'Ermil' },
     { id: 'jane', labelRu: 'Джейн', labelEn: 'Jane' },
     { id: 'omazh', labelRu: 'Омаж', labelEn: 'Omazh' },
     { id: 'zahar', labelRu: 'Захар', labelEn: 'Zahar' },
-    { id: 'ermil', labelRu: 'Ермил', labelEn: 'Ermil' },
     { id: 'alyss', labelRu: 'Алис', labelEn: 'Alyss' },
     { id: 'oksana', labelRu: 'Оксана', labelEn: 'Oksana' },
     { id: 'nick', labelRu: 'Ник', labelEn: 'Nick' },

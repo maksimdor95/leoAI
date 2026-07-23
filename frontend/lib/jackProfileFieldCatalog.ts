@@ -22,11 +22,14 @@ const OMIT_DISPLAY_KEYS = new Set([
   'skills',
   'workMode',
   'work_mode',
+  /** STAR bank для Interview Prep (seed из enrichment) — не поле анкеты Jack */
+  'starBank',
 ]);
 
 /** Служебные ключи collectedData (RAG, флаги) — не показываем в «Профиль» */
 function shouldOmitProfileKey(key: string): boolean {
   if (key.startsWith('__')) return true;
+  if (key === '__enriched') return true;
   return OMIT_DISPLAY_KEYS.has(key);
 }
 

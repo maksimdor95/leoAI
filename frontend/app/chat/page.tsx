@@ -37,10 +37,13 @@ import { getJackDetailedProgress } from '@/lib/jackDetailedProgress';
 import { buildVacancyPrepText, vacancyPrepDisplayLabel } from '@/lib/buildVacancyPrepText';
 import { fetchViewedJobIds } from '@/lib/jobApi';
 import {
+  addVacancyFavorite,
   buildKnownJobIdSet,
   buildViewedJobIdSet,
   collectVacancyIds,
   detectNewVacancyIds,
+  dismissVacancy,
+  filterJobsByDismissed,
   filterJobsByFavorite,
   filterJobsByNew,
   loadVacancyFeedState,
@@ -60,6 +63,13 @@ import {
   formatCollectedValue,
   getJackProfileSidebarRows,
 } from '@/lib/jackProfileFieldCatalog';
+import { getEnrichedProfileSidebarRows, resolveDisplayEnrichedProfile } from '@/lib/enrichedProfileDisplay';
+import { ProfileCompletenessBar } from '@/components/chat/ProfileCompletenessBar';
+import {
+  VacanciesMarketInsightPanel,
+  VacanciesMarketInsightTrigger,
+  hasVacanciesMarketInsight,
+} from '@/components/chat/VacanciesMarketInsight';
 import { MessageList } from '@/components/chat/MessageList';
 import {
   filterMessagesByPrepHistory,
@@ -74,6 +84,7 @@ import {
   type PrepHistoryFilter,
 } from '@/lib/interviewPrepModes';
 import { computePrepProgress, evaluateMockGate } from '@/lib/prepActivities';
+import { derivePrepRoute } from '@/lib/derivePrepRoute';
 import { resolvePrepArtifacts } from '@/lib/prepArtifacts';
 import { VoiceIndicator, type VoiceIndicatorMode } from '@/components/chat/VoiceIndicator';
 import { StagePanel, type PrepModeStageContent } from '@/components/chat/StagePanel';
@@ -99,11 +110,14 @@ import { ChatHoverTooltip } from '@/components/chat/ChatHoverTooltip';
 import {
   SoundOutlined,
   AudioMutedOutlined,
+  ForwardOutlined,
   SendOutlined,
   AudioOutlined,
   ReloadOutlined,
   HeartFilled,
   HeartOutlined,
+  DownOutlined,
+  UpOutlined,
 } from '@ant-design/icons';
 import {
   uploadResumeFile,
@@ -170,6 +184,11 @@ type JobsMatchMeta = {
   familyCatalogCount?: number;
   /** Предупреждение от API: 'catalog_family_mismatch' | 'no_matches' | 'empty_catalog' | null */
   catalogWarning?: 'catalog_family_mismatch' | 'no_matches' | 'empty_catalog' | null;
+  profileSignals?: {
+    role_family?: string | null;
+    seniority?: string | null;
+    missingSkillsTop?: string[];
+  };
 };
 
 
@@ -252,7 +271,7 @@ function ChatPageContent() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const isHume = settings.theme === 'hume-light';
-  const isMuted = !settings.speechEnabled;
+  const isMuted = settings.textOnlyReplies || !settings.speechEnabled;
   const ui = (key: Parameters<typeof chatUi>[1]) => chatUi(settings.locale, key);
   const v = (key: Parameters<typeof vacanciesUi>[1]) => vacanciesUi(settings.locale, key);
   const [form] = Form.useForm<MessageFormValues>();
@@ -308,6 +327,9 @@ function ChatPageContent() {
   const lastSpokenTextRef = useRef<string>('');
   const lastSpokenAtRef = useRef<number>(0);
   const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
+  const [isSpeechInFlight, setIsSpeechInFlight] = useState(false);
+  const canSkipSpeech =
+    !isMuted && (isSpeechInFlight || isTtsSpeaking || (isTyping && !!typingMessage));
   useEffect(() => {
     typingMessageIdRef.current = typingMessage?.id ?? null;
     typingMessageRef.current = typingMessage;
@@ -361,6 +383,8 @@ function ChatPageContent() {
     variant: 'recommended' | 'weak';
   } | null>(null);
   const [vacanciesFilter, setVacanciesFilter] = useState<VacanciesFilter>('all');
+  const [vacanciesInsightOpen, setVacanciesInsightOpen] = useState(false);
+  const [weakMatchesExpanded, setWeakMatchesExpanded] = useState(false);
   const knownJobIdsRef = useRef<Set<string>>(new Set());
   const viewedJobIdsRef = useRef<Set<string>>(new Set());
   const vacancyFeedUserIdRef = useRef<string | null>(null);
@@ -377,6 +401,20 @@ function ChatPageContent() {
   const [newJobBadgeIds, setNewJobBadgeIds] = useState<Set<string>>(() => new Set());
   const [favoriteJobIds, setFavoriteJobIds] = useState<Set<string>>(() => new Set());
   const favoriteJobIdsRef = useRef<Set<string>>(new Set());
+  const [dismissedJobIds, setDismissedJobIds] = useState<Set<string>>(() => new Set());
+  const dismissedJobIdsRef = useRef<Set<string>>(new Set());
+  const vacancyFeedbackRef = useRef<{
+    likedJobIds: string[];
+    dislikedJobIds: string[];
+    dislikedCompanies: string[];
+    likedCompanies: string[];
+  }>({
+    likedJobIds: [],
+    dislikedJobIds: [],
+    dislikedCompanies: [],
+    likedCompanies: [],
+  });
+  const swipeRematchAtRef = useRef(0);
   const newJobBadgeIdsRef = useRef<Set<string>>(new Set());
   const [resumeImportLoading, setResumeImportLoading] = useState(false);
   const [resumeDraftLoading, setResumeDraftLoading] = useState(false);
@@ -435,11 +473,14 @@ function ChatPageContent() {
     const viewedIds = buildViewedJobIdSet(persisted, serverViewedIds);
     const knownIds = buildKnownJobIdSet(persisted, serverViewedIds);
     const favorites = new Set(persisted.favoriteJobIds);
+    const dismissed = new Set(persisted.dismissedJobIds);
 
     viewedJobIdsRef.current = viewedIds;
     knownJobIdsRef.current = knownIds;
     favoriteJobIdsRef.current = favorites;
+    dismissedJobIdsRef.current = dismissed;
     setFavoriteJobIds(favorites);
+    setDismissedJobIds(dismissed);
     vacancyFeedUserIdRef.current = userId;
     viewedJobIdsLoadedRef.current = true;
   }, []);
@@ -451,7 +492,8 @@ function ChatPageContent() {
         newIds,
         viewedJobIdsRef.current,
         knownJobIdsRef.current,
-        favoriteJobIdsRef.current
+        favoriteJobIdsRef.current,
+        dismissedJobIdsRef.current
       )
     );
   }, []);
@@ -463,7 +505,21 @@ function ChatPageContent() {
         newJobBadgeIdsRef.current,
         viewedJobIdsRef.current,
         knownJobIdsRef.current,
-        favoriteIds
+        favoriteIds,
+        dismissedJobIdsRef.current
+      )
+    );
+  }, []);
+
+  const persistDismissedJobIds = useCallback((userId: string, dismissedIds: Set<string>) => {
+    saveVacancyFeedState(
+      userId,
+      toPersistedFeedState(
+        newJobBadgeIdsRef.current,
+        viewedJobIdsRef.current,
+        knownJobIdsRef.current,
+        favoriteJobIdsRef.current,
+        dismissedIds
       )
     );
   }, []);
@@ -492,7 +548,8 @@ function ChatPageContent() {
             next,
             viewedJobIdsRef.current,
             knownJobIdsRef.current,
-            favoriteJobIdsRef.current
+            favoriteJobIdsRef.current,
+            dismissedJobIdsRef.current
           )
         );
       }
@@ -647,6 +704,7 @@ function ChatPageContent() {
       window.speechSynthesis.cancel();
     }
     setIsTtsSpeaking(false);
+    setIsSpeechInFlight(false);
   }, [stopAssistantAudio]);
 
   const canUseBrowserTtsFallback = useCallback(() => {
@@ -779,32 +837,48 @@ function ChatPageContent() {
   }, [ensureAssistantAudioChain]);
 
   const speakFallback = useCallback(
-    (text: string) => {
-      if (typeof window === 'undefined' || isMuted || !text?.trim()) return;
-      if (isAssistantAudioPlaying()) return;
+    (text: string): Promise<void> =>
+      new Promise((resolve) => {
+        if (typeof window === 'undefined' || isMuted || !text?.trim()) {
+          resolve();
+          return;
+        }
+        if (isAssistantAudioPlaying()) {
+          resolve();
+          return;
+        }
 
-      const normalized = text.trim().toLowerCase().replace(/\s+/g, ' ');
-      const now = Date.now();
-      if (normalized && normalized === lastSpokenTextRef.current && now - lastSpokenAtRef.current < 4500) {
-        return;
-      }
+        const normalized = text.trim().toLowerCase().replace(/\s+/g, ' ');
+        const now = Date.now();
+        if (
+          normalized &&
+          normalized === lastSpokenTextRef.current &&
+          now - lastSpokenAtRef.current < 4500
+        ) {
+          resolve();
+          return;
+        }
 
-      stopAssistantAudio();
-      lastSpokenTextRef.current = normalized;
-      lastSpokenAtRef.current = now;
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text.trim());
-      utterance.lang = 'ru-RU';
-      utterance.rate = 0.95;
-      utterance.pitch = 0.9;
-      utterance.onstart = () => {
-        setIsTtsSpeaking(true);
-        ttsBeatAtRef.current = performance.now();
-      };
-      utterance.onend = () => setIsTtsSpeaking(false);
-      utterance.onerror = () => setIsTtsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-    },
+        stopAssistantAudio();
+        lastSpokenTextRef.current = normalized;
+        lastSpokenAtRef.current = now;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text.trim());
+        utterance.lang = 'ru-RU';
+        utterance.rate = 0.95;
+        utterance.pitch = 0.9;
+        utterance.onstart = () => {
+          setIsTtsSpeaking(true);
+          ttsBeatAtRef.current = performance.now();
+        };
+        const finish = () => {
+          setIsTtsSpeaking(false);
+          resolve();
+        };
+        utterance.onend = finish;
+        utterance.onerror = finish;
+        window.speechSynthesis.speak(utterance);
+      }),
     [isAssistantAudioPlaying, isMuted, stopAssistantAudio]
   );
 
@@ -862,43 +936,48 @@ function ChatPageContent() {
       cancelActiveSpeech();
       const epoch = speechEpochRef.current;
       return runSpeechExclusive(async () => {
-        if (speechEpochRef.current !== epoch) return;
+        setIsSpeechInFlight(true);
+        try {
+          if (speechEpochRef.current !== epoch) return;
 
-        const messageId = message?.id;
-        if (!messageId || handledSpeechMessageIdsRef.current.has(messageId)) return;
-        handledSpeechMessageIdsRef.current.add(messageId);
-        if (handledSpeechMessageIdsRef.current.size > 300) {
-          const first = handledSpeechMessageIdsRef.current.values().next().value;
-          if (first) handledSpeechMessageIdsRef.current.delete(first);
-        }
+          const messageId = message?.id;
+          if (!messageId || handledSpeechMessageIdsRef.current.has(messageId)) return;
+          handledSpeechMessageIdsRef.current.add(messageId);
+          if (handledSpeechMessageIdsRef.current.size > 300) {
+            const first = handledSpeechMessageIdsRef.current.values().next().value;
+            if (first) handledSpeechMessageIdsRef.current.delete(first);
+          }
 
-        let payload = assistantAudioByMessageIdRef.current.get(messageId) || null;
-        if (!payload) {
-          payload = await waitForAssistantAudio(messageId);
-        }
+          let payload = assistantAudioByMessageIdRef.current.get(messageId) || null;
+          if (!payload) {
+            payload = await waitForAssistantAudio(messageId);
+          }
 
-        if (speechEpochRef.current !== epoch) return;
+          if (speechEpochRef.current !== epoch) return;
 
-        if (payload) {
-          assistantAudioByMessageIdRef.current.delete(messageId);
-          const played = await playAssistantAudio(payload);
-          if (speechEpochRef.current !== epoch) {
-            stopAssistantAudio();
+          if (payload) {
+            assistantAudioByMessageIdRef.current.delete(messageId);
+            const played = await playAssistantAudio(payload);
+            if (speechEpochRef.current !== epoch) {
+              stopAssistantAudio();
+              return;
+            }
+            if (played) {
+              lastSpokenTextRef.current = message.question.trim().toLowerCase().replace(/\s+/g, ' ');
+              lastSpokenAtRef.current = Date.now();
+              await waitForAssistantAudioEnd();
+              return;
+            }
+            if (!canUseBrowserTtsFallback() || isAssistantAudioPlaying()) return;
+            await speakFallback(message.question);
             return;
           }
-          if (played) {
-            lastSpokenTextRef.current = message.question.trim().toLowerCase().replace(/\s+/g, ' ');
-            lastSpokenAtRef.current = Date.now();
-            await waitForAssistantAudioEnd();
-            return;
-          }
+
           if (!canUseBrowserTtsFallback() || isAssistantAudioPlaying()) return;
-          speakFallback(message.question);
-          return;
+          await speakFallback(message.question);
+        } finally {
+          setIsSpeechInFlight(false);
         }
-
-        if (!canUseBrowserTtsFallback() || isAssistantAudioPlaying()) return;
-        speakFallback(message.question);
       });
     },
     [
@@ -920,48 +999,53 @@ function ChatPageContent() {
       cancelActiveSpeech();
       const epoch = speechEpochRef.current;
       return runSpeechExclusive(async () => {
-        if (speechEpochRef.current !== epoch) return;
-        if (message.role !== MessageRole.ASSISTANT) return;
-        if (message.type === MessageType.QUESTION) return;
+        setIsSpeechInFlight(true);
+        try {
+          if (speechEpochRef.current !== epoch) return;
+          if (message.role !== MessageRole.ASSISTANT) return;
+          if (message.type === MessageType.QUESTION) return;
 
-        const text = getAssistantSpeakableTextForTts(message);
-        if (!text) return;
+          const text = getAssistantSpeakableTextForTts(message);
+          if (!text) return;
 
-        const messageId = message.id;
-        if (!messageId || handledSpeechMessageIdsRef.current.has(messageId)) return;
-        handledSpeechMessageIdsRef.current.add(messageId);
-        if (handledSpeechMessageIdsRef.current.size > 300) {
-          const first = handledSpeechMessageIdsRef.current.values().next().value;
-          if (first) handledSpeechMessageIdsRef.current.delete(first);
-        }
+          const messageId = message.id;
+          if (!messageId || handledSpeechMessageIdsRef.current.has(messageId)) return;
+          handledSpeechMessageIdsRef.current.add(messageId);
+          if (handledSpeechMessageIdsRef.current.size > 300) {
+            const first = handledSpeechMessageIdsRef.current.values().next().value;
+            if (first) handledSpeechMessageIdsRef.current.delete(first);
+          }
 
-        let payload = assistantAudioByMessageIdRef.current.get(messageId) || null;
-        if (!payload) {
-          payload = await waitForAssistantAudio(messageId);
-        }
+          let payload = assistantAudioByMessageIdRef.current.get(messageId) || null;
+          if (!payload) {
+            payload = await waitForAssistantAudio(messageId);
+          }
 
-        if (speechEpochRef.current !== epoch) return;
+          if (speechEpochRef.current !== epoch) return;
 
-        if (payload) {
-          assistantAudioByMessageIdRef.current.delete(messageId);
-          const played = await playAssistantAudio(payload);
-          if (speechEpochRef.current !== epoch) {
-            stopAssistantAudio();
+          if (payload) {
+            assistantAudioByMessageIdRef.current.delete(messageId);
+            const played = await playAssistantAudio(payload);
+            if (speechEpochRef.current !== epoch) {
+              stopAssistantAudio();
+              return;
+            }
+            if (played) {
+              lastSpokenTextRef.current = text.trim().toLowerCase().replace(/\s+/g, ' ');
+              lastSpokenAtRef.current = Date.now();
+              await waitForAssistantAudioEnd();
+              return;
+            }
+            if (!canUseBrowserTtsFallback() || isAssistantAudioPlaying()) return;
+            await speakFallback(text);
             return;
           }
-          if (played) {
-            lastSpokenTextRef.current = text.trim().toLowerCase().replace(/\s+/g, ' ');
-            lastSpokenAtRef.current = Date.now();
-            await waitForAssistantAudioEnd();
-            return;
-          }
+
           if (!canUseBrowserTtsFallback() || isAssistantAudioPlaying()) return;
-          speakFallback(text);
-          return;
+          await speakFallback(text);
+        } finally {
+          setIsSpeechInFlight(false);
         }
-
-        if (!canUseBrowserTtsFallback() || isAssistantAudioPlaying()) return;
-        speakFallback(text);
       });
     },
     [
@@ -994,6 +1078,19 @@ function ChatPageContent() {
       stopAssistantAudio();
     }
   }, [isMuted, stopAssistantAudio]);
+
+  // Режим «Только текст»: сразу показываем ответ и не озвучиваем
+  useEffect(() => {
+    if (!settings.textOnlyReplies) return;
+    cancelActiveSpeech();
+    setTypingMessage((current) => {
+      if (current) {
+        setMessages((prev) => appendMessage(prev, current));
+      }
+      return null;
+    });
+    setIsTyping(false);
+  }, [settings.textOnlyReplies, cancelActiveSpeech]);
 
   useEffect(() => {
     return () => {
@@ -1169,6 +1266,12 @@ function ChatPageContent() {
                 return;
               }
 
+              if (settingsRef.current.textOnlyReplies) {
+                setMessages(dedupeAndSortMessages(sortedMessages));
+                syncSessionMetadata();
+                return;
+              }
+
               setTypingMessage(firstAssistantQuestion);
               setTypingOptions({ speed: 50, delay: 1200 });
               setIsTyping(true);
@@ -1208,7 +1311,8 @@ function ChatPageContent() {
           }
 
           setMessages((prev) => {
-            const skipAnimation = Boolean(payload.skipAnimation);
+            const skipAnimation =
+              Boolean(payload.skipAnimation) || settingsRef.current.textOnlyReplies;
 
             if (!skipAnimation && shouldAnimateMessage(payload.message, prev)) {
               const pending = typingMessageRef.current;
@@ -1236,14 +1340,17 @@ function ChatPageContent() {
             }
 
             const isNewAssistantMessage = !prev.some((existing) => existing.id === payload.message.id);
+            const allowSpeech = !settingsRef.current.textOnlyReplies;
 
             if (
+              allowSpeech &&
               isNewAssistantMessage &&
               payload.message.role === MessageRole.ASSISTANT &&
               payload.message.type === MessageType.QUESTION
             ) {
               void speakQuestionWithPriority(payload.message as QuestionMessage);
             } else if (
+              allowSpeech &&
               isNewAssistantMessage &&
               payload.message.role === MessageRole.ASSISTANT &&
               (payload.message.type === MessageType.TEXT ||
@@ -1465,6 +1572,19 @@ function ChatPageContent() {
       return null;
     });
   }, []);
+
+  const handleSkipSpeech = useCallback(() => {
+    cancelActiveSpeech();
+    if (typingMessageRef.current) {
+      handleTypingComplete();
+    }
+    messageApi.open({
+      type: 'info',
+      content: ui('skipSpeechDone'),
+      duration: 1.5,
+      key: 'skip-speech',
+    });
+  }, [cancelActiveSpeech, handleTypingComplete, messageApi, ui]);
 
   const handleResumeFile = useCallback(
     async (file: File) => {
@@ -1898,6 +2018,26 @@ function ChatPageContent() {
 
   const jackCollectedSnapshot = sessionCollectedData;
 
+  useEffect(() => {
+    const raw = jackCollectedSnapshot.vacancyFeedback;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+    const record = raw as Record<string, unknown>;
+    const asIds = (value: unknown) =>
+      Array.isArray(value)
+        ? value.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+        : [];
+    vacancyFeedbackRef.current = {
+      likedJobIds: asIds(record.likedJobIds),
+      dislikedJobIds: asIds(record.dislikedJobIds),
+      dislikedCompanies: asIds(record.dislikedCompanies).map((c) =>
+        c.trim().toLowerCase().replace(/\s+/g, ' ')
+      ),
+      likedCompanies: asIds(record.likedCompanies).map((c) =>
+        c.trim().toLowerCase().replace(/\s+/g, ' ')
+      ),
+    };
+  }, [jackCollectedSnapshot.vacancyFeedback]);
+
   const interviewPrepCollectedSnapshot = useMemo((): Record<string, unknown> => {
     if (currentProduct !== 'interview-prep') {
       return {};
@@ -1963,13 +2103,34 @@ function ChatPageContent() {
         await handleCommandSelect(interviewModeCommandItem('mock'));
         return;
       }
-      setPrepHistoryFilter(mode);
+      // Вопрос LEO появляется на сцене; вкладка чата с фильтром режима часто пуста до ответа.
+      setPrepHistoryFilter('general');
       setSidePanelTab('chat');
+      setMobileMainTab('stage');
       // Один round-trip: executeCommand + sendMessage давали два ответа LEO и «ребит» печати на сцене.
       await chatRef.current.sendMessage(startMessage);
     },
     [handleCommandSelect, interviewPrepCollectedSnapshot]
   );
+
+  const handleStartPrepFromStage = useCallback(() => {
+    setSidePanelTab('profile');
+    if (!interviewPrepProgress) {
+      setMobileMainTab('workspace');
+      return;
+    }
+    const route = derivePrepRoute(interviewPrepProgress, interviewPrepCollectedSnapshot);
+    if (route.next && !route.next.blocked) {
+      void handlePrepActivityStart(route.next.activity.mode, route.next.startMessage);
+      return;
+    }
+    setMobileMainTab('workspace');
+  }, [
+    handlePrepActivityStart,
+    interviewPrepCollectedSnapshot,
+    interviewPrepProgress,
+  ]);
+
 
   const handleMockStart = useCallback(() => {
     unlockAudio();
@@ -2136,6 +2297,10 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
 
   /** Кнопки сценария (не показываем для экрана «Интервью завершено!» — там действия внутри карточек) */
   const stagePanelCommands = useMemo(() => {
+    // Во время ответа на вопрос не тащим кнопки с предыдущего info_card
+    if (centerStageQuestion) {
+      return undefined;
+    }
     if (
       (currentProduct === 'wannanew' || currentProduct === 'interview-prep') &&
       latestInfoCard?.title === 'Интервью завершено!'
@@ -2153,7 +2318,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
       return latestCommand.commands;
     }
     return undefined;
-  }, [latestInfoCard, latestCommand, currentProduct]);
+  }, [centerStageQuestion, latestInfoCard, latestCommand, currentProduct]);
 
   useEffect(() => {
     if (!connected || !sessionId) {
@@ -2287,10 +2452,48 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     [jackCollectedSnapshot]
   );
 
+  /** Отпечаток полей, влияющих на match — rematch при «не банки», зарплате и т.п. */
+  const jackMatchPreferenceFingerprint = useMemo(() => {
+    if (currentProduct !== 'jack') return '';
+    const keys = [
+      'additional_info',
+      'additionalNotes',
+      'desired_culture',
+      'desired_salary',
+      'desired_start',
+      'desired_location',
+      'desired_role',
+      'skills_hard',
+      'skills_soft',
+      'careerSummary',
+    ] as const;
+    const enriched = jackCollectedSnapshot.__enriched as
+      | { job_preferences?: { red_flags?: unknown; domains?: unknown } }
+      | undefined;
+    const redFlags = Array.isArray(enriched?.job_preferences?.red_flags)
+      ? enriched!.job_preferences!.red_flags!.join(',')
+      : '';
+    const domains = Array.isArray(enriched?.job_preferences?.domains)
+      ? enriched!.job_preferences!.domains!.join(',')
+      : '';
+    return (
+      keys.map((k) => String(jackCollectedSnapshot[k] ?? '')).join('|') +
+      `|rf:${redFlags}|dom:${domains}|vf:${JSON.stringify(jackCollectedSnapshot.vacancyFeedback ?? null)}`
+    );
+  }, [currentProduct, jackCollectedSnapshot]);
+
+  const jackEnrichedProfile = useMemo(
+    () => resolveDisplayEnrichedProfile(jackCollectedSnapshot),
+    [jackCollectedSnapshot]
+  );
+
   const jackProfileRows = useMemo(
     () =>
       currentProduct === 'jack'
-        ? getJackProfileSidebarRows(jackCollectedSnapshot, settings.locale)
+        ? [
+            ...getEnrichedProfileSidebarRows(jackCollectedSnapshot, settings.locale),
+            ...getJackProfileSidebarRows(jackCollectedSnapshot, settings.locale),
+          ]
         : [],
     [currentProduct, jackCollectedSnapshot, settings.locale]
   );
@@ -2345,31 +2548,58 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
   const profileEditableRows = useMemo(
     () =>
       jackProfileVisibleRows.filter(
-        (row) => !['readyToStart', 'pauseChoice', 'privacyConfirmed'].includes(row.key)
+        (row) =>
+          !row.key.startsWith('__enriched') &&
+          !['readyToStart', 'pauseChoice', 'privacyConfirmed'].includes(row.key)
       ),
     [jackProfileVisibleRows]
   );
 
-  const handleOpenProfileEdit = useCallback(() => {
-    const initialValues: ProfileEditFormValues = {};
-    for (const row of profileEditableRows) {
-      const raw = jackCollectedSnapshot[row.key];
-      if (raw === undefined || raw === null) {
-        initialValues[row.key] = '';
-      } else if (typeof raw === 'string') {
-        initialValues[row.key] = raw;
-      } else if (typeof raw === 'number' || typeof raw === 'boolean') {
-        initialValues[row.key] = String(raw);
-      } else if (Array.isArray(raw)) {
-        initialValues[row.key] = raw.map((item) => String(item)).join(', ');
-      } else {
-        initialValues[row.key] = JSON.stringify(raw);
+  const handleOpenProfileEdit = useCallback(
+    (options?: { focusKey?: string; suggestSkills?: string[] }) => {
+      const initialValues: ProfileEditFormValues = {};
+      for (const row of profileEditableRows) {
+        const raw = jackCollectedSnapshot[row.key];
+        if (raw === undefined || raw === null) {
+          initialValues[row.key] = '';
+        } else if (typeof raw === 'string') {
+          initialValues[row.key] = raw;
+        } else if (typeof raw === 'number' || typeof raw === 'boolean') {
+          initialValues[row.key] = String(raw);
+        } else if (Array.isArray(raw)) {
+          initialValues[row.key] = raw.map((item) => String(item)).join(', ');
+        } else {
+          initialValues[row.key] = JSON.stringify(raw);
+        }
       }
-    }
 
-    profileEditForm.setFieldsValue(initialValues);
-    setProfileEditOpen(true);
-  }, [jackCollectedSnapshot, profileEditForm, profileEditableRows]);
+      const suggest = (options?.suggestSkills ?? [])
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (suggest.length > 0) {
+        const current = (initialValues.skills_hard ?? '').trim();
+        const currentLower = current.toLowerCase();
+        const toAdd = suggest.filter((s) => !currentLower.includes(s.toLowerCase()));
+        if (toAdd.length > 0) {
+          initialValues.skills_hard = current
+            ? `${current}, ${toAdd.join(', ')}`
+            : toAdd.join(', ');
+        }
+      }
+
+      profileEditForm.setFieldsValue(initialValues);
+      setProfileEditOpen(true);
+
+      if (options?.focusKey) {
+        requestAnimationFrame(() => {
+          const el = document.getElementById(options.focusKey!);
+          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el?.focus();
+        });
+      }
+    },
+    [jackCollectedSnapshot, profileEditForm, profileEditableRows]
+  );
 
   const handleStartDetailedAnalysis = useCallback(() => {
     unlockAudio();
@@ -2384,8 +2614,11 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
 
   const handleEditProfileFromVacancies = useCallback(() => {
     setSidePanelTab('profile');
-    handleOpenProfileEdit();
-  }, [handleOpenProfileEdit]);
+    handleOpenProfileEdit({
+      focusKey: 'skills_hard',
+      suggestSkills: jobsMatchMeta?.profileSignals?.missingSkillsTop,
+    });
+  }, [handleOpenProfileEdit, jobsMatchMeta?.profileSignals?.missingSkillsTop]);
 
   const showVacanciesInsight = useMemo(
     () =>
@@ -2394,24 +2627,26 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
   );
 
   const displayedMatchedJobs = useMemo(() => {
+    const base = filterJobsByDismissed(matchedJobs, dismissedJobIds);
     if (vacanciesFilter === 'new') {
-      return filterJobsByNew(matchedJobs, newJobBadgeIds);
+      return filterJobsByNew(base, newJobBadgeIds);
     }
     if (vacanciesFilter === 'favorite') {
-      return filterJobsByFavorite(matchedJobs, favoriteJobIds);
+      return filterJobsByFavorite(base, favoriteJobIds);
     }
-    return matchedJobs;
-  }, [favoriteJobIds, matchedJobs, newJobBadgeIds, vacanciesFilter]);
+    return base;
+  }, [dismissedJobIds, favoriteJobIds, matchedJobs, newJobBadgeIds, vacanciesFilter]);
 
   const displayedWeakMatchedJobs = useMemo(() => {
+    const base = filterJobsByDismissed(weakMatchedJobs, dismissedJobIds);
     if (vacanciesFilter === 'new') {
-      return filterJobsByNew(weakMatchedJobs, newJobBadgeIds);
+      return filterJobsByNew(base, newJobBadgeIds);
     }
     if (vacanciesFilter === 'favorite') {
-      return filterJobsByFavorite(weakMatchedJobs, favoriteJobIds);
+      return filterJobsByFavorite(base, favoriteJobIds);
     }
-    return weakMatchedJobs;
-  }, [favoriteJobIds, newJobBadgeIds, vacanciesFilter, weakMatchedJobs]);
+    return base;
+  }, [dismissedJobIds, favoriteJobIds, newJobBadgeIds, vacanciesFilter, weakMatchedJobs]);
 
   const hasVisibleVacancies =
     displayedMatchedJobs.length > 0 || displayedWeakMatchedJobs.length > 0;
@@ -2538,8 +2773,13 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         matchedJobsRef.current,
         weakMatchedJobsRef.current
       );
-      setMatchedJobs(mergedLists.recommended);
-      setWeakMatchedJobs(mergedLists.weak);
+      const recommendedVisible = filterJobsByDismissed(
+        mergedLists.recommended,
+        dismissedJobIdsRef.current
+      );
+      const weakVisible = filterJobsByDismissed(mergedLists.weak, dismissedJobIdsRef.current);
+      setMatchedJobs(recommendedVisible);
+      setWeakMatchedJobs(weakVisible);
       setJobsLoadState('success');
       setJobsLastUpdatedAt(new Date().toLocaleTimeString());
 
@@ -2568,6 +2808,10 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         data?.catalogWarning === 'empty_catalog'
           ? (data.catalogWarning as JobsMatchMeta['catalogWarning'])
           : null;
+      const profileSignals =
+        data?.profileSignals && typeof data.profileSignals === 'object'
+          ? (data.profileSignals as JobsMatchMeta['profileSignals'])
+          : undefined;
       setJobsMatchMeta({
         jobsInDb,
         jobsScanned,
@@ -2581,10 +2825,11 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         familyRelevanceShare,
         familyCatalogCount,
         catalogWarning,
+        profileSignals,
       });
       jobsListHydratedRef.current = true;
 
-      const mergedIds = collectVacancyIds(mergedLists.recommended, mergedLists.weak);
+      const mergedIds = collectVacancyIds(recommendedVisible, weakVisible);
       const currentFeedJobCount =
         matchedJobsRef.current.length + weakMatchedJobsRef.current.length;
       const persistedFeed = loadVacancyFeedState(userId);
@@ -2683,6 +2928,118 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     }
   }, [getJobMatchingBaseUrl, hydrateVacancyFeedState, messageApi, persistVacancyFeedState, sessionCurrentStepId, syncSessionMetadata]);
 
+  const scheduleSwipeRematch = useCallback(() => {
+    const now = Date.now();
+    const wait = Math.max(0, 2000 - (now - swipeRematchAtRef.current));
+    window.setTimeout(() => {
+      swipeRematchAtRef.current = Date.now();
+      void fetchMatchedJobs({ revealPanel: false, silent: true });
+    }, wait);
+  }, [fetchMatchedJobs]);
+
+  const pushVacancyFeedback = useCallback(
+    async (patch: {
+      likedJobId?: string;
+      dislikedJobId?: string;
+      likedCompany?: string;
+      dislikedCompany?: string;
+    }) => {
+      const prev = vacancyFeedbackRef.current;
+      const likedJobIds = [...prev.likedJobIds];
+      const dislikedJobIds = [...prev.dislikedJobIds];
+      const likedCompanies = [...prev.likedCompanies];
+      const dislikedCompanies = [...prev.dislikedCompanies];
+
+      const pushUnique = (list: string[], value: string) => {
+        if (!value || list.includes(value)) return;
+        list.push(value);
+      };
+
+      if (patch.likedJobId) {
+        pushUnique(likedJobIds, patch.likedJobId);
+        const idx = dislikedJobIds.indexOf(patch.likedJobId);
+        if (idx >= 0) dislikedJobIds.splice(idx, 1);
+      }
+      if (patch.dislikedJobId) {
+        pushUnique(dislikedJobIds, patch.dislikedJobId);
+        const idx = likedJobIds.indexOf(patch.dislikedJobId);
+        if (idx >= 0) likedJobIds.splice(idx, 1);
+      }
+      if (patch.likedCompany) {
+        const key = patch.likedCompany.trim().toLowerCase().replace(/\s+/g, ' ');
+        pushUnique(likedCompanies, key);
+        const idx = dislikedCompanies.indexOf(key);
+        if (idx >= 0) dislikedCompanies.splice(idx, 1);
+      }
+      if (patch.dislikedCompany) {
+        const key = patch.dislikedCompany.trim().toLowerCase().replace(/\s+/g, ' ');
+        pushUnique(dislikedCompanies, key);
+        const idx = likedCompanies.indexOf(key);
+        if (idx >= 0) likedCompanies.splice(idx, 1);
+      }
+
+      const next = {
+        likedJobIds,
+        dislikedJobIds,
+        likedCompanies,
+        dislikedCompanies,
+        updatedAt: new Date().toISOString(),
+      };
+      vacancyFeedbackRef.current = next;
+
+      if (!chatRef.current) return;
+      try {
+        await chatRef.current.mergeCollectedData({ vacancyFeedback: next });
+        syncSessionMetadata();
+        scheduleSwipeRematch();
+      } catch {
+        // fail-open: UI already updated
+      }
+    },
+    [scheduleSwipeRematch, syncSessionMetadata]
+  );
+
+  const handleVacancySwipeLike = useCallback(
+    (item: MatchedJobItem) => {
+      const jobId = item.job.id;
+      setFavoriteJobIds((prev) => {
+        const next = addVacancyFavorite(jobId, prev);
+        favoriteJobIdsRef.current = next;
+        const userId = vacancyFeedUserIdRef.current;
+        if (userId) {
+          persistFavoriteJobIds(userId, next);
+        }
+        return next;
+      });
+      void pushVacancyFeedback({
+        likedJobId: jobId,
+        likedCompany: item.job.company,
+      });
+    },
+    [persistFavoriteJobIds, pushVacancyFeedback]
+  );
+
+  const handleVacancySwipeDislike = useCallback(
+    (item: MatchedJobItem) => {
+      const jobId = item.job.id;
+      setDismissedJobIds((prev) => {
+        const next = dismissVacancy(jobId, prev);
+        dismissedJobIdsRef.current = next;
+        const userId = vacancyFeedUserIdRef.current;
+        if (userId) {
+          persistDismissedJobIds(userId, next);
+        }
+        return next;
+      });
+      setMatchedJobs((prev) => prev.filter((entry) => entry.job.id !== jobId));
+      setWeakMatchedJobs((prev) => prev.filter((entry) => entry.job.id !== jobId));
+      void pushVacancyFeedback({
+        dislikedJobId: jobId,
+        dislikedCompany: item.job.company,
+      });
+    },
+    [persistDismissedJobIds, pushVacancyFeedback]
+  );
   /**
    * Кнопка reload теперь делает «умное обновление»:
    * 1) ставит в очередь сбор свежих вакансий под профиль пользователя;
@@ -2782,6 +3139,25 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
       }
     };
   }, [connected, currentProduct, fetchMatchedJobs, jackProfileReadyForMatch, latestUserMessageId, productSelected]);
+
+  /** Rematch при смене предпочтений / исключений (в т.ч. после «Заполнить пробелы»). */
+  useEffect(() => {
+    if (!productSelected || currentProduct !== 'jack' || !connected) return;
+    if (!jackProfileReadyForMatch || !jackMatchPreferenceFingerprint) return;
+
+    const timer = setTimeout(() => {
+      void fetchMatchedJobs({ revealPanel: false, silent: true });
+    }, 1400);
+
+    return () => clearTimeout(timer);
+  }, [
+    connected,
+    currentProduct,
+    fetchMatchedJobs,
+    jackMatchPreferenceFingerprint,
+    jackProfileReadyForMatch,
+    productSelected,
+  ]);
 
   /** Первая загрузка матча при открытии вкладки — только когда профиль готов для подбора. */
   useEffect(() => {
@@ -3083,7 +3459,15 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                           interviewPrepOnOpenOverview={
                             currentProduct === 'interview-prep' &&
                             latestInfoCard?.title === 'Профиль вакансии и план подготовки'
-                              ? () => setSidePanelTab('profile')
+                              ? handleStartPrepFromStage
+                              : undefined
+                          }
+                          prepProgress={
+                            currentProduct === 'interview-prep' ? interviewPrepProgress : undefined
+                          }
+                          prepCollectedData={
+                            currentProduct === 'interview-prep'
+                              ? interviewPrepCollectedSnapshot
                               : undefined
                           }
                           onContinue={() => {
@@ -3114,6 +3498,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                   onGenerateResume: handleGenerateResumeDraft,
                                   onSendResumeEmail: handleSendResumeByEmail,
                                   onGenerateSummary: handleGenerateSummary,
+                                  missingFields: jackEnrichedProfile?.missing_fields,
+                                  profileCompleteness: jackEnrichedProfile?.profile_completeness,
                                 }
                               : undefined
                           }
@@ -3192,7 +3578,12 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                         (matchedJobs.length > 0 ||
                         weakMatchedJobs.length > 0 ||
                         newJobBadgeIds.size > 0 ||
-                        favoriteJobIds.size > 0) ? (
+                        favoriteJobIds.size > 0 ||
+                        hasVacanciesMarketInsight({
+                          locale: settings.locale,
+                          marketFitSummary: jackEnrichedProfile?.market_fit_summary,
+                          missingSkillsTop: jobsMatchMeta?.profileSignals?.missingSkillsTop,
+                        })) ? (
                           <div className="mt-1.5 space-y-1.5">
                             {matchedJobs.length > 0 || weakMatchedJobs.length > 0 ? (
                               <div className="text-xs text-slate-400">
@@ -3208,13 +3599,20 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                   .join(' · ')}
                               </div>
                             ) : null}
-                            {newJobBadgeIds.size > 0 || favoriteJobIds.size > 0 ? (
+                            {newJobBadgeIds.size > 0 ||
+                            favoriteJobIds.size > 0 ||
+                            hasVacanciesMarketInsight({
+                              locale: settings.locale,
+                              marketFitSummary: jackEnrichedProfile?.market_fit_summary,
+                              missingSkillsTop: jobsMatchMeta?.profileSignals?.missingSkillsTop,
+                            }) ? (
+                              <div className="space-y-1.5">
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             {newJobBadgeIds.size > 0 ? (
-                              <ChatHoverTooltip title={v('newBadgeTooltip')}>
                                   <Button
                                     type="text"
                                     size="small"
+                                    aria-label={v('newBadgeTooltip')}
                                     aria-pressed={vacanciesFilter === 'new'}
                                     onClick={() =>
                                       setVacanciesFilter((current) =>
@@ -3234,13 +3632,12 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                     +{newJobBadgeIds.size}{' '}
                                     {newJobsBadgeWord(settings.locale, newJobBadgeIds.size)}
                                   </Button>
-                              </ChatHoverTooltip>
                             ) : null}
                             {favoriteJobIds.size > 0 ? (
-                              <ChatHoverTooltip title={v('favoriteBadgeTooltip')}>
                                 <Button
                                   type="text"
                                   size="small"
+                                  aria-label={v('favoriteBadgeTooltip')}
                                   aria-pressed={vacanciesFilter === 'favorite'}
                                   onClick={() =>
                                     setVacanciesFilter((current) =>
@@ -3264,32 +3661,24 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                   )}
                                   <span className="ml-1 tabular-nums">{favoriteJobIds.size}</span>
                                 </Button>
-                              </ChatHoverTooltip>
                             ) : null}
+                                <VacanciesMarketInsightTrigger
+                                  locale={settings.locale}
+                                  marketFitSummary={jackEnrichedProfile?.market_fit_summary}
+                                  missingSkillsTop={jobsMatchMeta?.profileSignals?.missingSkillsTop}
+                                  open={vacanciesInsightOpen}
+                                  onToggle={() => setVacanciesInsightOpen((v) => !v)}
+                                />
+                              </div>
+                                <VacanciesMarketInsightPanel
+                                  locale={settings.locale}
+                                  marketFitSummary={jackEnrichedProfile?.market_fit_summary}
+                                  missingSkillsTop={jobsMatchMeta?.profileSignals?.missingSkillsTop}
+                                  open={vacanciesInsightOpen}
+                                  onEditProfile={handleEditProfileFromVacancies}
+                                />
                               </div>
                             ) : null}
-                          </div>
-                        ) : null}
-                        {vacanciesFilter === 'new' && newJobBadgeIds.size > 0 ? (
-                          <div
-                            className={
-                              isHume
-                                ? 'mt-1 text-[11px] text-[var(--color-slate-plum)]'
-                                : 'mt-1 text-[11px] text-emerald-400/75'
-                            }
-                          >
-                            {v('newFilterActive')}
-                          </div>
-                        ) : null}
-                        {vacanciesFilter === 'favorite' && favoriteJobIds.size > 0 ? (
-                          <div
-                            className={
-                              isHume
-                                ? 'mt-1 text-[11px] text-[var(--color-slate-plum)]'
-                                : 'mt-1 text-[11px] text-rose-400/75'
-                            }
-                          >
-                            {v('favoriteFilterActive')}
                           </div>
                         ) : null}
                       </>
@@ -3369,7 +3758,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                     )}
                   </div>
                 </div>
-                <div className="chat-history-scroll overflow-y-auto flex-1 pr-1">
+                <div className="chat-history-scroll overflow-y-auto flex-1 px-1">
                   {sidePanelTab === 'vacancies' ? (
                     currentProduct !== 'jack' ? (
                       <div className="text-sm text-slate-400">
@@ -3450,35 +3839,62 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                         />
                         {displayedWeakMatchedJobs.length > 0 ? (
                           <div className="space-y-3">
-                            <div className="flex items-center gap-1.5">
-                              <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-400/90">
+                            <button
+                              type="button"
+                              aria-expanded={weakMatchesExpanded}
+                              aria-label={
+                                weakMatchesExpanded
+                                  ? v('hideWeakMatches')
+                                  : v('showWeakMatches')
+                              }
+                              onClick={() => setWeakMatchesExpanded((open) => !open)}
+                              className={`flex w-full appearance-none items-center gap-1.5 rounded-lg border-0 !bg-transparent px-0.5 py-0.5 text-left shadow-none outline-none transition hover:!bg-white/[0.04] ${
+                                isHume ? 'text-[var(--color-ink)] hover:!bg-[var(--color-rose-mist)]/60' : ''
+                              }`}
+                            >
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-400/90">
                                 {v('possibleWeakMatch')}
-                              </div>
+                              </span>
+                              <span className="text-[11px] tabular-nums text-amber-400/70">
+                                {displayedWeakMatchedJobs.length}
+                              </span>
+                              {weakMatchesExpanded ? (
+                                <UpOutlined className="!text-[10px] text-amber-400/80" aria-hidden />
+                              ) : (
+                                <DownOutlined className="!text-[10px] text-amber-400/80" aria-hidden />
+                              )}
                               {displayedMatchedJobs.length === 0 ? matchInfoTip : null}
-                            </div>
-                            {displayedWeakMatchedJobs.map((item) => (
-                              <MatchedJobCard
-                                key={item.job.id}
-                                variant="weak"
-                                title={item.job.title}
-                                company={item.job.company}
-                                score={item.score}
-                                source={item.job.source}
-                                sourceUrl={item.job.source_url}
-                                reasons={item.reasons}
-                                isFavorite={favoriteJobIds.has(item.job.id)}
-                                onToggleFavorite={() => handleToggleVacancyFavorite(item.job.id)}
-                                favoriteAriaLabel={
-                                  favoriteJobIds.has(item.job.id)
-                                    ? v('removeFromFavorites')
-                                    : v('addToFavorites')
-                                }
-                                isNew={newJobBadgeIds.has(item.job.id)}
-                                onOpenVacancy={() => handleOpenVacancyFromJob(item, 'weak')}
-                                onVacancyPrep={() => void handleVacancyPrepFromJob(item)}
-                                vacancyPrepLoading={vacancyPrepJobId === item.job.id}
-                              />
-                            ))}
+                            </button>
+                            {weakMatchesExpanded
+                              ? displayedWeakMatchedJobs.map((item) => (
+                                  <MatchedJobCard
+                                    key={item.job.id}
+                                    variant="weak"
+                                    title={item.job.title}
+                                    company={item.job.company}
+                                    score={item.score}
+                                    source={item.job.source}
+                                    sourceUrl={item.job.source_url}
+                                    reasons={item.reasons}
+                                    isFavorite={favoriteJobIds.has(item.job.id)}
+                                    onToggleFavorite={() => handleToggleVacancyFavorite(item.job.id)}
+                                    favoriteAriaLabel={
+                                      favoriteJobIds.has(item.job.id)
+                                        ? v('removeFromFavorites')
+                                        : v('addToFavorites')
+                                    }
+                                    isNew={newJobBadgeIds.has(item.job.id)}
+                                    onOpenVacancy={() => handleOpenVacancyFromJob(item, 'weak')}
+                                    onVacancyPrep={() => void handleVacancyPrepFromJob(item)}
+                                    vacancyPrepLoading={vacancyPrepJobId === item.job.id}
+                                    onSwipeLike={() => handleVacancySwipeLike(item)}
+                                    onSwipeDislike={() => handleVacancySwipeDislike(item)}
+                                    likeAriaLabel={v('swipeLike')}
+                                    dislikeAriaLabel={v('swipeDislike')}
+                                    tapHint={v('swipeTapHint')}
+                                  />
+                                ))
+                              : null}
                           </div>
                         ) : null}
                       </div>
@@ -3538,41 +3954,73 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                 onOpenVacancy={() => handleOpenVacancyFromJob(item, 'recommended')}
                                 onVacancyPrep={() => void handleVacancyPrepFromJob(item)}
                                 vacancyPrepLoading={vacancyPrepJobId === item.job.id}
+                                onSwipeLike={() => handleVacancySwipeLike(item)}
+                                onSwipeDislike={() => handleVacancySwipeDislike(item)}
+                                likeAriaLabel={v('swipeLike')}
+                                dislikeAriaLabel={v('swipeDislike')}
+                                tapHint={v('swipeTapHint')}
                               />
                             ))}
                           </div>
                         ) : null}
                         {displayedWeakMatchedJobs.length > 0 ? (
                           <div className="space-y-3">
-                            <div className="flex items-center gap-1.5">
-                              <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-400/90">
+                            <button
+                              type="button"
+                              aria-expanded={weakMatchesExpanded}
+                              aria-label={
+                                weakMatchesExpanded
+                                  ? v('hideWeakMatches')
+                                  : v('showWeakMatches')
+                              }
+                              onClick={() => setWeakMatchesExpanded((open) => !open)}
+                              className={`flex w-full appearance-none items-center gap-1.5 rounded-lg border-0 !bg-transparent px-0.5 py-0.5 text-left shadow-none outline-none transition hover:!bg-white/[0.04] ${
+                                isHume ? 'text-[var(--color-ink)] hover:!bg-[var(--color-rose-mist)]/60' : ''
+                              }`}
+                            >
+                              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-400/90">
                                 {v('weakMatch')}
-                              </div>
+                              </span>
+                              <span className="text-[11px] tabular-nums text-amber-400/70">
+                                {displayedWeakMatchedJobs.length}
+                              </span>
+                              {weakMatchesExpanded ? (
+                                <UpOutlined className="!text-[10px] text-amber-400/80" aria-hidden />
+                              ) : (
+                                <DownOutlined className="!text-[10px] text-amber-400/80" aria-hidden />
+                              )}
                               {displayedMatchedJobs.length === 0 ? matchInfoTip : null}
-                            </div>
-                            {displayedWeakMatchedJobs.map((item) => (
-                              <MatchedJobCard
-                                key={item.job.id}
-                                variant="weak"
-                                title={item.job.title}
-                                company={item.job.company}
-                                score={item.score}
-                                source={item.job.source}
-                                sourceUrl={item.job.source_url}
-                                reasons={item.reasons}
-                                isFavorite={favoriteJobIds.has(item.job.id)}
-                                onToggleFavorite={() => handleToggleVacancyFavorite(item.job.id)}
-                                favoriteAriaLabel={
-                                  favoriteJobIds.has(item.job.id)
-                                    ? v('removeFromFavorites')
-                                    : v('addToFavorites')
-                                }
-                                isNew={newJobBadgeIds.has(item.job.id)}
-                                onOpenVacancy={() => handleOpenVacancyFromJob(item, 'weak')}
-                                onVacancyPrep={() => void handleVacancyPrepFromJob(item)}
-                                vacancyPrepLoading={vacancyPrepJobId === item.job.id}
-                              />
-                            ))}
+                            </button>
+                            {weakMatchesExpanded
+                              ? displayedWeakMatchedJobs.map((item) => (
+                                  <MatchedJobCard
+                                    key={item.job.id}
+                                    variant="weak"
+                                    title={item.job.title}
+                                    company={item.job.company}
+                                    score={item.score}
+                                    source={item.job.source}
+                                    sourceUrl={item.job.source_url}
+                                    reasons={item.reasons}
+                                    isFavorite={favoriteJobIds.has(item.job.id)}
+                                    onToggleFavorite={() => handleToggleVacancyFavorite(item.job.id)}
+                                    favoriteAriaLabel={
+                                      favoriteJobIds.has(item.job.id)
+                                        ? v('removeFromFavorites')
+                                        : v('addToFavorites')
+                                    }
+                                    isNew={newJobBadgeIds.has(item.job.id)}
+                                    onOpenVacancy={() => handleOpenVacancyFromJob(item, 'weak')}
+                                    onVacancyPrep={() => void handleVacancyPrepFromJob(item)}
+                                    vacancyPrepLoading={vacancyPrepJobId === item.job.id}
+                                    onSwipeLike={() => handleVacancySwipeLike(item)}
+                                    onSwipeDislike={() => handleVacancySwipeDislike(item)}
+                                    likeAriaLabel={v('swipeLike')}
+                                    dislikeAriaLabel={v('swipeDislike')}
+                                    tapHint={v('swipeTapHint')}
+                                  />
+                                ))
+                              : null}
                           </div>
                         ) : null}
                       </div>
@@ -3642,6 +4090,22 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                       </div>
                     ) : (
                       <div className="pb-1">
+                        {typeof jackEnrichedProfile?.profile_completeness === 'number' ? (
+                          <div className="mb-4">
+                            <ProfileCompletenessBar
+                              completeness={jackEnrichedProfile.profile_completeness}
+                              missingFields={jackEnrichedProfile.missing_fields}
+                              locale={settings.locale}
+                            />
+                            {jackEnrichedProfile.isFallback ? (
+                              <p className="mt-2 text-[11px] text-slate-500 leading-relaxed">
+                                {settings.locale === 'en'
+                                  ? 'Estimated from your answers. LEO will refine this after enrichment.'
+                                  : 'Оценка по ответам в чате. LEO уточнит после полного анализа профиля.'}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
                         {jackProfileSections.map(([section, rows]) => (
                           <div key={section} className="mb-5 last:mb-0">
                             <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">
@@ -3658,9 +4122,22 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                   }`}
                                 >
                                   <div className="text-[11px] text-slate-500">{row.label}</div>
-                                  <div className="text-sm text-slate-100 mt-0.5 whitespace-pre-wrap break-words">
-                                    {row.value}
-                                  </div>
+                                  {row.key === '__enriched.skills' && jackEnrichedProfile?.normalized_skills?.length ? (
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                      {jackEnrichedProfile.normalized_skills.slice(0, 10).map((skill) => (
+                                        <span
+                                          key={skill.name}
+                                          className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[11px] text-slate-200"
+                                        >
+                                          {skill.level ? `${skill.name} · ${skill.level}` : skill.name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-sm text-slate-100 mt-0.5 whitespace-pre-wrap break-words">
+                                      {row.value}
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -3724,19 +4201,37 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                       <div className="lg:hidden">
                         <SupportWidget placement="toolbar" showTeaser={false} />
                       </div>
-                      <ChatHoverTooltip title={isMuted ? ui('muteOn') : ui('muteOff')}>
-                        <Button
-                          type="text"
-                          size="small"
-                          icon={isMuted ? <AudioMutedOutlined /> : <SoundOutlined />}
-                          onClick={() => setSpeechEnabled(isMuted)}
-                          className={
-                            isHume
-                              ? '!text-[var(--color-smoke)] hover:!text-[var(--color-ink)] hover:!bg-[var(--color-bone)] !p-1 sm:!p-2 !rounded-full'
-                              : '!text-white !p-1 sm:!p-2'
-                          }
-                        />
-                      </ChatHoverTooltip>
+                      {!settings.textOnlyReplies ? (
+                        <ChatHoverTooltip title={isMuted ? ui('muteOn') : ui('muteOff')}>
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={isMuted ? <AudioMutedOutlined /> : <SoundOutlined />}
+                            onClick={() => setSpeechEnabled(isMuted)}
+                            className={
+                              isHume
+                                ? '!text-[var(--color-smoke)] hover:!text-[var(--color-ink)] hover:!bg-[var(--color-bone)] !p-1 sm:!p-2 !rounded-full'
+                                : '!text-white !p-1 sm:!p-2'
+                            }
+                          />
+                        </ChatHoverTooltip>
+                      ) : null}
+                      {canSkipSpeech ? (
+                        <ChatHoverTooltip title={ui('skipSpeech')}>
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<ForwardOutlined />}
+                            onClick={handleSkipSpeech}
+                            aria-label={ui('skipSpeech')}
+                            className={
+                              isHume
+                                ? '!text-[var(--color-smoke)] hover:!text-[var(--color-ink)] hover:!bg-[var(--color-bone)] !p-1 sm:!p-2 !rounded-full animate-pulse bg-[var(--color-rose-mist)]/40'
+                                : '!text-green-300 hover:!text-green-200 hover:!bg-green-500/10 !p-1 sm:!p-2 !rounded-full animate-pulse bg-green-500/15'
+                            }
+                          />
+                        </ChatHoverTooltip>
+                      ) : null}
                       <ChatHoverTooltip title={isListening ? 'Остановить запись' : 'Начать запись голоса'}>
                         <Button
                           type="text"
@@ -3914,8 +4409,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         <Form form={profileEditForm} layout="vertical">
           <div className="max-h-[55vh] overflow-y-auto pr-1">
             {profileEditableRows.map((row) => (
-              <Form.Item key={row.key} name={row.key} label={`${row.section} - ${row.label}`}>
-                <Input.TextArea autoSize={{ minRows: 1, maxRows: 4 }} />
+              <Form.Item key={row.key} name={row.key} label={row.label}>
+                <Input.TextArea id={row.key} autoSize={{ minRows: 1, maxRows: 4 }} />
               </Form.Item>
             ))}
           </div>

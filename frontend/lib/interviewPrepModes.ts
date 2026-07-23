@@ -71,10 +71,11 @@ export function interviewModeCommandItem(mode: InterviewPrepMode): CommandItem {
 /** Одно сообщение для старта режима (без executeCommand + sendMessage). */
 export function buildInterviewPrepModeStartMessage(
   mode: InterviewPrepMode,
-  day?: number
+  _day?: number
 ): string {
   const label = INTERVIEW_PREP_MODE_LABELS[mode];
-  return typeof day === 'number' ? `Начать режим: ${label} · день ${day}` : `Начать режим: ${label}`;
+  // Протокол conversation: /^начать режим:\s*(.+)$/i — не менять префикс.
+  return `Начать режим: ${label}`;
 }
 
 export function isInterviewPrepStageAssistantMessage(message: Message): boolean {

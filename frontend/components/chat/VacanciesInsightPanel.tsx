@@ -17,6 +17,11 @@ export type VacanciesInsightMeta = {
   weakMatchFloor: number;
   profileFamily?: string | null;
   profileFamilyLabel?: string | null;
+  profileSignals?: {
+    role_family?: string | null;
+    seniority?: string | null;
+    missingSkillsTop?: string[];
+  };
   familyRelevanceShare?: number;
   catalogWarning?: 'catalog_family_mismatch' | 'no_matches' | 'empty_catalog' | null;
 };

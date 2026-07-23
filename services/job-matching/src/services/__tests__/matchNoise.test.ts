@@ -145,4 +145,47 @@ describe('matchNoise', () => {
 
     expect(reasons).not.toContain('seniority_mismatch');
   });
+
+  it('always demotes underleveled junior for lead/senior even at high same-family score', () => {
+    const job = mkJob({
+      title: 'Junior Product Manager',
+      experience_level: 'junior',
+    });
+    const profile: CollectedData = {
+      desiredRole: 'Head of Product / Product Lead / CPO',
+      totalExperience: 12,
+    };
+
+    const reasons = getDemoteReasons(job, profile, 'lead', 'junior', false, {
+      familyMatch: 'same',
+      score: 86,
+      thinProfile: false,
+    });
+
+    expect(reasons).toContain('seniority_mismatch');
+    expect(
+      shouldDemoteFromRecommended(job, profile, 'lead', 'junior', false, {
+        familyMatch: 'same',
+        score: 86,
+      })
+    ).toBe(true);
+  });
+
+  it('does not skip underleveled demote for thin profile', () => {
+    const job = mkJob({
+      title: 'Junior Product manager',
+      experience_level: 'junior',
+    });
+    const profile: CollectedData = {
+      desiredRole: 'Head of Product',
+    };
+
+    const reasons = getDemoteReasons(job, profile, 'senior', 'junior', false, {
+      familyMatch: 'same',
+      score: 80,
+      thinProfile: true,
+    });
+
+    expect(reasons).toContain('seniority_mismatch');
+  });
 });

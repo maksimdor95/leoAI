@@ -1,5 +1,7 @@
 import { Job } from '../models/job';
 import { CollectedData } from './userService';
+import { findProfileCompanyExclusion } from './preferenceSignals';
+import { findVacancyFeedbackDemotion } from './vacancyFeedbackSignals';
 import { extractSalaryFromText } from './quickPathEnrichment';
 
 export type SalesChannel = 'inbound' | 'outbound' | 'unknown';
@@ -197,7 +199,8 @@ export function matchSalaryExpectation(
 export type DemoteReasonCode =
   | 'salary_below_expectation'
   | 'seniority_mismatch'
-  | 'sales_channel_mismatch';
+  | 'sales_channel_mismatch'
+  | 'company_exclusion';
 
 export interface DemoteContext {
   familyMatch?: 'same' | 'adjacent' | 'unknown' | 'conflict';
@@ -210,6 +213,7 @@ export const DEMOTE_REASON_LABELS: Record<DemoteReasonCode, string> = {
   salary_below_expectation: 'Зарплата заметно ниже ожиданий',
   seniority_mismatch: 'Несовпадение по грейду',
   sales_channel_mismatch: 'Другой тип продаж',
+  company_exclusion: 'Исключённая компания / отрасль',
 };
 
 export function demoteReasonLabels(codes: DemoteReasonCode[]): string[] {
@@ -242,6 +246,13 @@ export function getDemoteReasons(
 ): DemoteReasonCode[] {
   const reasons: DemoteReasonCode[] = [];
 
+  if (
+    findProfileCompanyExclusion(job, collectedData) ||
+    findVacancyFeedbackDemotion(job, collectedData)
+  ) {
+    reasons.push('company_exclusion');
+  }
+
   if (salaryHardMismatch) {
     reasons.push('salary_below_expectation');
   }
@@ -251,13 +262,23 @@ export function getDemoteReasons(
   }
 
   if (isSeniorityTierNoise(userLevel, jobLevel)) {
-    const skipSeniorityDemote =
-      context?.familyMatch === 'same' &&
-      (context?.score ?? 0) >= 50 &&
-      (context?.thinProfile || isAspirationalRoleGap(userLevel, jobLevel));
+    const userRank = userLevel ? (SENIORITY_RANK[userLevel] ?? 2) : 2;
+    const jobRank = jobLevel ? (SENIORITY_RANK[jobLevel] ?? 2) : 2;
+    /** Пользователь явно выше вакансии (lead/senior → junior/intern) — всегда понижаем. */
+    const isUnderleveledJob = userRank - jobRank >= 2;
 
-    if (!skipSeniorityDemote) {
+    if (isUnderleveledJob) {
       reasons.push('seniority_mismatch');
+    } else {
+      // Только «вверх» (aspirational) можно не понижать при thin profile / явном стремлении.
+      const skipSeniorityDemote =
+        context?.familyMatch === 'same' &&
+        (context?.score ?? 0) >= 50 &&
+        (context?.thinProfile || isAspirationalRoleGap(userLevel, jobLevel));
+
+      if (!skipSeniorityDemote) {
+        reasons.push('seniority_mismatch');
+      }
     }
   }
 

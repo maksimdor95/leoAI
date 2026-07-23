@@ -7,13 +7,13 @@ const features = [
     icon: <RobotOutlined className="text-4xl" />,
     title: 'Умный AI-ассистент',
     description:
-      'Jack понимает твои предпочтения и цели, задает правильные вопросы и помогает найти идеальную работу.',
+      'LEO понимает твои предпочтения и цели, задаёт правильные вопросы и помогает найти идеальную работу.',
   },
   {
     icon: <MessageOutlined className="text-4xl" />,
     title: 'Персональный диалог',
     description:
-      'Веди естественный диалог с Jack на русском языке. Он запомнит твои ответы и учтет их при подборе вакансий.',
+      'Веди естественный диалог с LEO на русском языке. Он запомнит твои ответы и учтёт их при подборе вакансий.',
   },
   {
     icon: <RocketOutlined className="text-4xl" />,
@@ -25,7 +25,7 @@ const features = [
     icon: <UserOutlined className="text-4xl" />,
     title: 'Прямые интро',
     description:
-      'Jack может сделать прямое интро к менеджерам по найму через партнерскую сеть компаний.',
+      'LEO может сделать прямое интро к менеджерам по найму через партнёрскую сеть компаний.',
   },
 ];
 
@@ -35,7 +35,7 @@ export function FeaturesSection() {
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16 animate-fadeIn">
           <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            Почему выбирают Jack AI?
+            Почему выбирают LEO?
           </h2>
           <p className="text-slate-300 text-lg max-w-2xl mx-auto">
             Современный подход к поиску работы с использованием искусственного интеллекта

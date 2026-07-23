@@ -128,7 +128,7 @@ export const JACK_SCENARIO: ScenarioDefinition = {
       label: 'Резюме разобрано',
       title: '✅ Профиль из резюме готов',
       description:
-        'Данные из резюме сохранены. Нажмите «Показать рекомендации» — подберём вакансии с объяснением совпадения. Ошиблись — вкладка «Профиль».',
+        'Данные из резюме сохранены. Нажмите «Показать рекомендации» — подберём вакансии с объяснением совпадения. Или «Заполнить пробелы» — уточним только пустые поля. Ошиблись — вкладка «Профиль».',
       cards: [],
       commands: [
         {
@@ -137,14 +137,9 @@ export const JACK_SCENARIO: ScenarioDefinition = {
           action: 'show_recommendations',
         },
         {
-          id: 'resume_start_quick',
-          label: 'Быстрый подбор',
-          action: 'resume_start_quick',
-        },
-        {
-          id: 'resume_start_detailed',
-          label: 'Детальный анализ',
-          action: 'start_detailed_analysis',
+          id: 'resume_fill_gaps',
+          label: 'Заполнить пробелы',
+          action: 'fill_profile_gaps',
         },
       ],
       next: null,
