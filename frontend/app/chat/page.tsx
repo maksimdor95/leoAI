@@ -38,24 +38,28 @@ import { buildVacancyPrepText, vacancyPrepDisplayLabel } from '@/lib/buildVacanc
 import { fetchViewedJobIds } from '@/lib/jobApi';
 import {
   addVacancyFavorite,
+  applyVacancyNewBadges,
   buildKnownJobIdSet,
   buildViewedJobIdSet,
+  clearAllNewJobBadges,
+  CLEAR_NEW_CONFIRM_MIN,
   collectVacancyIds,
+  countIdsInFeed,
   detectNewVacancyIds,
   dismissVacancy,
   filterJobsByDismissed,
   filterJobsByFavorite,
   filterJobsByNew,
+  hasEstablishedVacancyFeedHistory,
   loadVacancyFeedState,
   markVacancyViewed,
+  pruneIdsToFeed,
   saveVacancyFeedState,
   sanitizeRestoredNewJobIds,
-  hasEstablishedVacancyFeedHistory,
+  shouldBaselineVacancyFeedLoad,
   syncVacancyListsFromApi,
   toPersistedFeedState,
   toggleVacancyFavorite,
-  applyVacancyNewBadges,
-  shouldBaselineVacancyFeedLoad,
   type VacanciesFilter,
 } from '@/lib/vacancyFeedState';
 import { getPublicJobMatchingBaseUrl } from '@/lib/publicJobMatchingUrl';
@@ -66,7 +70,7 @@ import {
 import { getEnrichedProfileSidebarRows, resolveDisplayEnrichedProfile } from '@/lib/enrichedProfileDisplay';
 import { ProfileCompletenessBar } from '@/components/chat/ProfileCompletenessBar';
 import {
-  VacanciesMarketInsightPanel,
+  VacanciesMarketInsightModal,
   VacanciesMarketInsightTrigger,
   hasVacanciesMarketInsight,
 } from '@/components/chat/VacanciesMarketInsight';
@@ -102,6 +106,7 @@ import { ProductSelectionScreen, ProductType } from '@/components/chat/ProductSe
 import { chatUi, inRecommendedSummary, newJobsBadgeWord, weakMatchSummary } from '@/lib/chatUiCopy';
 import {
   catalogFamilyMismatchWarning,
+  clearNewBadgesConfirmBody,
   vacanciesUi,
 } from '@/lib/vacanciesUiCopy';
 import { SupportWidget } from '@/components/support/SupportWidget';
@@ -116,6 +121,7 @@ import {
   ReloadOutlined,
   HeartFilled,
   HeartOutlined,
+  CloseOutlined,
   DownOutlined,
   UpOutlined,
 } from '@ant-design/icons';
@@ -458,6 +464,18 @@ function ChatPageContent() {
     }
   }, []);
 
+  /** Pull session again while background LLM enrichment finishes after resume import. */
+  const scheduleEnrichmentMetadataRefresh = useCallback(() => {
+    const delaysMs = [2000, 5000, 10000];
+    for (const ms of delaysMs) {
+      window.setTimeout(() => {
+        void chatRef.current?.refreshSessionMetadata().then(() => {
+          syncSessionMetadata();
+        });
+      }, ms);
+    }
+  }, [syncSessionMetadata]);
+
   const jackDetailedProgressLabel = useMemo(() => {
     if (currentProduct !== 'jack') return null;
     return getJackDetailedProgress(sessionCurrentStepId, sessionCompletedSteps)?.label ?? null;
@@ -557,6 +575,54 @@ function ChatPageContent() {
     });
   }, []);
 
+  const clearAllNewVacancyBadges = useCallback(() => {
+    if (newJobBadgeIdsRef.current.size === 0) return;
+
+    setNewJobBadgeIds((prev) => {
+      const next = new Set(prev);
+      clearAllNewJobBadges(next, viewedJobIdsRef.current, knownJobIdsRef.current);
+      const userId = vacancyFeedUserIdRef.current;
+      if (userId) {
+        persistVacancyFeedState(userId, next);
+      }
+      return next;
+    });
+    setVacanciesFilter((current) => (current === 'new' ? 'all' : current));
+  }, [persistVacancyFeedState]);
+
+  const requestClearAllNewVacancyBadges = useCallback(() => {
+    const count = newJobBadgeIdsRef.current.size;
+    if (count === 0) return;
+    if (count < CLEAR_NEW_CONFIRM_MIN) {
+      clearAllNewVacancyBadges();
+      return;
+    }
+    Modal.confirm({
+      title: vacanciesUi(settings.locale, 'clearNewBadgesConfirmTitle'),
+      content: clearNewBadgesConfirmBody(settings.locale, count),
+      okText: vacanciesUi(settings.locale, 'clearNewBadgesConfirmOk'),
+      cancelText: settings.locale === 'en' ? 'Cancel' : 'Отмена',
+      onOk: () => clearAllNewVacancyBadges(),
+    });
+  }, [clearAllNewVacancyBadges, settings.locale]);
+
+  /** Drop favorites that are no longer in the current match lists — no UI noise. */
+  const pruneStaleFavoriteJobIds = useCallback(
+    (feedIds: Set<string>) => {
+      setFavoriteJobIds((prev) => {
+        if (prev.size === 0) return prev;
+        const next = pruneIdsToFeed(prev, feedIds);
+        if (next.size === prev.size) return prev;
+        favoriteJobIdsRef.current = next;
+        const userId = vacancyFeedUserIdRef.current;
+        if (userId) {
+          persistFavoriteJobIds(userId, next);
+        }
+        return next;
+      });
+    },
+    [persistFavoriteJobIds]
+  );
   useEffect(() => {
     matchedJobsRef.current = matchedJobs;
   }, [matchedJobs]);
@@ -1196,6 +1262,8 @@ function ChatPageContent() {
           locale: settingsRef.current.locale,
           lang: settingsRef.current.ttsLang,
           voice: settingsRef.current.ttsVoice,
+          skipTts:
+            settingsRef.current.textOnlyReplies || !settingsRef.current.speechEnabled,
         }),
         onConnected: () => {
           if (chatConnectTimeoutRef.current) {
@@ -1637,6 +1705,7 @@ function ChatPageContent() {
           : fields;
         await chatRef.current.mergeCollectedData(imported);
         syncSessionMetadata();
+        scheduleEnrichmentMetadataRefresh();
         messageApi.destroy('resume-import');
         messageApi.success('Данные из резюме добавлены в профиль диалога');
       } catch (err) {
@@ -1646,7 +1715,7 @@ function ChatPageContent() {
         setResumeImportLoading(false);
       }
     },
-    [currentProduct, messageApi, syncSessionMetadata]
+    [currentProduct, messageApi, scheduleEnrichmentMetadataRefresh, syncSessionMetadata]
   );
 
   const handleResumeTextImport = useCallback(
@@ -1695,6 +1764,7 @@ function ChatPageContent() {
 
         await chatRef.current.mergeCollectedData(fields);
         syncSessionMetadata();
+        scheduleEnrichmentMetadataRefresh();
         messageApi.destroy('resume-import');
         messageApi.success('Данные из резюме добавлены в профиль диалога');
         return true;
@@ -1706,7 +1776,7 @@ function ChatPageContent() {
         setResumeImportLoading(false);
       }
     },
-    [currentProduct, messageApi, syncSessionMetadata]
+    [currentProduct, messageApi, scheduleEnrichmentMetadataRefresh, syncSessionMetadata]
   );
 
   const runReportDownload = useCallback(async () => {
@@ -2648,6 +2718,17 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     return base;
   }, [dismissedJobIds, favoriteJobIds, newJobBadgeIds, vacanciesFilter, weakMatchedJobs]);
 
+  const currentFeedJobIds = useMemo(
+    () => collectVacancyIds(matchedJobs, weakMatchedJobs),
+    [matchedJobs, weakMatchedJobs]
+  );
+
+  /** Favorites that still appear in the current match lists (badge / filter truth). */
+  const visibleFavoriteCount = useMemo(
+    () => countIdsInFeed(favoriteJobIds, currentFeedJobIds),
+    [currentFeedJobIds, favoriteJobIds]
+  );
+
   const hasVisibleVacancies =
     displayedMatchedJobs.length > 0 || displayedWeakMatchedJobs.length > 0;
 
@@ -2655,10 +2736,10 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     if (vacanciesFilter === 'new' && newJobBadgeIds.size === 0) {
       setVacanciesFilter('all');
     }
-    if (vacanciesFilter === 'favorite' && favoriteJobIds.size === 0) {
+    if (vacanciesFilter === 'favorite' && visibleFavoriteCount === 0) {
       setVacanciesFilter('all');
     }
-  }, [favoriteJobIds.size, newJobBadgeIds.size, vacanciesFilter]);
+  }, [newJobBadgeIds.size, vacanciesFilter, visibleFavoriteCount]);
 
   const jobsMatchInfoTooltip = useMemo(() => {
     if (!jobsMatchMeta || jobsLoadState !== 'success') return null;
@@ -2874,6 +2955,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         return next;
       });
 
+      pruneStaleFavoriteJobIds(mergedIds);
+
       if (options?.triggerWeakMatchGate) {
         const weakMatch =
           sessionCurrentStepId === 'resume_ready' &&
@@ -2926,7 +3009,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         setIsJobsLoading(false);
       }
     }
-  }, [getJobMatchingBaseUrl, hydrateVacancyFeedState, messageApi, persistVacancyFeedState, sessionCurrentStepId, syncSessionMetadata]);
+  }, [getJobMatchingBaseUrl, hydrateVacancyFeedState, messageApi, persistVacancyFeedState, pruneStaleFavoriteJobIds, sessionCurrentStepId, syncSessionMetadata]);
 
   const scheduleSwipeRematch = useCallback(() => {
     const now = Date.now();
@@ -3031,6 +3114,18 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         }
         return next;
       });
+      // Dislike means not interested — drop from favorites so the heart count stays honest.
+      setFavoriteJobIds((prev) => {
+        if (!prev.has(jobId)) return prev;
+        const next = new Set(prev);
+        next.delete(jobId);
+        favoriteJobIdsRef.current = next;
+        const userId = vacancyFeedUserIdRef.current;
+        if (userId) {
+          persistFavoriteJobIds(userId, next);
+        }
+        return next;
+      });
       setMatchedJobs((prev) => prev.filter((entry) => entry.job.id !== jobId));
       setWeakMatchedJobs((prev) => prev.filter((entry) => entry.job.id !== jobId));
       void pushVacancyFeedback({
@@ -3038,7 +3133,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         dislikedCompany: item.job.company,
       });
     },
-    [persistDismissedJobIds, pushVacancyFeedback]
+    [persistDismissedJobIds, persistFavoriteJobIds, pushVacancyFeedback]
   );
   /**
    * Кнопка reload теперь делает «умное обновление»:
@@ -3578,7 +3673,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                         (matchedJobs.length > 0 ||
                         weakMatchedJobs.length > 0 ||
                         newJobBadgeIds.size > 0 ||
-                        favoriteJobIds.size > 0 ||
+                        visibleFavoriteCount > 0 ||
                         hasVacanciesMarketInsight({
                           locale: settings.locale,
                           marketFitSummary: jackEnrichedProfile?.market_fit_summary,
@@ -3600,7 +3695,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                               </div>
                             ) : null}
                             {newJobBadgeIds.size > 0 ||
-                            favoriteJobIds.size > 0 ||
+                            visibleFavoriteCount > 0 ||
                             hasVacanciesMarketInsight({
                               locale: settings.locale,
                               marketFitSummary: jackEnrichedProfile?.market_fit_summary,
@@ -3609,31 +3704,47 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                               <div className="space-y-1.5">
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             {newJobBadgeIds.size > 0 ? (
-                                  <Button
-                                    type="text"
-                                    size="small"
-                                    aria-label={v('newBadgeTooltip')}
-                                    aria-pressed={vacanciesFilter === 'new'}
-                                    onClick={() =>
-                                      setVacanciesFilter((current) =>
-                                        current === 'new' ? 'all' : 'new'
-                                      )
-                                    }
+                                  <div
                                     className={
                                       vacanciesFilter === 'new'
                                         ? isHume
-                                          ? 'leo-vacancies-new-filter leo-vacancies-new-filter--active !h-auto !min-h-0 !rounded-full !border-0 !px-2 !py-0.5 !text-[11px] !font-medium !leading-none !shadow-none'
-                                          : '!h-auto !min-h-0 !rounded-full !border-0 !px-2 !py-0.5 !text-[11px] !font-medium !leading-none !bg-emerald-500/25 !text-emerald-100 !shadow-none ring-1 ring-emerald-400/40 hover:!bg-emerald-500/30 hover:!text-emerald-50'
+                                          ? 'leo-vacancies-new-filter leo-vacancies-new-filter--active inline-flex items-center rounded-full'
+                                          : 'inline-flex items-center rounded-full bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40'
                                         : isHume
-                                          ? 'leo-vacancies-new-filter !h-auto !min-h-0 !rounded-full !border-0 !px-2 !py-0.5 !text-[11px] !font-medium !leading-none !shadow-none'
-                                          : '!h-auto !min-h-0 !rounded-full !border-0 !px-2 !py-0.5 !text-[11px] !font-medium !leading-none !bg-emerald-500/15 !text-emerald-300/95 !shadow-none ring-1 ring-emerald-400/20 hover:!bg-emerald-500/22 hover:!text-emerald-200'
+                                          ? 'leo-vacancies-new-filter inline-flex items-center rounded-full'
+                                          : 'inline-flex items-center rounded-full bg-emerald-500/15 text-emerald-300/95 ring-1 ring-emerald-400/20'
                                     }
                                   >
-                                    +{newJobBadgeIds.size}{' '}
-                                    {newJobsBadgeWord(settings.locale, newJobBadgeIds.size)}
-                                  </Button>
+                                    <button
+                                      type="button"
+                                      aria-label={v('newBadgeTooltip')}
+                                      aria-pressed={vacanciesFilter === 'new'}
+                                      onClick={() =>
+                                        setVacanciesFilter((current) =>
+                                          current === 'new' ? 'all' : 'new'
+                                        )
+                                      }
+                                      className="!m-0 h-auto min-h-0 rounded-l-full border-0 bg-transparent px-2 py-0.5 text-[11px] font-medium leading-none text-inherit hover:bg-white/[0.06]"
+                                    >
+                                      +{newJobBadgeIds.size}{' '}
+                                      {newJobsBadgeWord(settings.locale, newJobBadgeIds.size)}
+                                    </button>
+                                    <ChatHoverTooltip title={v('clearNewBadgesTooltip')}>
+                                      <button
+                                        type="button"
+                                        aria-label={v('clearNewBadgesTooltip')}
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          requestClearAllNewVacancyBadges();
+                                        }}
+                                        className="!m-0 flex h-auto min-h-0 items-center justify-center rounded-r-full border-0 border-l border-current/15 bg-transparent px-1.5 py-0.5 text-inherit opacity-70 hover:bg-white/[0.08] hover:opacity-100"
+                                      >
+                                        <CloseOutlined className="!text-[9px]" aria-hidden />
+                                      </button>
+                                    </ChatHoverTooltip>
+                                  </div>
                             ) : null}
-                            {favoriteJobIds.size > 0 ? (
+                            {visibleFavoriteCount > 0 ? (
                                 <Button
                                   type="text"
                                   size="small"
@@ -3659,7 +3770,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                   ) : (
                                     <HeartOutlined className="!text-[11px]" aria-hidden />
                                   )}
-                                  <span className="ml-1 tabular-nums">{favoriteJobIds.size}</span>
+                                  <span className="ml-1 tabular-nums">{visibleFavoriteCount}</span>
                                 </Button>
                             ) : null}
                                 <VacanciesMarketInsightTrigger
@@ -3667,14 +3778,15 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                   marketFitSummary={jackEnrichedProfile?.market_fit_summary}
                                   missingSkillsTop={jobsMatchMeta?.profileSignals?.missingSkillsTop}
                                   open={vacanciesInsightOpen}
-                                  onToggle={() => setVacanciesInsightOpen((v) => !v)}
+                                  onOpen={() => setVacanciesInsightOpen(true)}
                                 />
                               </div>
-                                <VacanciesMarketInsightPanel
+                                <VacanciesMarketInsightModal
                                   locale={settings.locale}
                                   marketFitSummary={jackEnrichedProfile?.market_fit_summary}
                                   missingSkillsTop={jobsMatchMeta?.profileSignals?.missingSkillsTop}
                                   open={vacanciesInsightOpen}
+                                  onClose={() => setVacanciesInsightOpen(false)}
                                   onEditProfile={handleEditProfileFromVacancies}
                                 />
                               </div>

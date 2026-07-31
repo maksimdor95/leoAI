@@ -108,12 +108,17 @@ class ChatApiClient {
     this.getClientPreferences = getClientPreferences;
   }
 
-  private buildClientPreferencesBody(): { locale?: string; ttsPreferences?: TtsPreferences } {
+  private buildClientPreferencesBody(): {
+    locale?: string;
+    ttsPreferences?: TtsPreferences;
+    skipTts?: boolean;
+  } {
     const prefs = this.getClientPreferences?.();
     if (!prefs) return {};
     return {
       locale: prefs.locale,
       ttsPreferences: { lang: prefs.lang, voice: prefs.voice },
+      ...(prefs.skipTts ? { skipTts: true } : {}),
     };
   }
 
@@ -380,8 +385,8 @@ class ChatApiClient {
           method: 'POST',
           body: JSON.stringify({ collectedData, ...this.buildClientPreferencesBody() }),
         },
-        // Resume/import + enrichment может занимать >20s; свайпы — быстрый путь.
-        isFeedbackOnly ? 15000 : 60000
+        // Enrichment runs in the background on the server; keep a short client budget.
+        isFeedbackOnly ? 15000 : 25000
       );
 
       if (response.metadata) {
@@ -398,6 +403,21 @@ class ChatApiClient {
       this.onError?.({
         message: error instanceof Error ? error.message : 'Failed to merge profile data',
       });
+    }
+  }
+
+  /**
+   * Pull latest session metadata (e.g. after background profile enrichment).
+   */
+  async refreshSessionMetadata(): Promise<void> {
+    if (!this.sessionId) return;
+    try {
+      const session = await this.request<ChatSession>(`/api/chat/session/${this.sessionId}`);
+      if (session.metadata) {
+        this.applySessionMetadata(session.metadata);
+      }
+    } catch {
+      // fail-open: caller already has previous metadata
     }
   }
 
@@ -622,7 +642,7 @@ class ChatApiClient {
         if (generation !== this.pollingGeneration) return;
 
         if (session.metadata) {
-          this.sessionMetadata = session.metadata;
+          this.applySessionMetadata(session.metadata);
         }
 
         // Check for new messages
@@ -799,6 +819,7 @@ export function createChatApi(
     analyzeVacancy: (vacancyText: string, displayLabel: string) =>
       client.analyzeVacancy(vacancyText, displayLabel),
     mergeCollectedData: (data: Record<string, unknown>) => client.mergeCollectedData(data),
+    refreshSessionMetadata: () => client.refreshSessionMetadata(),
     executeCommand: (commandId: string, action: string) => client.executeCommand(commandId, action),
     generateResume: () => client.generateResume(),
     generateSummary: () => client.generateSummary(),

@@ -113,7 +113,7 @@ const strings: Record<AppLocale, LandingStrings> = {
     footerSettings: 'Настройка',
     settingsBackHome: '← На главную',
     settingsPageTitle: 'Настройки',
-    settingsPageIntro: 'Выберите язык интерфейса и тему оформления.',
+    settingsPageIntro: 'Язык, тема, озвучка и режим только текста.',
   },
   en: {
     heroBadge: 'Career AI assistant',
@@ -161,7 +161,7 @@ const strings: Record<AppLocale, LandingStrings> = {
     footerSettings: 'Settings',
     settingsBackHome: '← Back to home',
     settingsPageTitle: 'Settings',
-    settingsPageIntro: 'Choose interface language and appearance.',
+    settingsPageIntro: 'Language, theme, voice replies, and text-only mode.',
   },
 };
 
@@ -316,10 +316,4 @@ export function getLandingHowItWorksSteps(locale: AppLocale): LandingHowItWorksS
 
 export function getLandingPreviewScenarios(locale: AppLocale): LandingPreviewScenarioCopy[] {
   return scenarios[locale];
-}
-
-export function landingSettingsChipLabel(locale: AppLocale, isHume: boolean): string {
-  const lang = locale === 'en' ? 'EN' : 'RU';
-  const theme = isHume ? 'Hume' : 'LEO';
-  return locale === 'en' ? `${lang} · ${theme} theme` : `${lang} · тема ${theme}`;
 }

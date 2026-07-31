@@ -36,6 +36,125 @@ LEO AI — микросервисная платформа (Node.js + Express + 
 
 Запуск локально / на VPS: `npm run dev:up` (см. [OPERATIONS.md](./OPERATIONS.md)).
 
+### Инфопотоки (линейные пути)
+
+Рисунок (слои + продуктовые пайплайны): [assets/leoai-architecture-infoflow.png](./assets/leoai-architecture-infoflow.png)
+
+Идея схемы: **сверху вниз** — кто с кем говорит; **отдельные пайплайны** — куда уходят данные по продукту. Без «паутины» всех стрелок сразу.
+
+#### A. Слои системы (кто кого вызывает)
+
+```mermaid
+flowchart TB
+  subgraph L1["1. Клиент"]
+    U[Пользователь в браузере]
+    T[Пользователь в Telegram]
+  end
+
+  subgraph L2["2. Вход"]
+    FE["Frontend :3000<br/>UI, OAuth callback, health"]
+    TGS["Telegram Support :3008<br/>тикеты поддержки"]
+  end
+
+  subgraph L3["3. Ядро"]
+    UP["User Profile :3001<br/>JWT, OAuth, профиль, резюме"]
+    Conv["Conversation :3002<br/>сценарии + state machine"]
+  end
+
+  subgraph L4["4. Специализированные сервисы"]
+    AI["AI/NLP :3003"]
+    JM["Job Matching :3004"]
+    Mail["Email :3005"]
+    Rep["Report :3007"]
+    RP["Resume Parser :3011"]
+  end
+
+  subgraph L5["5. Внешние системы"]
+    OAuth[Google / Yandex OAuth]
+    YGPT[YandexGPT + SpeechKit]
+    HH[HH.ru / SuperJob]
+    S3[Object Storage]
+    TGAPI[Telegram Bot API]
+    SMTP[SMTP / SendGrid]
+  end
+
+  subgraph L6["6. Хранилища"]
+    PG[(PostgreSQL<br/>users, profiles, resumes, jobs)]
+    RD[(Redis<br/>session, AI history, report status)]
+  end
+
+  U -->|HTTP UI| FE
+  T -->|сообщения бота| TGS
+  TGS -->|Bot API| TGAPI
+
+  FE -->|login / profile / resume| UP
+  FE -->|чат: message + sessionId| Conv
+  FE -.->|TTS playback, иногда| AI
+
+  UP -->|файл резюме| RP
+  UP -->|OAuth code| OAuth
+  UP -->|users, profiles, resumes| PG
+
+  Conv -->|generate / validate / interview / TTS| AI
+  Conv -->|сохранить ответы профиля| UP
+  Conv -->|состояние диалога| RD
+
+  AI -->|промпты, речь| YGPT
+  AI -->|history| RD
+
+  JM -->|вакансии| HH
+  JM -->|jobs| PG
+  Mail -->|письмо| SMTP
+  Rep -->|PDF| S3
+  Rep -->|status| RD
+```
+
+#### B. Продуктовые пайплайны (что куда уходит)
+
+```mermaid
+flowchart LR
+  subgraph Auth["Auth / профиль"]
+    direction TB
+    A1[Browser] --> A2[Frontend] --> A3[User Profile]
+    A3 --> A4[OAuth]
+    A3 --> A5[Resume Parser]
+    A3 --> A6[(PostgreSQL)]
+  end
+
+  subgraph Jack["Jack: подбор вакансий"]
+    direction TB
+    J1[Browser] --> J2[Frontend] --> J3[Conversation<br/>jack-profile-v2]
+    J3 --> J4[AI/NLP<br/>шаги диалога]
+    J3 --> J5[User Profile<br/>collectedData]
+    J3 --> J6[Job Matching<br/>match]
+    J6 --> J7[Email<br/>дайджест]
+  end
+
+  subgraph Wanna["WannaNew: PM + PDF"]
+    direction TB
+    W1[Browser] --> W2[Frontend] --> W3[Conversation<br/>wannanew-pm-v1]
+    W3 --> W4[AI/NLP]
+    W3 --> W5[Report<br/>PDF]
+    W5 --> W6[Object Storage]
+  end
+
+  subgraph Prep["Interview Prep"]
+    direction TB
+    P1[Browser] --> P2[Frontend] --> P3[Conversation<br/>interview-prep-v1]
+    P3 --> P4[AI/NLP<br/>Prompt V2]
+    P4 --> P5[YandexGPT]
+  end
+```
+
+| Пайплайн | Данные на входе | Куда уходят на выходе |
+|----------|-----------------|----------------------|
+| **Auth** | email/OAuth, файл резюме | `jack.users` / `career_profiles` / `resumes` в PostgreSQL |
+| **Jack** | ответы чата → профиль | матч вакансий → email-дайджест; jobs в PostgreSQL |
+| **WannaNew** | ответы чата PM | PDF-отчёт → Object Storage; status в Redis |
+| **Interview Prep** | ответы / режим | только AI-контур (диалог + feedback), без matching |
+| **Support** | текст в Telegram | Telegram Bot API (вне основного продукта) |
+
+**Правило оркестрации:** GPT и TTS только через **AI/NLP**; matching / email / PDF — только из **Conversation** по завершению сценария (`integrationService`), не из Frontend напрямую.
 ### Health
 
 - Каждый сервис: `GET /health`

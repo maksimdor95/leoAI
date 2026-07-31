@@ -3,6 +3,7 @@ import type { AppLocale } from '@/types/appSettings';
 const copy = {
   ru: {
     settings: 'Настройки',
+    settingsSubtitle: 'Язык, тема, озвучка и режим только текста.',
     language: 'Язык',
     languageRu: 'Русский',
     languageEn: 'English',
@@ -10,6 +11,8 @@ const copy = {
     theme: 'Тема',
     themeLeo: 'LEO тёмная',
     themeHume: 'Hume светлая',
+    themeLeoHint: 'Тёмный чат и панели',
+    themeHumeHint: 'Светлый интерфейс',
     textOnlyReplies: 'Только текст',
     textOnlyRepliesHint: 'Ответы сразу, без озвучки и без печати по буквам',
     speech: 'Озвучка ответов',
@@ -78,6 +81,7 @@ const copy = {
   },
   en: {
     settings: 'Settings',
+    settingsSubtitle: 'Language, theme, voice replies, and text-only mode.',
     language: 'Language',
     languageRu: 'Russian',
     languageEn: 'English',
@@ -85,6 +89,8 @@ const copy = {
     theme: 'Theme',
     themeLeo: 'LEO dark',
     themeHume: 'Hume light',
+    themeLeoHint: 'Dark chat and panels',
+    themeHumeHint: 'Light interface',
     textOnlyReplies: 'Text only',
     textOnlyRepliesHint: 'Show full replies instantly — no voice, no typing animation',
     speech: 'Voice replies',

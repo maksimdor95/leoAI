@@ -59,7 +59,9 @@ export async function synthesizeWithYandexTts(params: {
       'Content-Type': 'application/x-www-form-urlencoded',
       ...(folderId ? { 'x-folder-id': folderId } : {}),
     },
-    timeout: 20000,
+    // Fail fast: conversation waits on TTS during session create; long hangs
+    // empty the chat UI (frontend aborts at ~20s).
+    timeout: Number(process.env.TTS_REQUEST_TIMEOUT_MS || 4000),
   });
 
   const data = Buffer.from(response.data);

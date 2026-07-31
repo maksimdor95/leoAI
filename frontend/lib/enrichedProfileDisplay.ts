@@ -1,5 +1,5 @@
 import type { AppLocale } from '@/types/appSettings';
-import type { ProfileSidebarRow } from '@/lib/jackProfileFieldCatalog';
+import { isCollectedFilled, type ProfileSidebarRow } from '@/lib/jackProfileFieldCatalog';
 import { toSecondPersonMarketFit } from '@/lib/marketFitCopy';
 
 export type EnrichedProfileView = {
@@ -100,11 +100,7 @@ const PROFILE_COMPLETENESS_SLOTS: Array<{
 ];
 
 function isFilledValue(value: unknown): boolean {
-  if (value == null) return false;
-  if (typeof value === 'string') return value.trim().length > 0;
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (Array.isArray(value)) return value.length > 0;
-  return true;
+  return isCollectedFilled(value);
 }
 
 function computeDisplayCompleteness(

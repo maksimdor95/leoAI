@@ -152,9 +152,21 @@ function pickCollectedValue(collected: Record<string, unknown>, key: string): un
   }
 }
 
+/** Placeholders that LLMs write for missing resume fields — treat as empty. */
+const EMPTY_COLLECTED_PLACEHOLDER_RE =
+  /^(не\s+указан[аоы]?|не\s+указаны|n\/?a|none|null|undefined|—|-|–|\.{1,3}|нет\s+данных)$/i;
+
+function isEmptyCollectedPlaceholder(value: string): boolean {
+  return EMPTY_COLLECTED_PLACEHOLDER_RE.test(value.trim());
+}
+
 export function isCollectedFilled(value: unknown): boolean {
   if (value === undefined || value === null) return false;
-  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'string') {
+    const t = value.trim();
+    if (!t || isEmptyCollectedPlaceholder(t)) return false;
+    return true;
+  }
   if (typeof value === 'number') return !Number.isNaN(value);
   if (typeof value === 'boolean') return true;
   if (Array.isArray(value)) return value.length > 0;
@@ -166,7 +178,8 @@ export function formatCollectedValue(value: unknown, locale: AppLocale = 'ru'): 
   if (value === undefined || value === null) return '—';
   if (typeof value === 'string') {
     const t = value.trim();
-    return t.length > 0 ? t : '—';
+    if (!t || isEmptyCollectedPlaceholder(t)) return '—';
+    return t;
   }
   if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '—';
   if (typeof value === 'boolean') {

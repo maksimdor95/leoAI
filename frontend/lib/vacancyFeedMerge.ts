@@ -143,12 +143,19 @@ export function sanitizeRestoredNewJobIds(
   return restored;
 }
 
+/**
+ * First display of the vacancy feed in this UI session → baseline (no "new" badges).
+ * "New" only appears on later rematches after the feed was already shown.
+ * Do not gate on cross-session localStorage history — that marked hundreds of jobs
+ * as "new" on the first open of a fresh chat.
+ */
 export function shouldBaselineVacancyFeedLoad(options: {
   feedBaselined: boolean;
-  hasEstablishedFeedHistory: boolean;
+  /** @deprecated Ignored — kept for call-site compatibility. */
+  hasEstablishedFeedHistory?: boolean;
   currentFeedJobCount: number;
 }): boolean {
-  if (options.feedBaselined || options.hasEstablishedFeedHistory) {
+  if (options.feedBaselined) {
     return false;
   }
   return options.currentFeedJobCount === 0;
@@ -183,3 +190,38 @@ export function filterJobsByDismissed<T extends MatchedJobItemLike>(
   }
   return jobs.filter((item) => !dismissedJobIds.has(item.job.id));
 }
+
+/** How many ids from `ids` are present in the current feed. */
+export function countIdsInFeed(ids: Set<string>, feedIds: Set<string>): number {
+  let count = 0;
+  for (const id of ids) {
+    if (feedIds.has(id)) count += 1;
+  }
+  return count;
+}
+
+/** Keep only favorites that still appear in the current match lists. */
+export function pruneIdsToFeed(ids: Set<string>, feedIds: Set<string>): Set<string> {
+  if (ids.size === 0) return new Set();
+  if (feedIds.size === 0) return new Set();
+  return new Set([...ids].filter((id) => feedIds.has(id)));
+}
+
+/**
+ * Mark every "new" badge as viewed/known and clear the set.
+ * Vacancies stay in the list — only the badge goes away.
+ */
+export function clearAllNewJobBadges(
+  newJobIds: Set<string>,
+  viewedIds: Set<string>,
+  knownIds: Set<string>
+): void {
+  for (const id of newJobIds) {
+    viewedIds.add(id);
+    knownIds.add(id);
+  }
+  newJobIds.clear();
+}
+
+/** Confirm before bulk-clearing a large "new" pile (avoid mis-taps). */
+export const CLEAR_NEW_CONFIRM_MIN = 20;

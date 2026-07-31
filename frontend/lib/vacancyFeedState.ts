@@ -1,6 +1,9 @@
 import {
   applyVacancyNewBadges,
+  clearAllNewJobBadges,
+  CLEAR_NEW_CONFIRM_MIN,
   collectVacancyIds,
+  countIdsInFeed,
   detectNewVacancyIds,
   ESTABLISHED_FEED_KNOWN_MIN,
   filterJobsByDismissed,
@@ -8,6 +11,7 @@ import {
   filterJobsByNew,
   hasEstablishedVacancyFeedHistory,
   mergeVacancyTierLists,
+  pruneIdsToFeed,
   sanitizeRestoredNewJobIds,
   shouldBaselineVacancyFeedLoad,
   syncVacancyListsFromApi,
@@ -19,7 +23,10 @@ export type VacanciesFilter = 'all' | 'new' | 'favorite';
 
 export {
   applyVacancyNewBadges,
+  clearAllNewJobBadges,
+  CLEAR_NEW_CONFIRM_MIN,
   collectVacancyIds,
+  countIdsInFeed,
   detectNewVacancyIds,
   ESTABLISHED_FEED_KNOWN_MIN,
   filterJobsByDismissed,
@@ -27,6 +34,7 @@ export {
   filterJobsByNew,
   hasEstablishedVacancyFeedHistory,
   mergeVacancyTierLists,
+  pruneIdsToFeed,
   sanitizeRestoredNewJobIds,
   shouldBaselineVacancyFeedLoad,
   syncVacancyListsFromApi,

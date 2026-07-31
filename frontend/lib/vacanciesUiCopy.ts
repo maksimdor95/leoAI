@@ -24,9 +24,14 @@ const copy = {
     possibleWeakMatch: 'Возможные варианты (слабое совпадение)',
     autoUpdateHint: 'Отвечайте в диалоге — подбор вакансий обновится автоматически.',
     wannanewNoJobs: 'Для продукта wannanew вакансии не подбираются.',
-    newBadgeTooltip: 'Новые вакансии с последнего обновления. Нажмите, чтобы отфильтровать. Статус снимается после «Открыть вакансию».',
+    newBadgeTooltip:
+      'Новые вакансии с последнего обновления. Нажмите чип, чтобы отфильтровать; × — снять все метки.',
     newFilterEmpty: 'Все новые вакансии просмотрены.',
-    favoriteBadgeTooltip: 'Показать только избранные вакансии',
+    clearNewBadgesTooltip:
+      'Убрать метку «новая» со всех карточек. Вакансии останутся в списке.',
+    clearNewBadgesConfirmTitle: 'Сбросить метки «новая»?',
+    clearNewBadgesConfirmOk: 'Сбросить',
+    favoriteBadgeTooltip: 'Показать только избранные вакансии из текущего подбора',
     favoriteFilterEmpty: 'В избранном пока нет вакансий из текущего списка.',
     addToFavorites: 'Добавить в избранное',
     removeFromFavorites: 'Убрать из избранного',
@@ -60,9 +65,13 @@ const copy = {
     possibleWeakMatch: 'Possible options (weak match)',
     autoUpdateHint: 'Keep chatting — job matches update automatically.',
     wannanewNoJobs: 'WannaNew does not include job matching.',
-    newBadgeTooltip: 'Jobs added since your last review. Click to filter. Cleared after “Open vacancy”.',
+    newBadgeTooltip:
+      'Jobs added since your last review. Click the chip to filter; × clears all “new” badges.',
     newFilterEmpty: 'You have reviewed all new jobs.',
-    favoriteBadgeTooltip: 'Show only favorited jobs',
+    clearNewBadgesTooltip: 'Remove the “new” badge from all cards. Jobs stay in the list.',
+    clearNewBadgesConfirmTitle: 'Clear all “new” badges?',
+    clearNewBadgesConfirmOk: 'Clear',
+    favoriteBadgeTooltip: 'Show only favorited jobs from the current match list',
     favoriteFilterEmpty: 'No favorited jobs in the current list.',
     addToFavorites: 'Add to favorites',
     removeFromFavorites: 'Remove from favorites',
@@ -81,6 +90,13 @@ export type VacanciesUiCopyKey = keyof (typeof copy)['ru'];
 
 export function vacanciesUi(locale: AppLocale, key: VacanciesUiCopyKey): string {
   return copy[locale][key];
+}
+
+export function clearNewBadgesConfirmBody(locale: AppLocale, count: number): string {
+  if (locale === 'en') {
+    return `Remove the “new” badge from ${count} jobs? They stay in the list.`;
+  }
+  return `Снять метку «новая» с ${count} вакансий? Сами карточки останутся в списке.`;
 }
 
 export function buildVacanciesInsightReasons(

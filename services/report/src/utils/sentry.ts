@@ -15,6 +15,12 @@ export function initSentry(serviceName: string): void {
         delete event.request.headers['authorization'];
         delete event.request.headers['cookie'];
       }
+      const message =
+        event.exception?.values?.map((v) => v.value ?? '').join(' ') ?? event.message ?? '';
+      // Local Redis blips are noisy and not actionable for this service.
+      if (/MaxRetriesPerRequestError/i.test(message)) {
+        return null;
+      }
       return event;
     },
   });

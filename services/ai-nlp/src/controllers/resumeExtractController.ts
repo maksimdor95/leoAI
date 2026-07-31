@@ -57,7 +57,7 @@ export async function extractProfileFromResume(req: Request, res: Response) {
         `# Задача
 Ты извлекаешь структурированные поля профиля кандидата из текста резюме.
 Верни ТОЛЬКО один JSON-объект без пояснений и без markdown.
-Не выдумывай факты: если чего-то нет в тексте — не включай ключ или поставь null.
+Не выдумывай факты: если чего-то нет в тексте — НЕ включай ключ (не пиши null, «не указано», «n/a»).
 Числовые поля — числа или строки с цифрами, как удобнее для фронтенда.
 ${wannanewHint}
 ## Формат ответа
@@ -95,7 +95,20 @@ ${wannanewHint}
     const cleaned: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(fields)) {
       if (v === null || v === undefined) continue;
-      if (typeof v === 'string' && v.trim().length === 0) continue;
+      if (typeof v === 'string') {
+        const t = v.trim();
+        if (!t) continue;
+        // Models often invent placeholders for missing resume fields — drop them.
+        if (
+          /^(не\s+указан[аоы]?|не\s+указаны|n\/?a|none|null|undefined|—|-|–|\.{1,3}|нет\s+данных)$/i.test(
+            t
+          )
+        ) {
+          continue;
+        }
+        cleaned[k] = t;
+        continue;
+      }
       cleaned[k] = v;
     }
 

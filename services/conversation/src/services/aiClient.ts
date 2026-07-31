@@ -853,7 +853,9 @@ export async function synthesizeAssistantAudio(params: {
           DEFAULT_TTS_FORMAT,
       },
       {
-        timeout: 25000,
+        // Keep well under frontend chat connect timeout (~20s). When Yandex TTS
+        // is unreachable we must fail open quickly so session create still returns.
+        timeout: Number(process.env.TTS_REQUEST_TIMEOUT_MS || 4500),
         headers: buildAuthHeaders(params.authToken),
       }
     );

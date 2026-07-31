@@ -298,8 +298,11 @@ async function synthesizeAssistantMessageAudio(
   message: Message,
   session: ConversationSession,
   requestPrefs: ReturnType<typeof parseTtsPreferences>,
-  authToken?: string
+  authToken?: string,
+  skipTts?: boolean
 ): Promise<AssistantAudioResult> {
+  if (skipTts) return null;
+
   const ttsText = getSpeakableTextFromAssistantMessage(message);
   if (!ttsText) return null;
 
@@ -310,6 +313,15 @@ async function synthesizeAssistantMessageAudio(
     voice,
     authToken,
   });
+}
+
+function readSkipTts(body: unknown): boolean {
+  return Boolean(
+    body &&
+      typeof body === 'object' &&
+      !Array.isArray(body) &&
+      (body as { skipTts?: unknown }).skipTts === true
+  );
 }
 
 /** Привязывает TTS к id сообщения, для которого синтезировали аудио (важно при нескольких новых сообщениях в одном ответе). */
@@ -443,7 +455,8 @@ app.post('/api/chat/session', authenticateRequest, async (req, res) => {
             entryStepResult.message,
             hydratedSession,
             requestTtsPrefs,
-            token || undefined
+            token || undefined,
+            readSkipTts(req.body)
           );
         }
       }
@@ -539,7 +552,8 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
         replyResult.message,
         sessionForTts,
         requestTtsPrefs,
-        token || undefined
+        token || undefined,
+        readSkipTts(req.body)
       );
     }
 
@@ -652,7 +666,8 @@ app.post('/api/chat/session/:id/analyze-vacancy', authenticateRequest, async (re
         replyResult.message,
         sessionForTts,
         requestTtsPrefs,
-        token || undefined
+        token || undefined,
+        readSkipTts(req.body)
       );
     }
 
@@ -706,10 +721,26 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
     const mergeKeys = Object.keys(collectedData);
     const isVacancyFeedbackOnly =
       mergeKeys.length === 1 && mergeKeys[0] === 'vacancyFeedback';
-    if (token && !isVacancyFeedbackOnly) {
-      await enrichAndPersistProfile(sessionForReply, token, 'merge_collected');
-    }
+
+    // Persist import immediately so resume_ready UI is not blocked on LLM enrichment.
     await updateSession(sessionForReply);
+
+    if (token && !isVacancyFeedbackOnly) {
+      const enrichSessionId = sessionForReply.id;
+      void (async () => {
+        try {
+          const live = await getSession(enrichSessionId);
+          if (!live) return;
+          const enriched = await enrichAndPersistProfile(live, token, 'merge_collected');
+          if (enriched) {
+            await updateSession(live);
+            logger.info(`merge-collected: background enrichment done session=${enrichSessionId}`);
+          }
+        } catch (err: unknown) {
+          logger.warn(`merge-collected: background enrichment failed: ${String(err)}`);
+        }
+      })();
+    }
 
     const mergedRole =
       (result.metadataUpdates?.collectedData?.desired_role as string | undefined) ||
@@ -722,6 +753,8 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
 
     let assistantMessage = null;
     let assistantAudio: AssistantAudioResult = null;
+    // Resume import: skip TTS so the ready screen appears as soon as parse+merge finish.
+    const skipTtsForMerge = !isVacancyFeedbackOnly || readSkipTts(req.body);
     if (result.message) {
       await addMessageToSession(sessionForReply.id, result.message);
       assistantMessage = result.message;
@@ -730,7 +763,8 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
         result.message,
         sessionForTts,
         requestTtsPrefs,
-        token || undefined
+        token || undefined,
+        skipTtsForMerge
       );
     }
 
@@ -1032,7 +1066,8 @@ app.post('/api/chat/session/:id/resume-email', authenticateRequest, async (req, 
       assistantMessage,
       sessionForTts,
       null,
-      token || undefined
+      token || undefined,
+      readSkipTts(req.body)
     );
 
     const updatedSession = await getSession(session.id);
@@ -1232,7 +1267,8 @@ app.post('/api/chat/session/:id/command', authenticateRequest, async (req, res) 
         commandAssistantMessage,
         sessionForTts,
         requestTtsPrefs,
-        token || undefined
+        token || undefined,
+        readSkipTts(req.body)
       );
     }
 

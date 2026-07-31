@@ -26,6 +26,7 @@ const redis = new Redis({
     : {}),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tls: ioredisTlsOptions() as any,
+  maxRetriesPerRequest: null,
   retryStrategy: (times: number) => {
     const delay = Math.min(times * 50, 2000);
     return delay;

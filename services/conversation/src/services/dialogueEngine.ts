@@ -86,7 +86,7 @@ import {
   type PrepRetentionState,
 } from '../utils/prepRetention';
 import { appendUserStarBankEntry, loadUserStarBank, saveUserStarBank } from './prepRetentionStore';
-import { getUserSessions } from './sessionService';
+import { getSession, getUserSessions, updateSession } from './sessionService';
 import { logger } from '../utils/logger';
 import { triggerProfileDrivenScrape } from './integrationService';
 import { enrichAndPersistProfile } from './profileEnrichmentService';
@@ -159,7 +159,19 @@ export function getStepSentFlagKey(stepId: string): string {
 
 function isCollectedFilledForImport(value: unknown): boolean {
   if (value === undefined || value === null) return false;
-  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'string') {
+    const t = value.trim();
+    if (!t) return false;
+    // LLM/resume extract often writes placeholders like «не указано» — treat as empty.
+    if (
+      /^(не\s+указан[аоы]?|не\s+указаны|n\/?a|none|null|undefined|—|-|–|\.{1,3}|нет\s+данных)$/i.test(
+        t
+      )
+    ) {
+      return false;
+    }
+    return true;
+  }
   if (typeof value === 'number') return !Number.isNaN(value);
   if (typeof value === 'boolean') return true;
   if (Array.isArray(value)) return value.length > 0;
@@ -285,6 +297,10 @@ const PROFILE_GAP_ALWAYS_SKIP = new Set([
   'privacy_info',
   'clarify',
   'completion_gap',
+  // Quick-path duplicates — detailed steps with same collectKey come later.
+  'quick_role',
+  'quick_experience',
+  'quick_location',
 ]);
 
 function hasCareerNarrativeForGapSkip(collected: Record<string, unknown>): boolean {
@@ -3521,14 +3537,23 @@ export async function handleUserReply(
       ...enriched,
     };
     logger.info('Enriched resume-path collectedData before resume_ready screen');
+    // LLM enrichment is slow (multi-call YandexGPT). Do not block resume_ready UI.
     if (authToken) {
-      const enrichedProfile = await enrichAndPersistProfile(session, authToken, 'resume_ready');
-      if (enrichedProfile) {
-        metadataUpdates.collectedData = {
-          ...(metadataUpdates.collectedData || {}),
-          __enriched: enrichedProfile,
-        };
-      }
+      const sessionId = session.id;
+      const token = authToken;
+      void (async () => {
+        try {
+          const live = await getSession(sessionId);
+          if (!live) return;
+          const enrichedProfile = await enrichAndPersistProfile(live, token, 'resume_ready');
+          if (enrichedProfile) {
+            await updateSession(live);
+            logger.info(`resume_ready: background enrichment saved session=${sessionId}`);
+          }
+        } catch (err: unknown) {
+          logger.warn(`resume_ready: background enrichment failed: ${String(err)}`);
+        }
+      })();
     }
   }
 

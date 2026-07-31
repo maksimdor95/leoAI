@@ -21,6 +21,8 @@ const redisConfig = {
     : {}),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tls: ioredisTlsOptions() as any,
+  // Align with BullMQ connection: avoid MaxRetriesPerRequestError on brief Redis blips.
+  maxRetriesPerRequest: null as null,
   retryStrategy: (times: number) => {
     const delay = Math.min(times * 50, 2000);
     return delay;

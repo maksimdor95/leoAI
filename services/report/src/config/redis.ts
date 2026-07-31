@@ -7,9 +7,12 @@ export function getRedisClient(): Redis {
   if (!redisClient) {
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
     redisClient = new Redis(redisUrl, {
-      maxRetriesPerRequest: 3,
-      retryDelayOnFailover: 100,
+      // null = retry indefinitely on reconnect (avoids MaxRetriesPerRequestError
+      // unhandled rejection when Redis briefly drops in local/dev).
+      maxRetriesPerRequest: null,
+      enableReadyCheck: true,
       lazyConnect: true,
+      retryStrategy: (times: number) => Math.min(times * 100, 3000),
     });
 
     redisClient.on('connect', () => {

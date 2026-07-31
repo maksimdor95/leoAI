@@ -252,6 +252,25 @@ describe('dialogueEngine', () => {
       );
     });
 
+    it('treats LLM placeholders like «не указано» as empty gaps', () => {
+      const collected = {
+        scenarioMode: 'готовое резюме',
+        desired_role: 'Head of Product',
+        careerSummary: '15 лет в продукте',
+        skills_hard: 'Product Management',
+        desired_location: 'Москва',
+        totalExperience: 15,
+        education_main: 'МГУ',
+        education_additional: 'нет',
+        skills_soft: 'лидерство',
+        skills_languages: 'английский B2',
+        desired_salary: 'не указано',
+        desired_culture: 'не указано',
+        desired_start: 'не указано',
+      };
+      expect(findFirstProfileGapStepId(JACK_SCENARIO, collected)).toBe('desired_salary');
+    });
+
     it('returns null when matching-critical and follow-up fields are filled', () => {
       const collected = {
         scenarioMode: 'готовое резюме',

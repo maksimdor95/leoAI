@@ -1,9 +1,12 @@
 import {
   applyVacancyNewBadges,
+  clearAllNewJobBadges,
   collectVacancyIds,
+  countIdsInFeed,
   detectNewVacancyIds,
   hasEstablishedVacancyFeedHistory,
   mergeVacancyTierLists,
+  pruneIdsToFeed,
   sanitizeRestoredNewJobIds,
   shouldBaselineVacancyFeedLoad,
   syncVacancyListsFromApi,
@@ -88,7 +91,7 @@ describe('vacancyFeedMerge', () => {
   });
 
   describe('shouldBaselineVacancyFeedLoad', () => {
-    it('baselines first feed display when there is no established history', () => {
+    it('baselines first feed display in the UI session', () => {
       expect(
         shouldBaselineVacancyFeedLoad({
           feedBaselined: false,
@@ -98,14 +101,14 @@ describe('vacancyFeedMerge', () => {
       ).toBe(true);
     });
 
-    it('does not baseline when feed history already exists', () => {
+    it('still baselines on first display even with cross-session known history', () => {
       expect(
         shouldBaselineVacancyFeedLoad({
           feedBaselined: false,
           hasEstablishedFeedHistory: true,
           currentFeedJobCount: 0,
         })
-      ).toBe(false);
+      ).toBe(true);
     });
 
     it('does not baseline after the first feed was already baselined', () => {
@@ -114,6 +117,15 @@ describe('vacancyFeedMerge', () => {
           feedBaselined: true,
           hasEstablishedFeedHistory: false,
           currentFeedJobCount: 0,
+        })
+      ).toBe(false);
+    });
+
+    it('does not baseline when the feed is already on screen (rematch)', () => {
+      expect(
+        shouldBaselineVacancyFeedLoad({
+          feedBaselined: false,
+          currentFeedJobCount: 12,
         })
       ).toBe(false);
     });
@@ -153,6 +165,26 @@ describe('vacancyFeedMerge', () => {
     it('requires a meaningful known-job history', () => {
       expect(hasEstablishedVacancyFeedHistory(19, 0)).toBe(false);
       expect(hasEstablishedVacancyFeedHistory(20, 0)).toBe(true);
+    });
+  });
+
+  describe('clearAllNewJobBadges / countIdsInFeed / pruneIdsToFeed', () => {
+    it('clears new badges into viewed/known without losing history', () => {
+      const newIds = new Set(['a', 'b', 'c']);
+      const viewed = new Set<string>(['x']);
+      const known = new Set<string>(['x']);
+
+      clearAllNewJobBadges(newIds, viewed, known);
+
+      expect(newIds.size).toBe(0);
+      expect(viewed.has('a') && viewed.has('b') && viewed.has('c')).toBe(true);
+      expect(known.has('a') && known.has('b') && known.has('c')).toBe(true);
+      expect(viewed.has('x')).toBe(true);
+
+      expect(countIdsInFeed(new Set(['a', 'z']), new Set(['a', 'b']))).toBe(1);
+      expect(Array.from(pruneIdsToFeed(new Set(['a', 'z']), new Set(['a', 'b']))).sort()).toEqual([
+        'a',
+      ]);
     });
   });
 });

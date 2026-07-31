@@ -37,6 +37,8 @@ export type TtsPreferences = {
 
 export type ClientPreferences = TtsPreferences & {
   locale: import('@/types/appSettings').AppLocale;
+  /** When true, conversation skips Yandex TTS (text-only / muted). */
+  skipTts?: boolean;
 };
 
 export function getDefaultTtsVoice(lang: TtsLang): string {
