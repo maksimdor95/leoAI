@@ -14,6 +14,7 @@ import { extractHhVacancyMeta, mapHhWorkMode } from '../utils/hhVacancyMeta';
 import { uniqueLocationLabels } from '../utils/locationLabels';
 import { enrichJobWithLLM } from './enrichment';
 import { classifyRoleFamily } from './roleFamily';
+import { scrapeExtendedSources } from './connectors';
 
 const HH_API_URL = process.env.HH_API_URL || 'https://api.hh.ru';
 const SUPERJOB_API_URL = process.env.SUPERJOB_API_URL || 'https://api.superjob.ru/2.0';
@@ -120,6 +121,49 @@ export interface ScrapeResult {
   errors: string[];
   sourcesUsed: string[];
   mockJobsUsed: boolean;
+  /** Per JobInput.source counts for ops/metrics (Phase 4). */
+  bySource?: Record<string, { scraped: number; saved: number }>;
+  familyReports?: FamilyRunReport[];
+}
+
+export interface PersistJobsOptions {
+  /**
+   * When true, call enrichJobWithLLM before save (slow; depends on ai-nlp).
+   * Default false — Kabi-style ingest first; enrichment is a later pipeline stage.
+   */
+  enrich?: boolean;
+}
+
+/**
+ * Persist scraped jobs one-by-one. Failures on individual rows are collected, not thrown.
+ */
+export async function persistScrapedJobs(
+  jobs: JobInput[],
+  options: PersistJobsOptions = {}
+): Promise<{ saved: number; errors: string[]; bySource: Record<string, { scraped: number; saved: number }> }> {
+  const enrich = options.enrich === true;
+  let saved = 0;
+  const errors: string[] = [];
+  const bySource: Record<string, { scraped: number; saved: number }> = {};
+
+  for (const job of jobs) {
+    const src = job.source || 'unknown';
+    if (!bySource[src]) bySource[src] = { scraped: 0, saved: 0 };
+    bySource[src].scraped += 1;
+    try {
+      const isMock = job.source === 'demo';
+      const toSave = !isMock && enrich ? await enrichJobWithLLM(job) : job;
+      await jobRepository.createOrUpdate(toSave);
+      saved += 1;
+      bySource[src].saved += 1;
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.error(`Failed to save job ${job.source_url}:`, errorMsg);
+      errors.push(`Failed to save job: ${errorMsg}`);
+    }
+  }
+
+  return { saved, errors, bySource };
 }
 
 /**
@@ -142,12 +186,80 @@ export const DEFAULT_SEED_KEYWORDS: readonly string[] = [
 ];
 
 /**
- * Scrape jobs from all configured sources (HH.ru, SuperJob, etc.)
- * Falls back to mock data in development if all real sources fail.
+ * Scrape jobs from configured source families in parallel (fail-open).
+ * Each family persists as soon as it finishes — HH failure cannot block SJ/extended.
+ * Legacy name `scrapeHHJobs` kept for callers; prefer `scrapeCatalog`.
  */
 export async function scrapeHHJobs(
   keywords: string[] = [...DEFAULT_SEED_KEYWORDS],
   locationId: number = 113 // Россия (HH area). Города сужают выборку слишком сильно.
+): Promise<ScrapeResult> {
+  return scrapeCatalog(keywords, locationId);
+}
+
+export type ScrapeFamilyId = 'hh' | 'superjob' | 'extended';
+
+export interface ScrapeCatalogOptions {
+  families?: ScrapeFamilyId[];
+  /** Enrich HH/SJ batches. Default: ENRICH_ON_SCRAPE=true only (Phase 3: off). */
+  enrich?: boolean;
+  /** Enrich extended batches. Default: ENRICH_EXTENDED_ON_SCRAPE=true only. */
+  enrichExtended?: boolean;
+  /** Dev mock fallback when every family returns nothing (default true). */
+  allowMockFallback?: boolean;
+  /** Injectable fetchers for unit tests. */
+  fetchHh?: (keywords: string[], locationId: number) => Promise<JobInput[]>;
+  fetchSj?: (keywords: string[]) => Promise<JobInput[]>;
+  fetchExtended?: typeof scrapeExtendedSources;
+  persist?: typeof persistScrapedJobs;
+}
+
+export interface FamilyRunReport {
+  family: ScrapeFamilyId;
+  scraped: number;
+  saved: number;
+  sourcesUsed: string[];
+  errors: string[];
+  ms: number;
+  bySource?: Record<string, { scraped: number; saved: number }>;
+}
+
+function familyTimeoutMs(family: ScrapeFamilyId): number {
+  const defaults: Record<ScrapeFamilyId, number> = {
+    hh: 10 * 60 * 1000,
+    superjob: 8 * 60 * 1000,
+    extended: 6 * 60 * 1000,
+  };
+  const envKeys: Record<ScrapeFamilyId, string> = {
+    hh: 'SCRAPE_HH_TIMEOUT_MS',
+    superjob: 'SCRAPE_SJ_TIMEOUT_MS',
+    extended: 'SCRAPE_EXTENDED_TIMEOUT_MS',
+  };
+  const raw = parseInt(process.env[envKeys[family]] || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : defaults[family];
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Phase 1 orchestrator: HH | SuperJob | Extended via allSettled + per-family persist.
+ */
+export async function scrapeCatalog(
+  keywords: string[] = [...DEFAULT_SEED_KEYWORDS],
+  locationId: number = 113,
+  options: ScrapeCatalogOptions = {}
 ): Promise<ScrapeResult> {
   const result: ScrapeResult = {
     success: false,
@@ -156,130 +268,201 @@ export async function scrapeHHJobs(
     errors: [],
     sourcesUsed: [],
     mockJobsUsed: false,
+    bySource: {},
+    familyReports: [],
   };
 
-  try {
-    logger.info('Starting job scraping...');
+  const families: ScrapeFamilyId[] = options.families ?? ['hh', 'superjob', 'extended'];
+  // Phase 3: enrich off by default (ENRICH_ON_SCRAPE=true or options.enrich=true to opt in).
+  const enrich =
+    options.enrich === true ||
+    (options.enrich === undefined && process.env.ENRICH_ON_SCRAPE === 'true');
+  const enrichExtended =
+    options.enrichExtended === true ||
+    (options.enrichExtended === undefined &&
+      process.env.ENRICH_EXTENDED_ON_SCRAPE === 'true');
+  const allowMockFallback = options.allowMockFallback !== false;
+  const persist = options.persist ?? persistScrapedJobs;
+  const fetchHh = options.fetchHh ?? scrapeHHViaAPI;
+  const fetchSj = options.fetchSj ?? scrapeSuperJobViaAPI;
+  const fetchExtended = options.fetchExtended ?? scrapeExtendedSources;
 
-    // Check if mock jobs are explicitly enabled
+  try {
+    logger.info(
+      `Starting catalog scrape (families=${families.join(',')}, enrich=${enrich}, ` +
+        `enrichExtended=${enrichExtended}, keywords=${keywords.slice(0, 5).join(', ')}…)`
+    );
+
     if (USE_MOCK_JOBS) {
       logger.info('USE_MOCK_JOBS is enabled - generating mock jobs only');
       const mockJobs = generateMockJobs(keywords);
+      const persisted = await persist(mockJobs, { enrich: false });
       result.jobsScraped = mockJobs.length;
+      result.jobsSaved = persisted.saved;
+      result.errors.push(...persisted.errors);
       result.mockJobsUsed = true;
       result.sourcesUsed.push('mock');
-
-      // Save mock jobs
-      for (const job of mockJobs) {
-        try {
-          await jobRepository.createOrUpdate(job);
-          result.jobsSaved++;
-        } catch (error: unknown) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          logger.error(`Failed to save job ${job.source_url}:`, errorMsg);
-          result.errors.push(`Failed to save job: ${errorMsg}`);
-        }
-      }
-
-      result.success = true;
-      logger.info(
-        `Mock job generation completed: ${result.jobsScraped} generated, ${result.jobsSaved} saved`
-      );
+      result.success = result.jobsSaved > 0;
       return result;
     }
 
-    // Try real sources first
-    const jobs: JobInput[] = [];
-    let allSourcesFailed = true;
+    const runFamily = async (family: ScrapeFamilyId): Promise<FamilyRunReport> => {
+      const started = Date.now();
+      const report: FamilyRunReport = {
+        family,
+        scraped: 0,
+        saved: 0,
+        sourcesUsed: [],
+        errors: [],
+        ms: 0,
+      };
 
-    // Try to use HH.ru API (if auth is configured)
-    if (hasHHAuthConfig()) {
-      try {
+      if (family === 'hh') {
+        if (!hasHHAuthConfig()) {
+          logger.info('HH auth is not configured — skipping HH family');
+          report.ms = Date.now() - started;
+          return report;
+        }
         logger.info('Attempting to scrape jobs from HH.ru API...');
-        const apiJobs = await scrapeHHViaAPI(keywords, locationId);
-        if (apiJobs.length > 0) {
-          jobs.push(...apiJobs);
-          result.sourcesUsed.push('hh.ru-api');
-          allSourcesFailed = false;
-          logger.info(`Successfully scraped ${apiJobs.length} jobs via HH.ru API`);
+        const jobs = await fetchHh(keywords, locationId);
+        report.scraped = jobs.length;
+        if (jobs.length > 0) {
+          report.sourcesUsed.push('hh.ru-api');
+          const persisted = await persist(jobs, { enrich });
+          report.saved = persisted.saved;
+          report.errors.push(...persisted.errors);
+          report.bySource = persisted.bySource;
+          logger.info(`HH family: scraped=${jobs.length} saved=${persisted.saved}`);
         } else {
           logger.info('HH.ru API returned no jobs');
         }
-      } catch (error: unknown) {
-        logger.warn('HH.ru API scraping failed:', error);
-        result.errors.push(
-          `HH API error: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    } else {
-      logger.info(
-        'HH auth is not configured (HH_ACCESS_TOKEN / HH_API_KEY / HH_CLIENT_ID+HH_CLIENT_SECRET) - skipping HH.ru API scraping'
-      );
-    }
-
-    // Try SuperJob API (simple alternative to HH.ru)
-    if (process.env.SUPERJOB_API_KEY) {
-      try {
+      } else if (family === 'superjob') {
+        if (!process.env.SUPERJOB_API_KEY) {
+          logger.info('SUPERJOB_API_KEY not set — skipping SuperJob family');
+          report.ms = Date.now() - started;
+          return report;
+        }
         logger.info('Attempting to scrape jobs from SuperJob API...');
-        const superJobJobs = await scrapeSuperJobViaAPI(keywords);
-        if (superJobJobs.length > 0) {
-          jobs.push(...superJobJobs);
-          result.sourcesUsed.push('superjob-api');
-          allSourcesFailed = false;
-          logger.info(`Successfully scraped ${superJobJobs.length} jobs via SuperJob API`);
+        const jobs = await fetchSj(keywords);
+        report.scraped = jobs.length;
+        if (jobs.length > 0) {
+          report.sourcesUsed.push('superjob-api');
+          const persisted = await persist(jobs, { enrich });
+          report.saved = persisted.saved;
+          report.errors.push(...persisted.errors);
+          report.bySource = persisted.bySource;
+          logger.info(`SuperJob family: scraped=${jobs.length} saved=${persisted.saved}`);
         } else {
           logger.info('SuperJob API returned no jobs');
         }
-      } catch (error: unknown) {
-        logger.warn('SuperJob API scraping failed:', error);
-        result.errors.push(
-          `SuperJob API error: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    } else {
-      logger.info('SUPERJOB_API_KEY not set - skipping SuperJob API scraping');
-    }
-
-    // If all sources failed or returned no jobs, check if we should use mock data as fallback
-    if (jobs.length === 0 && allSourcesFailed) {
-      logger.warn('All job sources failed or returned no jobs');
-
-      // In production, don't use mock data unless explicitly enabled
-      const isProduction = process.env.NODE_ENV === 'production';
-
-      if (isProduction) {
-        logger.error(
-          'Production mode: Cannot use mock jobs as fallback. Please configure real job sources.'
-        );
-        result.errors.push(
-          'No jobs found from real sources and mock jobs are disabled in production'
-        );
-        return result;
       } else {
-        logger.warn('Development mode: Using mock jobs as fallback since all sources failed');
-        const mockJobs = generateMockJobs(keywords);
-        jobs.push(...mockJobs);
-        result.mockJobsUsed = true;
-        result.sourcesUsed.push('mock-fallback');
-        logger.warn(`Generated ${mockJobs.length} mock jobs as fallback`);
+        // Extended: persist after each connector (Kabi); enrich opt-in via enrichExtended.
+        let saved = 0;
+        const bySource: Record<string, { scraped: number; saved: number }> = {};
+        const extended = await fetchExtended(keywords, {
+          afterConnector: async ({ connectorId, jobs }) => {
+            if (jobs.length === 0) return;
+            const persisted = await persist(jobs, { enrich: enrichExtended });
+            saved += persisted.saved;
+            report.errors.push(...persisted.errors);
+            for (const [src, counts] of Object.entries(persisted.bySource)) {
+              if (!bySource[src]) bySource[src] = { scraped: 0, saved: 0 };
+              bySource[src].scraped += counts.scraped;
+              bySource[src].saved += counts.saved;
+            }
+            logger.info(
+              `Extended source ${connectorId}: persisted ${persisted.saved}/${jobs.length}`
+            );
+          },
+        });
+        report.scraped = extended.jobs.length;
+        report.saved = saved;
+        report.bySource = bySource;
+        report.sourcesUsed.push(...extended.sourcesUsed);
+        report.errors.push(...extended.errors);
+        logger.info(
+          `Extended family: scraped=${extended.jobs.length} saved=${saved} ` +
+            `sources=${extended.sourcesUsed.join(',') || '(none)'}`
+        );
+      }
+
+      report.ms = Date.now() - started;
+      return report;
+    };
+
+    const settled = await Promise.allSettled(
+      families.map((family) =>
+        withTimeout(runFamily(family), familyTimeoutMs(family), `${family} family`)
+      )
+    );
+
+    const reports: FamilyRunReport[] = [];
+    for (let i = 0; i < settled.length; i += 1) {
+      const family = families[i];
+      const outcome = settled[i];
+      if (outcome.status === 'fulfilled') {
+        reports.push(outcome.value);
+      } else {
+        const msg =
+          outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+        logger.warn(`Catalog family ${family} failed: ${msg}`);
+        result.errors.push(`${family}: ${msg}`);
+        reports.push({
+          family,
+          scraped: 0,
+          saved: 0,
+          sourcesUsed: [],
+          errors: [msg],
+          ms: 0,
+        });
       }
     }
 
-    // Save jobs to database
-    for (const job of jobs) {
-      try {
-        const isMock = job.source === 'demo';
-        const enrichedJob = isMock ? job : await enrichJobWithLLM(job);
-        await jobRepository.createOrUpdate(enrichedJob);
-        result.jobsSaved++;
-      } catch (error: unknown) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        logger.error(`Failed to save job ${job.source_url}:`, errorMsg);
-        result.errors.push(`Failed to save job: ${errorMsg}`);
+    for (const report of reports) {
+      result.jobsScraped += report.scraped;
+      result.jobsSaved += report.saved;
+      result.sourcesUsed.push(...report.sourcesUsed);
+      result.errors.push(...report.errors);
+      if (report.bySource) {
+        for (const [src, counts] of Object.entries(report.bySource)) {
+          if (!result.bySource![src]) result.bySource![src] = { scraped: 0, saved: 0 };
+          result.bySource![src].scraped += counts.scraped;
+          result.bySource![src].saved += counts.saved;
+        }
+      }
+      logger.info(
+        `Family report ${report.family}: scraped=${report.scraped} saved=${report.saved} ms=${report.ms}`
+      );
+    }
+    result.familyReports = reports;
+    logger.info(`ScrapeReport ${JSON.stringify({ bySource: result.bySource, families: reports.map((r) => ({ family: r.family, scraped: r.scraped, saved: r.saved, ms: r.ms })) })}`);
+
+
+    if (result.jobsSaved === 0 && result.jobsScraped === 0) {
+      logger.warn('All job source families failed or returned no jobs');
+      if (allowMockFallback) {
+        const isProduction = process.env.NODE_ENV === 'production';
+        if (isProduction) {
+          result.errors.push(
+            'No jobs found from real sources and mock jobs are disabled in production'
+          );
+        } else {
+          logger.warn('Development mode: Using mock jobs as fallback since all sources failed');
+          const mockJobs = generateMockJobs(keywords);
+          const persisted = await persist(mockJobs, { enrich: false });
+          result.jobsScraped = mockJobs.length;
+          result.jobsSaved = persisted.saved;
+          result.errors.push(...persisted.errors);
+          result.mockJobsUsed = true;
+          result.sourcesUsed.push('mock-fallback');
+        }
+      } else if (families.length === 1 && families[0] === 'extended') {
+        result.errors.push(
+          'No extended jobs fetched (flag off, empty connectors, or keyword filters)'
+        );
       }
     }
 
-    result.jobsScraped = jobs.length;
     result.success = result.jobsSaved > 0;
 
     if (result.mockJobsUsed) {
@@ -287,12 +470,11 @@ export async function scrapeHHJobs(
         `⚠️  Job scraping completed using MOCK DATA: ${result.jobsScraped} generated, ${result.jobsSaved} saved`
       );
       logger.warn(`   Sources used: ${result.sourcesUsed.join(', ')}`);
-      logger.warn(`   This should NOT happen in production!`);
     } else {
       logger.info(
-        `✅ Job scraping completed: ${result.jobsScraped} scraped, ${result.jobsSaved} saved`
+        `✅ Catalog scrape completed: scraped=${result.jobsScraped} saved=${result.jobsSaved}`
       );
-      logger.info(`   Sources used: ${result.sourcesUsed.join(', ')}`);
+      logger.info(`   Sources used: ${result.sourcesUsed.join(', ') || '(none)'}`);
     }
   } catch (error: unknown) {
     logger.error('Job scraping failed:', error);
@@ -300,6 +482,22 @@ export async function scrapeHHJobs(
   }
 
   return result;
+}
+
+/**
+ * Extended-only ingest (Phase 0 pipeline refactor).
+ * Does not touch HH/SJ. Persists after each connector (Kabi early-save).
+ * Enrichment off by default so a slow/dead ai-nlp cannot block catalog fill.
+ */
+export async function scrapeExtendedOnly(
+  keywords: string[] = [...DEFAULT_SEED_KEYWORDS],
+  options: PersistJobsOptions = {}
+): Promise<ScrapeResult> {
+  return scrapeCatalog(keywords, 113, {
+    families: ['extended'],
+    enrichExtended: options.enrich === true,
+    allowMockFallback: false,
+  });
 }
 
 /**

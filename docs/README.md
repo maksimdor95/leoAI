@@ -24,6 +24,7 @@
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Сервисы, порты, AI, голос, данные |
 | [OPERATIONS.md](./OPERATIONS.md) | Локальный запуск, env, ops-чеклист |
 | [ROADMAP.md](./ROADMAP.md) | Статус, ближайшие задачи, MVP 1 |
+| [JOB_SOURCES_EXPANSION.md](./JOB_SOURCES_EXPANSION.md) | Расширение источников вакансий (M7 / бигтех API) |
 | [STAGING_DEPLOY.md](./STAGING_DEPLOY.md) | Деплой на VPS (`dev:deploy:staging`) |
 | [ALPHA_TEST.md](./ALPHA_TEST.md) | Чеклист перед ссылкой в канал |
 | [INTERVIEW_TRAINER_PROMPT_V2.md](./INTERVIEW_TRAINER_PROMPT_V2.md) | Interview Prep Prompt V2 |

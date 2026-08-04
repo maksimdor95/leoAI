@@ -1438,7 +1438,9 @@ function resolveInterviewModeLabel(label: string): InterviewPrepMode | null {
   if (v.includes('кейс')) return 'case';
   if (v.includes('мок')) return 'mock';
   if (v.includes('star') || v.includes('поведен')) return 'star';
-  if (v.includes('работодател')) return 'employer_questions';
+  if (v.includes('работодател') || v === 'вопросы' || v.includes('вопросы hr')) {
+    return 'employer_questions';
+  }
   return null;
 }
 
@@ -1459,7 +1461,7 @@ export function detectInterviewModeCommandFromUserText(raw: string): InterviewPr
   if (/^(кейс|case)$/i.test(value)) return 'case';
   if (/^(мок-интервью|мок|mock)$/i.test(value)) return 'mock';
   if (/^(star|стар)$/i.test(value)) return 'star';
-  if (/^(вопросы работодателю|employer_questions?)$/i.test(value)) {
+  if (/^(вопросы работодателю|вопросы|employer_questions?)$/i.test(value)) {
     return 'employer_questions';
   }
 
@@ -1551,11 +1553,11 @@ function buildVacancyProfileCard(
       { id: 'diagnostics', label: 'Диагностика', action: 'interview_mode:diagnostics' },
       { id: 'theory', label: 'Теория', action: 'interview_mode:theory' },
       { id: 'case', label: 'Кейс', action: 'interview_mode:case' },
-      { id: 'mock', label: 'Мок-интервью', action: 'interview_mode:mock' },
+      { id: 'mock', label: 'Мок', action: 'interview_mode:mock' },
       { id: 'star', label: 'STAR', action: 'interview_mode:star' },
       {
         id: 'employer_questions',
-        label: 'Вопросы работодателю',
+        label: 'Вопросы',
         action: 'interview_mode:employer_questions',
       },
     ],
@@ -1655,6 +1657,7 @@ function mergeCollectedWithPrepProgress(
   const merged = { ...collectedData, ...patch };
   if (prepPlan?.length) {
     merged.prepProgress = computePrepProgress(prepPlan, merged);
+    merged.prepLastActiveAt = new Date().toISOString();
   }
   return merged;
 }
@@ -2570,6 +2573,7 @@ async function handleInterviewPrepReply(
     result.metadataUpdates.collectedData = {
       ...result.metadataUpdates.collectedData,
       prepProgress: computePrepProgress(prepPlan, merged),
+      prepLastActiveAt: new Date().toISOString(),
     };
   }
   return {

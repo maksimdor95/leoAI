@@ -88,5 +88,7 @@ export interface MatchedJobPreviewContext {
   source?: string;
   sourceUrl?: string;
   reasons?: string[];
+  matchedSkills?: string[];
+  missingSkills?: string[];
   variant: 'recommended' | 'weak';
 }

@@ -4,6 +4,7 @@ import {
   MATCH_SCORE_THRESHOLD,
   WEAK_MATCH_SCORE_FLOOR,
   filterWeakMatchesForPresentation,
+  softCapMatchScore,
 } from '../matcher';
 import { CollectedData } from '../userService';
 import type { MatchingScore } from '../matcher';
@@ -437,5 +438,90 @@ describe('matchJobs — stored __enriched', () => {
     expect(pmMatch?.jobFamily).toBe('product');
     expect(pmMatch?.familyMatch).toBe('same');
     expect(pmMatch?.matchedSkills?.length).toBeGreaterThan(0);
+  });
+});
+
+describe('matchJobs — substantive reasons over HH meta noise', () => {
+  it('softCapMatchScore compresses scores above 88', () => {
+    expect(softCapMatchScore(80)).toBe(80);
+    expect(softCapMatchScore(88)).toBe(88);
+    expect(softCapMatchScore(100)).toBeLessThanOrEqual(97);
+    expect(softCapMatchScore(120)).toBeLessThanOrEqual(97);
+  });
+  it('surfaces role/skills before schedule and matches X5-like HH skill tags via aliases', () => {
+    const x5 = mkJob({
+      id: 'x5-po',
+      title: 'Владелец продукта/Product owner',
+      company: 'X5 Tech',
+      location: ['Москва'],
+      description:
+        'Формирование видения и стратегии Продукта. Управление бэклогом. A/B тесты и KPI. Agile/Scrum.',
+      requirements: 'Опыт Product Owner от 3 лет, Agile/Scrum',
+      skills: [
+        'Стратегический менеджмент',
+        'Управление командой',
+        'Продуктовые метрики',
+        'Управление ресурсами',
+        'Управление изменениями',
+        'Продуктовая стратегия',
+        'Управление бэклогом',
+      ],
+      role_family: 'product',
+      work_mode: 'hybrid',
+      source_meta: {
+        experienceLabel: 'От 3 до 6 лет',
+        experienceId: 'between3And6',
+        employmentLabel: 'Полная занятость',
+        employmentId: 'full',
+        employmentForms: ['Трудовой договор'],
+        employmentFormIds: ['FULL'],
+        scheduleLabel: 'Полный день',
+        scheduleId: 'fullDay',
+        workScheduleDays: '5/2',
+        workScheduleDayIds: ['FIVE_ON_TWO_OFF'],
+        workingHours: '8 часов',
+        workingHourIds: ['HOURS_8'],
+        workFormatLabel: 'Гибрид',
+        workFormatIds: ['HYBRID'],
+      },
+    });
+
+    const profile: CollectedData = {
+      desiredRole: 'Product Owner',
+      totalExperience: 7,
+      location: ['Москва'],
+      workMode: 'hybrid',
+      skills: [
+        'Управление бэклогом',
+        'Управление командой',
+        'Product vision',
+        'Business Strategy',
+        'Agile Project Management',
+        'управление изменениями',
+      ],
+    };
+
+    const res = matchJobs([x5], profile);
+    const entry = res.matches[0] ?? res.weakMatches[0];
+    expect(entry).toBeDefined();
+    expect(entry!.score).toBeGreaterThanOrEqual(MATCH_SCORE_THRESHOLD);
+
+    const reasonsJoined = entry!.reasons.join(' | ').toLowerCase();
+    expect(reasonsJoined).toMatch(/направлен|должност|навык/);
+    expect(reasonsJoined).toMatch(/опыт пересекается с обязанностями/);
+    expect(reasonsJoined).not.toMatch(/график: 5\/2/);
+    expect(reasonsJoined).not.toMatch(/рабочие часы: 8/);
+    expect(entry!.matchedSkills?.length).toBeGreaterThanOrEqual(3);
+    // Soft HH-теги (стратегический менеджмент и т.п.) при сильном fit не обязаны быть gaps
+    expect(entry!.score).toBeLessThanOrEqual(97);
+
+    const roleOrSkillsIdx = entry!.reasons.findIndex(
+      (r) =>
+        /должност|навык|совпадение фраз/i.test(r)
+    );
+    const scheduleIdx = entry!.reasons.findIndex((r) => /график совпадает/i.test(r));
+    if (roleOrSkillsIdx >= 0 && scheduleIdx >= 0) {
+      expect(roleOrSkillsIdx).toBeLessThan(scheduleIdx);
+    }
   });
 });

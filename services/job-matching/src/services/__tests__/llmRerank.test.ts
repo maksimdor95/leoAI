@@ -1,4 +1,4 @@
-import { applyLlmRerankDeltas } from '../llmRerank';
+import { applyLlmRerankDeltas, buildJobRerankSnippet } from '../llmRerank';
 import type { MatchingScore } from '../matcher';
 import type { Job } from '../../models/job';
 
@@ -45,6 +45,7 @@ describe('llmRerank applyLlmRerankDeltas', () => {
     expect(out[0].job.id).toBe('b');
     expect(out[0].score).toBe(93);
     expect(out[0].reasons[0]).toContain('AI:');
+    expect(out[0].reasons[0]).toContain('Сильный product/SaaS fit');
     expect(out[1].job.id).toBe('a');
     expect(out[1].score).toBe(82);
   });
@@ -53,5 +54,25 @@ describe('llmRerank applyLlmRerankDeltas', () => {
     const matches = [mkMatch('a', 50)];
     const out = applyLlmRerankDeltas(matches, [{ id: 'a', delta: 100 }]);
     expect(out[0].score).toBe(62); // +12 clamp
+  });
+
+  it('uses human-readable delta explain when LLM omits explain', () => {
+    const matches = [mkMatch('a', 70)];
+    const out = applyLlmRerankDeltas(matches, [{ id: 'a', delta: 4 }]);
+    expect(out[0].reasons[0]).toMatch(/AI: выше по fit опыта/);
+  });
+});
+
+describe('buildJobRerankSnippet', () => {
+  it('includes description, requirements and skills up to limit', () => {
+    const snippet = buildJobRerankSnippet({
+      description: 'Формирование видения и стратегии. '.repeat(40),
+      requirements: 'Опыт PO от 3 лет, Agile/Scrum',
+      skills: ['Управление бэклогом', 'Продуктовые метрики'],
+    });
+    expect(snippet.length).toBeGreaterThan(280);
+    expect(snippet.length).toBeLessThanOrEqual(800);
+    expect(snippet).toContain('Agile/Scrum');
+    expect(snippet).toContain('Управление бэклогом');
   });
 });

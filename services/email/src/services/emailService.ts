@@ -308,6 +308,44 @@ export async function sendPasswordResetEmail(params: {
   }
 }
 
+export type PrepContinueEmailPayload = {
+  userEmail: string;
+  userName?: string;
+  role?: string;
+  stageLabel: string;
+  nextTitle: string;
+  durationMin: number;
+  stepIndex: number;
+  stepTotal: number;
+  progressPercent: number;
+  continueUrl: string;
+};
+
+export async function sendPrepContinueEmail(payload: PrepContinueEmailPayload): Promise<boolean> {
+  try {
+    const html = await compileTemplate(TemplateName.PREP_CONTINUE, {
+      userName: payload.userName || '',
+      role: payload.role || '',
+      stageLabel: payload.stageLabel,
+      nextTitle: payload.nextTitle,
+      durationMin: payload.durationMin || 20,
+      stepIndex: payload.stepIndex,
+      stepTotal: payload.stepTotal,
+      progressPercent: payload.progressPercent,
+      continueUrl: payload.continueUrl,
+    });
+
+    return await sendEmail({
+      to: payload.userEmail,
+      subject: `Продолжите подготовку: ${payload.nextTitle}`,
+      html,
+    });
+  } catch (error: unknown) {
+    logger.error('Failed to send prep continue email:', error);
+    return false;
+  }
+}
+
 /**
  * Отправка заявки на консультацию («Написать нам») команде LEO.
  */

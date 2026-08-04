@@ -372,6 +372,26 @@ export class JobRepository {
   }
 
   /**
+   * Jobs without embeddings — for out-of-band enrichment (Phase 3).
+   */
+  async findMissingEmbeddings(limit: number = 50): Promise<Job[]> {
+    const capped = Math.min(Math.max(1, limit), 200);
+    const query = `
+      SELECT * FROM jobs
+      WHERE embedding IS NULL
+      ORDER BY updated_at DESC
+      LIMIT $1
+    `;
+    try {
+      const result = await pool.query(query, [capped]);
+      return result.rows.map((row) => this.mapRowToJob(row));
+    } catch (error: unknown) {
+      logger.error('Error finding jobs missing embeddings:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Map database row to Job object
    */
   private mapRowToJob(row: JobRow): Job {

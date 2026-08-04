@@ -12,6 +12,7 @@ export enum TemplateName {
   WELCOME = 'welcome-email',
   JOBS_DIGEST = 'jobs-digest',
   PASSWORD_RESET = 'password-reset',
+  PREP_CONTINUE = 'prep-continue',
 }
 
 const templatesDir = path.join(__dirname, '../templates');

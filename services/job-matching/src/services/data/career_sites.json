@@ -1,0 +1,49 @@
+{
+  "notes": "HTML career sites for wave B. Ozon blocked (antibot). Wave A uses dedicated API connectors. T-Bank: Kabi M7 parity (IT SSR + all/moscow).",
+  "sites": [
+    {
+      "id": "avito",
+      "name": "Авито",
+      "kind": "html_list",
+      "enabled": true,
+      "list_url": "https://career.avito.com/vacancies/",
+      "path_regex": "/vacancies/[^/]+/\\d+",
+      "path_exclude": ["/teams/job/"]
+    },
+    {
+      "id": "vk",
+      "name": "VK",
+      "kind": "html_list",
+      "enabled": true,
+      "list_url": "https://team.vk.company/vacancy/?search=&town=",
+      "path_regex": "/vacancy/\\d+"
+    },
+    {
+      "id": "tbank",
+      "name": "Т-Банк",
+      "kind": "html_list",
+      "enabled": true,
+      "list_url": "https://www.tbank.ru/career/vacancies/it/",
+      "list_urls": [
+        "https://www.tbank.ru/career/vacancies/it/",
+        "https://www.tbank.ru/career/it/about/",
+        "https://www.tbank.ru/career/vacancies/all/moscow/"
+      ],
+      "link_contains": ["/vacancy/"],
+      "path_regex": "/career/[^/]+/vacancy/[^/]+/[^/]+/[0-9a-f-]{8,}",
+      "path_exclude": [
+        "operator-rannego",
+        "predstavitel",
+        "operator_rannego"
+      ]
+    },
+    {
+      "id": "ozon",
+      "name": "Ozon",
+      "kind": "blocked_antibot",
+      "enabled": false,
+      "list_url": "https://job.ozon.ru/",
+      "notes": "HTTP 307 __rr loop — backlog"
+    }
+  ]
+}

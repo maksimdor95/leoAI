@@ -407,6 +407,37 @@ class ChatApiClient {
   }
 
   /**
+   * Interview Prep: сохранить темп спринт/марафон в collectedData.
+   */
+  async setPrepPreferences(prepPace: 'sprint' | 'marathon'): Promise<SessionMetadata | null> {
+    if (!this.sessionId) {
+      this.onError?.({ message: 'Сессия не инициализирована' });
+      return null;
+    }
+
+    try {
+      const response = await this.request<{ metadata?: SessionMetadata }>(
+        `/api/chat/session/${this.sessionId}/prep-preferences`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ prepPace }),
+        },
+        15000
+      );
+      if (response.metadata) {
+        this.applySessionMetadata(response.metadata);
+        return response.metadata;
+      }
+      return null;
+    } catch (error) {
+      this.onError?.({
+        message: error instanceof Error ? error.message : 'Не удалось сохранить темп подготовки',
+      });
+      return null;
+    }
+  }
+
+  /**
    * Pull latest session metadata (e.g. after background profile enrichment).
    */
   async refreshSessionMetadata(): Promise<void> {
@@ -819,6 +850,7 @@ export function createChatApi(
     analyzeVacancy: (vacancyText: string, displayLabel: string) =>
       client.analyzeVacancy(vacancyText, displayLabel),
     mergeCollectedData: (data: Record<string, unknown>) => client.mergeCollectedData(data),
+    setPrepPreferences: (prepPace: 'sprint' | 'marathon') => client.setPrepPreferences(prepPace),
     refreshSessionMetadata: () => client.refreshSessionMetadata(),
     executeCommand: (commandId: string, action: string) => client.executeCommand(commandId, action),
     generateResume: () => client.generateResume(),

@@ -12,7 +12,8 @@
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "test:db": "ts-node-dev --transpile-only src/test-connection.ts",
-    "init:db": "ts-node-dev --transpile-only src/init-db.ts"
+    "init:db": "ts-node-dev --transpile-only src/init-db.ts",
+    "worker:scrape": "ts-node --transpile-only src/workers/runScrapeWorker.ts"
   },
   "keywords": [
     "job-matching",
@@ -31,9 +32,11 @@
     "express": "^4.18.2",
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
+    "https-proxy-agent": "^7.0.6",
     "ioredis": "^5.3.2",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "socks-proxy-agent": "^8.0.5"
   },
   "devDependencies": {
     "@types/cheerio": "^0.22.35",

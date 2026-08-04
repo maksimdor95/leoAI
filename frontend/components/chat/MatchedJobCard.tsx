@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { HeartFilled, HeartOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { formatJobSourceLabel } from '@/lib/jobSourceLabel';
 import { humanizeMatchReasons } from '@/lib/humanizeMatchReasons';
+import { normalizeVacancyCardFields } from '@/lib/normalizeVacancyCard';
 import { useHumeTheme } from '@/lib/useHumeTheme';
 
 const SWIPE_THRESHOLD_PX = 56;
@@ -15,6 +16,8 @@ type MatchedJobCardProps = {
   source?: string;
   sourceUrl?: string;
   reasons?: string[];
+  matchedSkills?: string[];
+  missingSkills?: string[];
   isNew?: boolean;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
@@ -39,6 +42,8 @@ export function MatchedJobCard({
   score,
   source,
   reasons,
+  matchedSkills,
+  missingSkills,
   isNew,
   isFavorite = false,
   onToggleFavorite,
@@ -62,9 +67,14 @@ export function MatchedJobCard({
   const dragging = useRef(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const isWeak = variant === 'weak';
-  const humanized = humanizeMatchReasons(reasons);
+  const humanized = humanizeMatchReasons(reasons, { matched: matchedSkills, missing: missingSkills });
   const hasReasons = humanized.length > 0;
   const sourceLabel = formatJobSourceLabel(source);
+  const { title: displayTitle, company: displayCompany } = normalizeVacancyCardFields({
+    title,
+    company,
+    source,
+  });
   const swipeEnabled = Boolean(onSwipeLike || onSwipeDislike);
 
   const linkClass = isHume
@@ -241,7 +251,7 @@ export function MatchedJobCard({
       ref={cardRef}
       role="group"
       aria-label={
-        swipeEnabled ? `${title}, ${company}. ${tapHint}` : `${title}, ${company}`
+        swipeEnabled ? `${displayTitle}, ${displayCompany}. ${tapHint}` : `${displayTitle}, ${displayCompany}`
       }
       onPointerDown={onPointerDownCard}
       onPointerMove={onPointerMoveCard}
@@ -340,7 +350,7 @@ export function MatchedJobCard({
               : 'text-sm font-semibold text-white leading-snug'
           }
         >
-          {title}
+          {displayTitle}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5">
           {isNew ? (
@@ -367,7 +377,7 @@ export function MatchedJobCard({
       </div>
 
       <div className={isHume ? 'mt-1 hume-body-sm !text-xs' : 'mt-1 text-xs text-slate-300'}>
-        {company}
+        {displayCompany}
       </div>
 
       <div
@@ -400,7 +410,15 @@ export function MatchedJobCard({
               {score}
             </span>
           ) : (
-            <span className="tabular-nums">{score}</span>
+            <span
+              className={
+                isHume
+                  ? 'font-medium tabular-nums text-[var(--color-ink)]'
+                  : 'font-medium tabular-nums text-green-400'
+              }
+            >
+              {score}
+            </span>
           )}
         </span>
         {sourceLabel ? (

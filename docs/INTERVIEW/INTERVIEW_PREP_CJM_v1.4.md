@@ -216,10 +216,15 @@ flowchart TB
 3. ~~IA: next step on top~~ overview
 4. ~~Скрыть пустые артефакты и режимы на старте~~
 
-**P1 — удержание**
-6. In-app «Продолжить с этапа N» при возврате.
-7. Email-дайджест с этапом (сервис `email`).
-8. Блок «Рекомендуемый темп» (уже частично в paceHint).
+**P1 — удержание (DoD закрыт)**
+
+| # | Пункт | Статус | Реализация |
+|---|--------|--------|------------|
+| 6 | In-app «Продолжить с этапа N» при паузе >24 ч | ✅ done | `resolvePrepContinue` + баннер в `PrepNextStepPanel`; `prepLastActiveAt` |
+| 7 | Email-дайджест с этапом при паузе ≥24 ч | ✅ done | Redis ZSET `prep:reminders` + `startPrepReminderWorker`; отправка через `/send-prep-continue-internal`; не шлётся сразу после шага; спринт отменяет очередь |
+| 8 | Блок темпа спринт/марафон | ✅ done | UI + `POST .../prep-preferences` → `collectedData.prepPace`; влияет на schedule/cancel reminder |
+
+**P1 remaining:** нет (follow-up вне DoD: North Star PostHog).
 
 **P2 — модель данных**
 9. `prepStages[]` вместо привязки к `day` в `collectedData`.

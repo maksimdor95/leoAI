@@ -16,6 +16,8 @@ import { useHumeTheme } from '@/lib/useHumeTheme';
 type MatchReasonsPopoverProps = {
   score: number;
   reasons?: string[];
+  matchedSkills?: string[];
+  missingSkills?: string[];
   variant?: 'recommended' | 'weak';
   className?: string;
 };
@@ -44,6 +46,8 @@ function reasonTextClass(tone: 'positive' | 'negative' | 'neutral', isHume: bool
 export function MatchReasonsPopover({
   score,
   reasons,
+  matchedSkills,
+  missingSkills,
   variant = 'recommended',
   className = '',
 }: MatchReasonsPopoverProps) {
@@ -52,7 +56,7 @@ export function MatchReasonsPopover({
   const handleClose = useCallback(() => setOpen(false), []);
   useCloseOnScroll(open, handleClose);
   const isWeak = variant === 'weak';
-  const humanized = humanizeMatchReasons(reasons);
+  const humanized = humanizeMatchReasons(reasons, { matched: matchedSkills, missing: missingSkills });
   const accentClass = isHume
     ? isWeak
       ? 'text-[var(--color-meringue)]'

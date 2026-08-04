@@ -63,7 +63,9 @@ start_service() {
   local post_env=""
   local run_cmd="npm run dev"
 
-  if [[ "$PRODUCTION" -eq 1 ]]; then
+  if [[ "$mode" == "worker" ]]; then
+    run_cmd="npm run worker:scrape"
+  elif [[ "$PRODUCTION" -eq 1 ]]; then
     run_cmd="npm run start"
     if [[ "$mode" == "next-dev" ]]; then
       post_env="export NODE_ENV=production"
@@ -77,23 +79,40 @@ start_service() {
   fi
 
   # Staging VPS: backend must run with NODE_ENV=production (JWT/INTERNAL_API_KEY validators, secure cookies).
-  if [[ "$mode" != "next-dev" && "$ENV_FILE" == *staging* ]]; then
+  if [[ "$mode" != "next-dev" && "$mode" != "worker" && "$ENV_FILE" == *staging* ]]; then
     post_env="export NODE_ENV=production"
   fi
 
-  if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+  # Phase 2 DoD: job-matching API must not consume scrape queue inline.
+  if [[ "$name" == "job-matching" ]]; then
+    post_env="${post_env}
+export SCRAPE_INLINE_WORKER=false"
+  fi
+
+  if [[ "$mode" != "worker" ]] && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     echo "[$name] Port $port already busy, skipping start."
     return 0
   fi
 
+  if [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" >/dev/null 2>&1; then
+    echo "[$name] Already running (pid $(cat "$pid_file")), skipping start."
+    return 0
+  fi
+
   local mode_label="dev"
-  if [[ "$PRODUCTION" -eq 1 ]]; then
+  if [[ "$mode" == "worker" ]]; then
+    mode_label="worker"
+  elif [[ "$PRODUCTION" -eq 1 ]]; then
     mode_label="production"
   elif [[ "$FRONTEND_PRODUCTION" -eq 1 && "$mode" == "next-dev" ]]; then
     mode_label="frontend-production"
   fi
 
-  echo "[$name] Starting on port $port ($mode_label, env: $ENV_FILE)..."
+  if [[ "$mode" == "worker" ]]; then
+    echo "[$name] Starting scrape worker ($mode_label, env: $ENV_FILE)..."
+  else
+    echo "[$name] Starting on port $port ($mode_label, env: $ENV_FILE)..."
+  fi
   nohup bash -lc "
 while IFS= read -r line || [[ -n \"\$line\" ]]; do
   [[ -z \"\$line\" || \"\$line\" =~ ^[[:space:]]*# ]] && continue
@@ -124,6 +143,8 @@ start_service "user-profile" 3001 "services/user-profile"
 start_service "conversation" 3002 "services/conversation"
 start_service "ai-nlp" 3003 "services/ai-nlp"
 start_service "job-matching" 3004 "services/job-matching"
+# Dedicated scrape/enrich worker (Phase 2/3 DoD) — separate process from API :3004
+start_service "job-matching-worker" 0 "services/job-matching" "worker"
 start_service "email" 3005 "services/email"
 start_service "telegram-support" 3008 "services/telegram-support"
 start_service "report" 3007 "services/report"

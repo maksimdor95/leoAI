@@ -5,6 +5,7 @@
 
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
+import { extractAccessToken } from '../utils/extractAccessToken';
 import jobRepository, { resolveMatchScanLimit } from '../models/jobRepository';
 import { getUserProfile, getCollectedDataWithFallback } from '../services/userService';
 import {
@@ -17,8 +18,7 @@ import {
   normalizeForMatch,
 } from '../services/matcher';
 import { classifyProfileRoles, familyLabelRu } from '../services/roleFamily';
-import { scrapeHHJobs } from '../services/scraper';
-import { triggerScraping } from '../services/scrapingQueue';
+import { triggerScraping, scheduleLazyEnrichForMatchJobs } from '../services/scrapingQueue';
 import { deriveScrapeParams } from '../services/scrapeProfileParams';
 import {
   getSalaryEvaluation,
@@ -86,8 +86,8 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Get auth token from request
-    const token = req.headers.authorization?.replace('Bearer ', '') || '';
+    // Cookie / X-Auth-Token / Bearer — тот же источник, что и authenticateToken
+    const token = extractAccessToken(req) || '';
 
     // Get user profile (preferences optional — matching works from collectedData)
     let userProfile: Awaited<ReturnType<typeof getUserProfile>>;
@@ -182,6 +182,12 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
     };
 
     const { matches: matchedJobs, weakMatches, stats } = matchJobs(allJobs, collectedData, prefs);
+
+    // Phase 3: lazy out-of-band enrich for cards shown without embeddings (non-blocking).
+    scheduleLazyEnrichForMatchJobs([
+      ...matchedJobs.map((m) => m.job),
+      ...weakMatches.map((m) => m.job),
+    ]);
 
     const effectiveForSignals = normalizeForMatch(collectedData);
     const missingSkillsTop = (() => {
@@ -288,6 +294,8 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         jobFamily: match.jobFamily,
         familyMatch: match.familyMatch,
         demoteReasons: match.demoteReasons ?? null,
+        matchedSkills: match.matchedSkills ?? [],
+        missingSkills: match.missingSkills ?? [],
       })),
       count: returnedJobs.length,
       totalMatched: returnedJobs.length,
@@ -298,6 +306,8 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         jobFamily: match.jobFamily,
         familyMatch: match.familyMatch,
         demoteReasons: match.demoteReasons ?? null,
+        matchedSkills: match.matchedSkills ?? [],
+        missingSkills: match.missingSkills ?? [],
       })),
       weakCount: returnedWeak.length,
       weakTierTotal: returnedWeak.length,
@@ -359,37 +369,54 @@ export async function getJobDetails(req: AuthRequest, res: Response): Promise<vo
 
 /**
  * Trigger generic job scraping (diverse seed keyword set).
- * Оставлено для обратной совместимости: admin-кнопка «пересобрать каталог».
- * Для релевантного пользователю подбора используйте `scrapeForUser`.
+ * Phase 2: enqueue only — never call scrapeCatalog from the HTTP process path.
  */
 export async function refreshJobs(_req: AuthRequest, res: Response): Promise<void> {
   try {
-    logger.info('Manual generic job scraping triggered');
-
-    scrapeHHJobs()
-      .then((result) => {
-        if (result.mockJobsUsed) {
-          logger.warn('⚠️  Job scraping completed using MOCK DATA');
-        } else {
-          logger.info('✅ Job scraping completed successfully');
-        }
-        logger.info(
-          `   Sources=${result.sourcesUsed.join(', ')} scraped=${result.jobsScraped} saved=${result.jobsSaved}`
-        );
-        if (result.errors.length > 0) {
-          logger.warn(`   Errors: ${result.errors.join('; ')}`);
-        }
-      })
-      .catch((error) => {
-        logger.error('Job scraping failed:', error);
-      });
+    logger.info('Manual generic job scraping enqueued');
+    await triggerScraping({ origin: 'manual' });
 
     res.json({
-      message: 'Job scraping started',
-      note: 'Scraping runs in background. Check logs for progress.',
+      message: 'Job scraping enqueued',
+      note: 'Worker picks up the job. Check logs for progress.',
     });
   } catch (error: unknown) {
     logger.error('Error triggering job scraping:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * Phase 0/2: extended-only catalog fill (no HH/SJ) via queue.
+ * Auth: same as /refresh (JOB_CATALOG_TOKEN in prod).
+ */
+export async function scrapeExtendedJobs(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const body = (req.body || {}) as { keywords?: unknown; enrich?: unknown };
+    const keywords = Array.isArray(body.keywords)
+      ? body.keywords.filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
+      : undefined;
+    const enrich = body.enrich === true;
+
+    logger.info(
+      `Manual extended-only scraping enqueued (enrich=${enrich}, keywords=${keywords?.length ?? 'default'})`
+    );
+
+    await triggerScraping({
+      origin: 'extended-only',
+      families: ['extended'],
+      enrichExtended: enrich,
+      keywords: keywords && keywords.length > 0 ? keywords : undefined,
+    });
+
+    res.json({
+      message: 'Extended-only job scraping enqueued',
+      note: 'Runs via Bull worker without HH/SJ. Check logs / catalog by source.',
+      enrich,
+      keywords: keywords && keywords.length > 0 ? keywords : 'DEFAULT_SEED_KEYWORDS',
+    });
+  } catch (error: unknown) {
+    logger.error('Error triggering extended-only scraping:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -414,7 +441,7 @@ export async function scrapeForUser(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const token = req.headers.authorization?.replace('Bearer ', '') || '';
+    const token = extractAccessToken(req) || '';
     const collectedData = await getCollectedDataWithFallback(userId, token);
     const params = deriveScrapeParams(collectedData);
 

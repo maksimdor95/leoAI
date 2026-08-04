@@ -17,6 +17,18 @@ const router = Router();
 router.post('/send-jobs', authenticateToken, emailController.sendJobs);
 
 /**
+ * POST /api/email/send-prep-continue
+ * Interview Prep: remind to continue next stage (authenticated user)
+ */
+router.post('/send-prep-continue', authenticateToken, emailController.sendPrepContinue);
+
+/**
+ * POST /api/email/send-prep-continue-internal
+ * Deferred worker (≥24h) — X-Internal-Key, no user JWT
+ */
+router.post('/send-prep-continue-internal', emailController.sendPrepContinueInternal);
+
+/**
  * POST /api/email/send-welcome
  * Send welcome email
  */

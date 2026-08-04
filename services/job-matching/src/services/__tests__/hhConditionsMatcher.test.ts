@@ -5,6 +5,7 @@ import {
   matchHhExperienceFromMeta,
   matchHhVacancyConditions,
   matchHhWorkSchedule,
+  matchHhWorkingHours,
   resolveJobWorkMode,
   resolveUserEmploymentPreference,
 } from '../hhConditionsMatcher';
@@ -89,11 +90,18 @@ describe('hhConditionsMatcher', () => {
     expect(result?.points).toBe(-6);
   });
 
-  it('adds informational schedule reason when vacancy has schedule but profile does not', () => {
+  it('stays silent on schedule when profile has no preference', () => {
     const profile: CollectedData = { totalExperience: 8 };
     const result = matchHhWorkSchedule(FULL_META, profile);
     expect(result?.points).toBe(0);
-    expect(result?.reason).toContain('5/2');
+    expect(result?.reason).toBeUndefined();
+  });
+
+  it('stays silent on working hours when profile has no preference', () => {
+    const profile: CollectedData = { totalExperience: 8 };
+    const result = matchHhWorkingHours(FULL_META, profile);
+    expect(result?.points).toBe(0);
+    expect(result?.reason).toBeUndefined();
   });
 
   it('scores schedule when profile preference matches', () => {

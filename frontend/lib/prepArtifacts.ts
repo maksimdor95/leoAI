@@ -28,7 +28,7 @@ export const PREP_PACK_LABELS: Record<PrepPackType, string> = {
   star_pack: 'STAR-история',
   case_structure: 'Структура кейса',
   mock_summary: 'Итог мок-интервью',
-  employer_questions: 'Вопросы работодателю',
+  employer_questions: 'Вопросы',
   prep_complete: 'Итог подготовки',
 };
 

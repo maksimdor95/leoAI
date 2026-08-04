@@ -58,6 +58,11 @@ import {
   type ProfileSummaryExport,
 } from './services/summaryExport';
 import { handleConversationCompletion, triggerProfileDrivenScrape } from './services/integrationService';
+import {
+  syncPrepContinueReminder,
+  startPrepReminderWorker,
+} from './services/prepReminderQueue';
+import { parsePrepPace } from './utils/prepContinueReminder';
 import { enrichAndPersistProfile } from './services/profileEnrichmentService';
 import { createApplicationDraft } from './controllers/applicationDraftController';
 import { validateAndLogConfig } from './utils/configValidator';
@@ -90,6 +95,25 @@ const corsExplicitOrigins = new Set(
     .map((s) => s.trim())
     .filter(Boolean)
 );
+
+async function maybeSchedulePrepContinueReminder(params: {
+  sessionId: string;
+  email: string;
+}): Promise<void> {
+  const { sessionId, email } = params;
+  if (!email) {
+    return;
+  }
+  try {
+    const session = await getSession(sessionId);
+    if (!session) {
+      return;
+    }
+    await syncPrepContinueReminder({ session, email });
+  } catch (error: unknown) {
+    logger.error('Error scheduling prep-continue reminder:', error);
+  }
+}
 
 function corsOriginChecker(
   origin: string | undefined,
@@ -557,6 +581,16 @@ app.post('/api/chat/session/:id/message', authenticateRequest, async (req, res) 
       );
     }
 
+    // Interview Prep P1: перепланировать отложенный email (≥24 ч), не слать сразу
+    if (sessionForReply.metadata.product === 'interview-prep') {
+      maybeSchedulePrepContinueReminder({
+        sessionId: sessionForReply.id,
+        email: user.email || '',
+      }).catch((err) => {
+        logger.error('Error in REST prep-continue schedule:', err);
+      });
+    }
+
     // Mirror WebSocket behavior: trigger completion integration on REST path too.
     if (!replyResult.nextStepId && replyResult.metadataUpdates?.currentStepId === undefined) {
       const updatedSessionForCompletion = await getSession(session.id);
@@ -779,6 +813,56 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
   } catch (error: unknown) {
     logger.error('Error merging collected data:', error);
     res.status(500).json({ error: 'Failed to merge collected data' });
+  }
+});
+
+/**
+ * Interview Prep: сохранить темп (sprint/marathon) в collectedData и пересинхронизировать reminder.
+ */
+app.post('/api/chat/session/:id/prep-preferences', authenticateRequest, async (req, res) => {
+  try {
+    const user = (req as express.Request & { user: { userId: string; email: string } }).user;
+    const sessionId = req.params.id;
+    const prepPace = parsePrepPace((req.body as { prepPace?: unknown })?.prepPace);
+
+    if (!prepPace) {
+      res.status(400).json({ error: 'prepPace must be "sprint" or "marathon"' });
+      return;
+    }
+
+    const session = await getSession(sessionId);
+    if (!session || session.userId !== user.userId) {
+      res.status(404).json({ error: 'Session not found or unauthorized' });
+      return;
+    }
+
+    if (session.metadata.product !== 'interview-prep') {
+      res.status(400).json({ error: 'prep-preferences only for interview-prep sessions' });
+      return;
+    }
+
+    await updateSessionMetadata(session.id, {
+      collectedData: {
+        ...session.metadata.collectedData,
+        prepPace,
+        prepLastActiveAt: new Date().toISOString(),
+      },
+    });
+
+    const updated = await getSession(session.id);
+    if (updated) {
+      await syncPrepContinueReminder({ session: updated, email: user.email || '' });
+    }
+
+    const finalSession = await getSession(session.id);
+    res.json({
+      sessionId: finalSession?.id,
+      metadata: finalSession?.metadata,
+      prepPace,
+    });
+  } catch (error: unknown) {
+    logger.error('Error updating prep preferences:', error);
+    res.status(500).json({ error: 'Failed to update prep preferences' });
   }
 });
 
@@ -1473,6 +1557,16 @@ io.on('connection', async (socket) => {
         });
       }
 
+      if (sessionSnapshot.metadata.product === 'interview-prep') {
+        const authEmail = (socket.handshake.auth as SocketAuth)?.email || '';
+        maybeSchedulePrepContinueReminder({
+          sessionId: sessionSnapshot.id,
+          email: authEmail,
+        }).catch((err) => {
+          logger.error('Error in WS prep-continue schedule:', err);
+        });
+      }
+
       // Check if conversation is complete (no next step and not in free chat)
       if (!replyResult.nextStepId && replyResult.metadataUpdates?.currentStepId === undefined) {
         const updatedSession = await getSession(sessionSnapshot.id);
@@ -1542,6 +1636,16 @@ io.on('connection', async (socket) => {
         await addMessageToSession(sessionSnapshot.id, commandResult.message);
         io.to(`session:${sessionSnapshot.id}`).emit('message:received', {
           message: commandResult.message,
+        });
+      }
+
+      if (sessionSnapshot.metadata.product === 'interview-prep') {
+        const authEmail = (socket.handshake.auth as SocketAuth)?.email || '';
+        maybeSchedulePrepContinueReminder({
+          sessionId: sessionSnapshot.id,
+          email: authEmail,
+        }).catch((err) => {
+          logger.error('Error in WS command prep-continue schedule:', err);
         });
       }
 
@@ -1623,6 +1727,7 @@ async function start() {
       if (!isProduction) {
         logger.info(`Test page: http://localhost:${PORT}/test-client.html`);
       }
+      startPrepReminderWorker(60_000);
     });
   } catch (error: unknown) {
     logger.error('Failed to start server:', error);

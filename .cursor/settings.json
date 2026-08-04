@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "posthog": {
+      "enabled": true
+    },
+    "gitlab": {
+      "enabled": true
+    }
+  }
+}

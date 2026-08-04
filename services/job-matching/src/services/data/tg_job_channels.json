@@ -1,0 +1,144 @@
+{
+  "posts_per_channel": 25,
+  "notes": "Kabi M7 parity: 23 must TG channels. Multi-role families for Leo Jack (not product-only).",
+  "channels": [
+    {
+      "username": "forproducts",
+      "title": "Job for Products and Projects",
+      "families": ["product"],
+      "priority": "must"
+    },
+    {
+      "username": "productjobgo",
+      "title": "Вакансии для продакт-менеджеров",
+      "families": ["product"],
+      "priority": "must"
+    },
+    {
+      "username": "hireproproduct",
+      "title": "Hire ProProduct",
+      "families": ["product"],
+      "priority": "must"
+    },
+    {
+      "username": "peersjobboard",
+      "title": "Peers Jobs",
+      "families": ["product", "management"],
+      "priority": "must"
+    },
+    {
+      "username": "careerfedoroff",
+      "title": "Fedoroff | ТОП специалисты",
+      "families": ["product", "management"],
+      "priority": "must"
+    },
+    {
+      "username": "jobinspb",
+      "title": "Топовые вакансии | Петр Липов",
+      "families": ["product", "management", "backend"],
+      "priority": "must"
+    },
+    {
+      "username": "forchiefs",
+      "title": "Job for Chiefs",
+      "families": ["product", "management"],
+      "priority": "must"
+    },
+    {
+      "username": "nrgjobs",
+      "title": "Вакансии в топ стартапах (NRG)",
+      "families": ["product", "backend", "frontend", "data"],
+      "priority": "must"
+    },
+    {
+      "username": "HRity",
+      "title": "HRity",
+      "families": ["product", "backend", "frontend", "design", "marketing"],
+      "priority": "must"
+    },
+    {
+      "username": "yojob",
+      "title": "Dream Job",
+      "families": ["product", "backend", "frontend", "data", "design"],
+      "priority": "must"
+    },
+    {
+      "username": "vacanciesbest",
+      "title": "Лучшие вакансии",
+      "families": ["product", "backend", "frontend", "data", "design", "marketing"],
+      "priority": "must"
+    },
+    {
+      "username": "hcareers_jobs",
+      "title": "Эйч Вакансии",
+      "families": ["product", "backend", "frontend", "data", "design", "marketing"],
+      "priority": "must"
+    },
+    {
+      "username": "budujobs",
+      "title": "БУДУ",
+      "families": ["product", "backend", "frontend", "design", "marketing"],
+      "priority": "must"
+    },
+    {
+      "username": "pm_jobs",
+      "title": "PM jobs",
+      "families": ["product"],
+      "priority": "must"
+    },
+    {
+      "username": "digital_jobs",
+      "title": "Digital jobs",
+      "families": ["marketing", "product", "design"],
+      "priority": "must"
+    },
+    {
+      "username": "startupjobs",
+      "title": "Startup jobs",
+      "families": ["product", "backend", "frontend", "fullstack"],
+      "priority": "must"
+    },
+    {
+      "username": "startupfellows",
+      "title": "StartupFellows",
+      "families": ["product", "backend", "frontend", "data"],
+      "priority": "must"
+    },
+    {
+      "username": "careerspace",
+      "title": "careerspace",
+      "families": ["product", "marketing", "design", "backend"],
+      "priority": "must"
+    },
+    {
+      "username": "Remoteit",
+      "title": "Remote IT (Inflow)",
+      "families": ["backend", "frontend", "fullstack", "devops", "product"],
+      "priority": "must"
+    },
+    {
+      "username": "remotegeekjob",
+      "title": "RemoteGeekjob",
+      "families": ["backend", "frontend", "fullstack", "design", "product"],
+      "priority": "must"
+    },
+    {
+      "username": "remote_w0rk",
+      "title": "Удаленка",
+      "families": ["backend", "frontend", "fullstack", "product", "design"],
+      "priority": "must"
+    },
+    {
+      "username": "IT_jobs_apply",
+      "title": "IT / Tech jobs",
+      "families": ["backend", "frontend", "fullstack", "devops", "data", "product"],
+      "priority": "must"
+    },
+    {
+      "username": "projects_jobs",
+      "title": "Projects Jobs",
+      "families": ["product", "management"],
+      "priority": "must"
+    }
+  ]
+}

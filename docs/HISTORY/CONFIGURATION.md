@@ -238,6 +238,18 @@ SENDGRID_API_KEY=SG.xxxxxxxxxxxxxxxxxxxxxxxxx
 | ---------- | ------------------------------ | ----------------------- |
 | `BASE_URL` | Базовый URL для ссылок в email | `http://localhost:3000` |
 
+### Interview Prep continue reminder (P1)
+
+Отложенное письмо ≥24 ч после паузы: conversation worker → `POST /api/email/send-prep-continue-internal`.
+
+| Переменная | Сервис | Описание | Обязательно |
+| ---------- | ------ | -------- | ----------- |
+| `FRONTEND_URL` / `APP_PUBLIC_URL` | conversation | Ссылка «Продолжить в LEO» в письме | Нет (`https://leo-ai.ru`) |
+| `INTERNAL_API_KEY` | conversation + email | Заголовок `X-Internal-Key` | Да в production |
+| `EMAIL_SERVICE_URL` | conversation | URL email-сервиса | Да |
+
+Темп **спринт** отменяет очередь; **марафон** (или темп не выбран) планирует reminder в Redis (`prep:reminders`).
+
 ## Аутентификация
 
 ### JWT
@@ -391,7 +403,56 @@ USE_MOCK_JOBS=false
 1. Если есть `HH_API_KEY` — скрейпит HH.ru
 2. Если есть `SUPERJOB_API_KEY` — скрейпит SuperJob
 3. Если оба настроены — вакансии объединяются
-4. Если ни один не настроен и `USE_MOCK_JOBS=false` — в development используются mock-данные как fallback; в production скрейпинг не будет работать
+4. Если `ENABLE_EXTENDED_JOB_SOURCES=true` — дополнительно волна A (Yandex/MTS/WB/Alfa/Sber), fail-open; см. [JOB_SOURCES_EXPANSION.md](../JOB_SOURCES_EXPANSION.md)
+5. Если ни один не настроен и `USE_MOCK_JOBS=false` — в development используются mock-данные как fallback; в production скрейпинг не будет работать
+
+### Extended job sources (opt-in)
+
+По умолчанию **выключено** — поведение MVP0 не меняется.
+
+| Переменная | Описание | По умолчанию |
+| ---------- | -------- | ------------ |
+| `ENABLE_EXTENDED_JOB_SOURCES` | Master switch (`true` / `false`) | `false` |
+| `EXTENDED_JOB_SOURCES` | CSV или `all` (yandex,mts,wb,alfa,sber,habr,tg,getmatch,geekjob,avito,vk,tbank) | `all` |
+| `EXTENDED_JOB_KEYWORD_LIMIT` | Сколько keywords из профиля на коннектор (1–12) | `5` |
+| `EXTENDED_JOB_MAX_PER_SOURCE` | Потолок вакансий с одного источника за прогон | `40` |
+| `ALFA_SSL_INSECURE` | `rejectUnauthorized=false` для job.alfabank.ru | `true` |
+| `SCRAPE_HH_TIMEOUT_MS` | Budget на HH family в `scrapeCatalog` | `600000` (10m) |
+| `SCRAPE_SJ_TIMEOUT_MS` | Budget на SuperJob family | `480000` (8m) |
+| `SCRAPE_EXTENDED_TIMEOUT_MS` | Budget на extended family | `360000` (6m) |
+| `SCRAPE_INLINE_WORKER` | `true` = API ест очередь (не для DoD). **Default/prod: false** + `worker:scrape` | `false` |
+| `ENRICH_ON_SCRAPE` | Sync LLM enrich для HH/SJ при scrape | `false` |
+| `ENRICH_EXTENDED_ON_SCRAPE` | Sync enrich для extended | `false` |
+| `EXTENDED_CONNECTOR_CONCURRENCY` | Параллельные extended-коннекторы (1–8) | `3` |
+| `TG_HTTP_PROXY` | SOCKS5/HTTP для scrape `t.me/s/` (TG + Getmatch). Паритет Kabi. Без него с РФ часто timeout | — |
+| `TELEGRAM_PROXY_URL` | Fallback для scrape, если `TG_HTTP_PROXY` пуст (также bot API) | — |
+
+**Ops:** `npm run dev:up` поднимает `job-matching` (API, `SCRAPE_INLINE_WORKER=false`) и `job-matching-worker` (`npm run worker:scrape`). Enrich: cron каждые 20м + lazy после match. Extended-only: `POST /api/jobs/scrape/extended` или `scripts/scrape-extended-only.ts`.
+
+```env
+ENABLE_EXTENDED_JOB_SOURCES=true
+EXTENDED_JOB_SOURCES=mts,wb,yandex
+EXTENDED_JOB_MAX_PER_SOURCE=40
+# Proxy6 / EU SOCKS — как в Kabi (не коммитить секреты)
+TG_HTTP_PROXY=socks5://USER:PASS@HOST:PORT
+```
+
+### LLM rerank shortlist (job-matching → ai-nlp)
+
+После rule-based match top-N вакансий можно скорректировать через YandexGPT (`POST /api/ai/match-rerank`). Fail-open: при ошибке/таймауте остаётся rule score.
+
+| Переменная | Описание | По умолчанию |
+| ---------- | -------- | ------------ |
+| `MATCH_LLM_RERANK` | `true` / `false` — включить Layer 3 rerank | `true` |
+| `MATCH_LLM_RERANK_TOP_N` | Сколько recommended вакансий отправить в LLM (5–20) | `12` |
+| `MATCH_LLM_RERANK_TIMEOUT_MS` | Таймаут вызова ai-nlp (3000–20000) | `9000` |
+| `AI_NLP_URL` | Базовый URL ai-nlp для embedding/rerank | `http://localhost:3003` |
+
+```env
+MATCH_LLM_RERANK=true
+MATCH_LLM_RERANK_TOP_N=12
+MATCH_LLM_RERANK_TIMEOUT_MS=9000
+```
 
 ## Service URLs
 

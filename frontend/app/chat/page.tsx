@@ -163,6 +163,8 @@ type MatchedJobItem = {
   };
   score: number;
   reasons?: string[];
+  matchedSkills?: string[];
+  missingSkills?: string[];
 };
 
 type JobsLoadState = 'idle' | 'scraping' | 'matching' | 'success' | 'error';
@@ -1879,6 +1881,8 @@ function ChatPageContent() {
             source: vacancyPreview.item.job.source,
             sourceUrl: vacancyPreview.item.job.source_url,
             reasons: vacancyPreview.item.reasons,
+            matchedSkills: vacancyPreview.item.matchedSkills,
+            missingSkills: vacancyPreview.item.missingSkills,
             variant: vacancyPreview.variant,
           }
         : null,
@@ -2139,6 +2143,16 @@ function ChatPageContent() {
       computePrepProgress(interviewPrepPlanDays, interviewPrepCollectedSnapshot)
     );
   }, [interviewPrepPlanDays, interviewPrepCollectedSnapshot]);
+
+  const interviewPrepLastActiveFallback = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const ts = messages[i]?.timestamp;
+      if (typeof ts === 'string' && ts.trim()) {
+        return ts;
+      }
+    }
+    return undefined;
+  }, [messages]);
 
   const mockGateBlockers = useMemo(() => {
     if (currentProduct !== 'interview-prep') {
@@ -3988,6 +4002,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                     source={item.job.source}
                                     sourceUrl={item.job.source_url}
                                     reasons={item.reasons}
+                                    matchedSkills={item.matchedSkills}
+                                    missingSkills={item.missingSkills}
                                     isFavorite={favoriteJobIds.has(item.job.id)}
                                     onToggleFavorite={() => handleToggleVacancyFavorite(item.job.id)}
                                     favoriteAriaLabel={
@@ -4055,6 +4071,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                 source={item.job.source}
                                 sourceUrl={item.job.source_url}
                                 reasons={item.reasons}
+                                matchedSkills={item.matchedSkills}
+                                missingSkills={item.missingSkills}
                                 isFavorite={favoriteJobIds.has(item.job.id)}
                                 onToggleFavorite={() => handleToggleVacancyFavorite(item.job.id)}
                                 favoriteAriaLabel={
@@ -4114,6 +4132,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                     source={item.job.source}
                                     sourceUrl={item.job.source_url}
                                     reasons={item.reasons}
+                                    matchedSkills={item.matchedSkills}
+                                    missingSkills={item.missingSkills}
                                     isFavorite={favoriteJobIds.has(item.job.id)}
                                     onToggleFavorite={() => handleToggleVacancyFavorite(item.job.id)}
                                     favoriteAriaLabel={
@@ -4169,6 +4189,10 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                           }}
                           prepArtifacts={interviewPrepArtifacts}
                           onOpenArtifactInChat={handleOpenArtifactInChat}
+                          lastActiveFallback={interviewPrepLastActiveFallback}
+                          onPaceChange={async (pace) => {
+                            await chatRef.current?.setPrepPreferences(pace);
+                          }}
                         />
                       ) : (
                         <div className="text-sm text-slate-400 leading-relaxed">

@@ -14,11 +14,14 @@ const jobItemSchema = z.object({
   company: z.string(),
   score: z.number(),
   reasons: z.array(z.string()).optional(),
+  matchedSkills: z.array(z.string()).optional(),
+  missingSkills: z.array(z.string()).optional(),
   snippet: z.string().optional(),
 });
 
 const rerankSchema = z.object({
-  profileSummary: z.string().min(20).max(4000),
+  profileSummary: z.string().min(20).max(5000),
+  experienceHighlights: z.array(z.string()).max(8).optional(),
   redFlags: z.array(z.string()).max(12).optional(),
   jobs: z.array(jobItemSchema).min(1).max(20),
 });
@@ -46,15 +49,24 @@ function parseJsonObject(text: string): unknown {
 export async function rerankMatchedJobs(req: Request, res: Response): Promise<void> {
   try {
     const parsed = rerankSchema.parse(req.body);
-    const { profileSummary, redFlags = [], jobs } = parsed;
+    const { profileSummary, experienceHighlights = [], redFlags = [], jobs } = parsed;
 
     const jobsBlock = jobs
-      .map(
-        (j, i) =>
+      .map((j, i) => {
+        const skillsLine =
+          (j.matchedSkills?.length
+            ? ` matched=[${j.matchedSkills.slice(0, 5).join(', ')}]`
+            : '') +
+          (j.missingSkills?.length
+            ? ` missing=[${j.missingSkills.slice(0, 4).join(', ')}]`
+            : '');
+        return (
           `${i + 1}. id=${j.id} | ${j.title} @ ${j.company} | score=${j.score}` +
-          (j.reasons?.length ? ` | reasons: ${j.reasons.slice(0, 3).join('; ')}` : '') +
-          (j.snippet ? `\n   ${j.snippet.slice(0, 280)}` : '')
-      )
+          skillsLine +
+          (j.reasons?.length ? ` | reasons: ${j.reasons.slice(0, 4).join('; ')}` : '') +
+          (j.snippet ? `\n   JD: ${j.snippet.slice(0, 800)}` : '')
+        );
+      })
       .join('\n');
 
     const flagsLine =
@@ -62,15 +74,27 @@ export async function rerankMatchedJobs(req: Request, res: Response): Promise<vo
         ? `Исключения кандидата (обязательно учитывать): ${redFlags.join(', ')}`
         : 'Явных исключений нет.';
 
+    const experienceBlock =
+      experienceHighlights.length > 0
+        ? `Ключевые позиции / достижения кандидата:\n- ${experienceHighlights
+            .map((h) => h.slice(0, 220))
+            .join('\n- ')}`
+        : 'Отдельные буллеты опыта не переданы — опирайся на профиль ниже.';
+
     const prompt = `Ты — карьерный matching-аналитик LEO AI.
 Дан профиль кандидата и shortlist вакансий со скором правила.
-Скорректируй порядок: учти fit роли, домен, seniority, исключения.
+Скорректируй порядок: сравни обязанности и требования JD с опытом и достижениями кандидата
+(роль, домен, seniority, навыки, исключения).
 Не выдумывай факты, которых нет в тексте.
+explain обязателен: одно короткое предложение на русском — почему вакансия лучше или хуже подходит
+по сути опыта ↔ обязанностей (не про график/часы).
 
 ${flagsLine}
 
+${experienceBlock}
+
 Профиль:
-${profileSummary.slice(0, 2500)}
+${profileSummary.slice(0, 2800)}
 
 Вакансии:
 ${jobsBlock}
@@ -78,22 +102,23 @@ ${jobsBlock}
 Верни ТОЛЬКО JSON:
 {
   "items": [
-    { "id": "...", "delta": -10..10, "explain": "1 короткое предложение на русском почему вверх/вниз" }
+    { "id": "...", "delta": -10..10, "explain": "Подходит потому что … / Слабее потому что …" }
   ]
 }
-delta: положительный = лучше fit, отрицательный = хуже. Для каждой вакансии ровно один item с тем же id.`;
+delta: положительный = лучше fit, отрицательный = хуже. Для каждой вакансии ровно один item с тем же id.
+explain: обязательно, до 220 символов, без воды.`;
 
     const response = await callYandexModel({
       messages: [
         {
           role: 'system',
-          text: 'Ты ранжируешь вакансии для кандидата. Ответ — только валидный JSON без markdown.',
+          text: 'Ты ранжируешь вакансии для кандидата. Ответ — только валидный JSON без markdown. У каждой вакансии должен быть explain.',
         },
         { role: 'user', text: prompt },
       ],
       completionOptions: {
         temperature: 0.15,
-        maxTokens: 1200,
+        maxTokens: 1600,
       },
     });
 
@@ -113,7 +138,7 @@ delta: положительный = лучше fit, отрицательный =
         delta,
         explain:
           typeof item.explain === 'string' && item.explain.trim()
-            ? item.explain.trim().slice(0, 180)
+            ? item.explain.trim().slice(0, 240)
             : undefined,
       });
     }
@@ -126,6 +151,9 @@ delta: положительный = лучше fit, отрицательный =
         explain: adj?.explain,
       };
     });
+
+    const explainCount = result.filter((r) => r.explain).length;
+    logger.info(`match-rerank: jobs=${jobs.length} explain=${explainCount}/${jobs.length}`);
 
     res.json({ items: result });
   } catch (error: unknown) {

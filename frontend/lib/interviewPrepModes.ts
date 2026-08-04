@@ -14,9 +14,9 @@ export const INTERVIEW_PREP_MODE_LABELS: Record<InterviewPrepMode, string> = {
   diagnostics: 'Диагностика',
   theory: 'Теория',
   case: 'Кейс',
-  mock: 'Мок-интервью',
+  mock: 'Мок',
   star: 'STAR',
-  employer_questions: 'Вопросы работодателю',
+  employer_questions: 'Вопросы',
 };
 
 /** Короткие подписи для табов в истории диалога. */
@@ -26,7 +26,7 @@ export const INTERVIEW_PREP_MODE_TAB_LABELS: Record<InterviewPrepMode, string> =
   case: 'Кейс',
   mock: 'Мок',
   star: 'STAR',
-  employer_questions: 'Работодат.',
+  employer_questions: 'Вопросы',
 };
 
 export type PrepHistoryFilter = 'general' | InterviewPrepMode;

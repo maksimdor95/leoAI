@@ -23,14 +23,14 @@ export function ChatAppHeaderNav({
   const ui = (key: Parameters<typeof chatUi>[1]) => chatUi(settings.locale, key);
   const isHume = settings.theme === 'hume-light';
   const btnClass = isHume
-    ? 'leo-chat-header-btn !text-[var(--color-ink)] hover:!bg-[rgba(34,34,34,0.04)] text-xs sm:text-sm'
-    : 'leo-chat-header-btn !text-slate-200 hover:!bg-white/[0.06] text-xs sm:text-sm';
+    ? 'leo-chat-header-btn !border-0 !bg-transparent !shadow-none !text-[var(--color-ink)]/65 hover:!bg-transparent hover:!text-[var(--color-ink)] text-xs sm:text-sm'
+    : 'leo-chat-header-btn !border-0 !bg-transparent !shadow-none !text-slate-400 hover:!bg-transparent hover:!text-slate-100 text-xs sm:text-sm';
   const activeBtnClass = isHume
-    ? 'leo-chat-header-btn !text-[var(--color-ink)] !border !border-[rgba(34,34,34,0.16)] !bg-[var(--color-paper)] text-xs sm:text-sm'
-    : 'leo-chat-header-btn !text-white !border !border-white/20 !bg-white/[0.08] text-xs sm:text-sm';
+    ? 'leo-chat-header-btn !border-0 !bg-transparent !shadow-none !font-semibold !text-[var(--color-ink)] underline decoration-[var(--color-iris)] decoration-2 underline-offset-[6px] hover:!bg-transparent text-xs sm:text-sm'
+    : 'leo-chat-header-btn !border-0 !bg-transparent !shadow-none !font-medium !text-white underline decoration-white/70 decoration-2 underline-offset-[6px] hover:!bg-transparent text-xs sm:text-sm';
   const logoutClass = isHume
-    ? 'leo-chat-header-btn !text-[var(--color-ink)] hover:!text-red-600 text-xs sm:text-sm'
-    : 'leo-chat-header-btn !text-slate-200 hover:!text-red-400 text-xs sm:text-sm';
+    ? 'leo-chat-header-btn !border-0 !bg-transparent !shadow-none !text-[var(--color-ink)]/65 hover:!bg-transparent hover:!text-red-600 text-xs sm:text-sm'
+    : 'leo-chat-header-btn !border-0 !bg-transparent !shadow-none !text-slate-400 hover:!bg-transparent hover:!text-red-400 text-xs sm:text-sm';
 
   const navClass = (href: string) => (pathname === href ? activeBtnClass : btnClass);
 

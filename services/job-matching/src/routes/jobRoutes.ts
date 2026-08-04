@@ -65,6 +65,13 @@ router.get('/:jobId', authenticateToken, jobsController.getJobDetails);
 router.post('/refresh', requireJobCatalogAccess, jobsController.refreshJobs);
 
 /**
+ * POST /api/jobs/scrape/extended
+ * Extended-only ingest (no HH/SJ). Phase 0 pipeline refactor — fills career/TG/Habr
+ * even when the monolithic HH scrape is unstable.
+ */
+router.post('/scrape/extended', requireJobCatalogAccess, jobsController.scrapeExtendedJobs);
+
+/**
  * POST /api/jobs/scrape/for-user/:userId
  * Триггер сбора вакансий по профилю пользователя (role-family + skills).
  * Использует собственный токен пользователя; conversation-service вызывает

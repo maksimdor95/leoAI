@@ -173,6 +173,144 @@ export async function triggerJobsEmail(
   }
 }
 
+export type PrepContinueEmailRequest = {
+  userId: string;
+  email: string;
+  token: string;
+  sessionId: string;
+  stageLabel: string;
+  nextTitle: string;
+  durationMin: number;
+  stepIndex: number;
+  stepTotal: number;
+  progressPercent: number;
+  role?: string;
+};
+
+function buildPrepContinueUrl(sessionId: string): string {
+  const frontendBase = (process.env.FRONTEND_URL || process.env.APP_PUBLIC_URL || 'https://leo-ai.ru').replace(
+    /\/+$/,
+    ''
+  );
+  return `${frontendBase}/chat?sessionId=${encodeURIComponent(sessionId)}`;
+}
+
+/**
+ * Interview Prep: письмо «продолжите» с user JWT (интерактивный путь).
+ */
+export async function triggerPrepContinueEmail(request: PrepContinueEmailRequest): Promise<boolean> {
+  const {
+    userId,
+    email,
+    token,
+    sessionId,
+    stageLabel,
+    nextTitle,
+    durationMin,
+    stepIndex,
+    stepTotal,
+    progressPercent,
+    role,
+  } = request;
+
+  try {
+    logger.info(`Triggering prep-continue email for user: ${userId}, session: ${sessionId}`);
+    await withHttpRetry(
+      'prep-continue-email',
+      HTTP_RETRY.jobsEmail,
+      async () =>
+        axios.post(
+          `${EMAIL_SERVICE_URL}/api/email/send-prep-continue`,
+          {
+            recipientEmail: email,
+            stageLabel,
+            nextTitle,
+            durationMin,
+            stepIndex,
+            stepTotal,
+            progressPercent,
+            role,
+            continueUrl: buildPrepContinueUrl(sessionId),
+          },
+          {
+            headers: {
+              Authorization: toBearerToken(token),
+              'Content-Type': 'application/json',
+            },
+            timeout: HTTP_TIMEOUT_MS.jobsEmail,
+          }
+        )
+    );
+    logger.info(`Prep-continue email sent to user: ${userId}`);
+    return true;
+  } catch (error: unknown) {
+    logger.error(`Error triggering prep-continue email for user ${userId}:`, error);
+    return false;
+  }
+}
+
+export type PrepContinueEmailInternalRequest = Omit<PrepContinueEmailRequest, 'token'>;
+
+/**
+ * Воркер ≥24ч: без user JWT, через X-Internal-Key (как password-reset).
+ */
+export async function triggerPrepContinueEmailInternal(
+  request: PrepContinueEmailInternalRequest
+): Promise<boolean> {
+  const {
+    userId,
+    email,
+    sessionId,
+    stageLabel,
+    nextTitle,
+    durationMin,
+    stepIndex,
+    stepTotal,
+    progressPercent,
+    role,
+  } = request;
+
+  const internalKey = process.env.INTERNAL_API_KEY?.trim();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (internalKey) {
+    headers['X-Internal-Key'] = internalKey;
+  }
+
+  try {
+    logger.info(`Triggering prep-continue email (internal) for user: ${userId}, session: ${sessionId}`);
+    await withHttpRetry(
+      'prep-continue-email-internal',
+      HTTP_RETRY.jobsEmail,
+      async () =>
+        axios.post(
+          `${EMAIL_SERVICE_URL}/api/email/send-prep-continue-internal`,
+          {
+            to: email,
+            stageLabel,
+            nextTitle,
+            durationMin,
+            stepIndex,
+            stepTotal,
+            progressPercent,
+            role,
+            continueUrl: buildPrepContinueUrl(sessionId),
+          },
+          {
+            headers,
+            timeout: HTTP_TIMEOUT_MS.jobsEmail,
+          }
+        )
+    );
+    logger.info(`Prep-continue email (internal) sent to user: ${userId}`);
+    return true;
+  } catch (error: unknown) {
+    logger.error(`Error triggering prep-continue email (internal) for user ${userId}:`, error);
+    return false;
+  }
+}
+
 /**
  * Trigger report generation for wannanew product.
  */

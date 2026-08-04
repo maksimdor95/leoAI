@@ -4,11 +4,18 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button, Form, Input, Typography, message, Spin } from 'antd';
-import { LockOutlined } from '@ant-design/icons';
+import { EyeInvisibleOutlined, EyeOutlined, LockOutlined } from '@ant-design/icons';
 import { userAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
 const { Title, Text } = Typography;
+
+const passwordVisibilityIcon = (visible: boolean) =>
+  visible ? (
+    <EyeOutlined className="text-slate-400 hover:text-slate-200" />
+  ) : (
+    <EyeInvisibleOutlined className="text-slate-400 hover:text-slate-200" />
+  );
 
 type ApiError = {
   response?: {
@@ -154,8 +161,9 @@ export function ResetPasswordClient() {
               >
                 <Input.Password
                   prefix={<LockOutlined className="text-slate-400" />}
+                  iconRender={passwordVisibilityIcon}
                   placeholder="Новый пароль"
-                  className="!bg-black/30 !border-white/10 !text-white !placeholder:text-slate-500 hover:!border-white/20 focus:!border-green-500/50"
+                  className="!bg-black/30 !border-white/10 !text-white !placeholder:text-slate-500 hover:!border-white/20 focus:!border-green-500/50 [&_.ant-input-password-icon]:!text-slate-400"
                 />
               </Form.Item>
 
@@ -176,8 +184,9 @@ export function ResetPasswordClient() {
               >
                 <Input.Password
                   prefix={<LockOutlined className="text-slate-400" />}
+                  iconRender={passwordVisibilityIcon}
                   placeholder="Повторите пароль"
-                  className="!bg-black/30 !border-white/10 !text-white !placeholder:text-slate-500 hover:!border-white/20 focus:!border-green-500/50"
+                  className="!bg-black/30 !border-white/10 !text-white !placeholder:text-slate-500 hover:!border-white/20 focus:!border-green-500/50 [&_.ant-input-password-icon]:!text-slate-400"
                 />
               </Form.Item>
 

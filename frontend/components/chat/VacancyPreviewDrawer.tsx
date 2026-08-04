@@ -319,6 +319,8 @@ export function VacancyPreviewDrawer({
       <MatchReasonsPopover
         score={context.score}
         reasons={context.reasons}
+        matchedSkills={context.matchedSkills}
+        missingSkills={context.missingSkills}
         variant={context.variant}
       />
       {sourceLabel ? <span>{sourceLabel}</span> : null}

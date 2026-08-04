@@ -6,8 +6,9 @@ import { getEmbedding } from './enrichment';
 import type { CollectedData } from './userService';
 import { getEnrichedFromCollected } from '../types/enrichedProfile';
 import { logger } from '../utils/logger';
+import { buildExperienceHighlights } from './experienceSignals';
 
-/** Собирает компактный текст профиля для embedding (роль, skills, summary, red flags). */
+/** Собирает компактный текст профиля для embedding (роль, skills, summary, опыт, red flags). */
 export function buildProfileEmbeddingText(data: CollectedData): string {
   const parts: string[] = [];
   const role =
@@ -18,6 +19,11 @@ export function buildProfileEmbeddingText(data: CollectedData): string {
 
   if (typeof data.careerSummary === 'string' && data.careerSummary.trim()) {
     parts.push(`Опыт: ${data.careerSummary.trim().slice(0, 600)}`);
+  }
+
+  const experienceHighlights = buildExperienceHighlights(data, 4);
+  if (experienceHighlights.length > 0) {
+    parts.push(`Позиции:\n- ${experienceHighlights.join('\n- ')}`);
   }
 
   const skills: string[] = [];
@@ -49,7 +55,7 @@ export function buildProfileEmbeddingText(data: CollectedData): string {
     parts.push(`Домены: ${enriched.job_preferences.domains.join(', ')}`);
   }
 
-  return parts.join('\n').slice(0, 2000);
+  return parts.join('\n').slice(0, 2500);
 }
 
 /**

@@ -1,0 +1,14 @@
+---
+description: Agreed multi-point plans must be delivered in full; no silent scope cuts
+alwaysApply: true
+---
+
+# Agreed plan = full delivery
+
+If the user agrees to a plan with N items (or says «давай» / «реализуй план» after a numbered plan):
+
+1. **Deliver every item** to its Definition of Done before calling the work done.
+2. **Do not silently shrink scope.** If you need to cut items, stop and get explicit approval first.
+3. **Do not present a partial slice as complete.** Partial progress is fine only when labeled as partial and with a clear remaining checklist.
+4. Prefer implementing **in the agreed order** (1 → 2 → 3…), finishing each slice before starting the next unless the user says otherwise.
+5. End-of-work report must map **each plan item → done / not done**, never a vague «готово».

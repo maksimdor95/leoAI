@@ -21,6 +21,20 @@ print_status() {
   fi
 }
 
+print_worker_status() {
+  local name="$1"
+  local pid_file="$PID_DIR/$name.pid"
+  local pid="-"
+  if [[ -f "$pid_file" ]]; then
+    pid="$(cat "$pid_file")"
+  fi
+  if [[ -f "$pid_file" ]] && kill -0 "$pid" >/dev/null 2>&1; then
+    echo "[$name] status:UP pid_file:$pid"
+  else
+    echo "[$name] status:DOWN pid_file:$pid"
+  fi
+}
+
 print_tts_status() {
   if ! lsof -nP -iTCP:3003 -sTCP:LISTEN >/dev/null 2>&1; then
     echo "[tts-check] status:SKIPPED reason:ai-nlp-down"
@@ -62,6 +76,7 @@ print_status "user-profile" 3001
 print_status "conversation" 3002
 print_status "ai-nlp" 3003
 print_status "job-matching" 3004
+print_worker_status "job-matching-worker"
 print_status "email" 3005
 print_status "telegram-support" 3008
 print_status "report" 3007

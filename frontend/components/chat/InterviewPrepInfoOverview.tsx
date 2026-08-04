@@ -12,6 +12,7 @@ import type { PrepProgress } from '@/lib/prepActivities';
 import type { PrepArtifact } from '@/lib/prepArtifacts';
 import { derivePrepRoute } from '@/lib/derivePrepRoute';
 import { resolvePrepRetention } from '@/lib/prepRetention';
+import type { PrepPace } from '@/lib/prepContinue';
 import { useHumeTheme } from '@/lib/useHumeTheme';
 
 const PREP_PLAN_TITLE = 'План подготовки';
@@ -70,6 +71,9 @@ export type InterviewPrepInfoOverviewProps = {
   onDownloadReport?: () => void;
   prepArtifacts?: PrepArtifact[];
   onOpenArtifactInChat?: (artifact: PrepArtifact) => void;
+  /** ISO timestamp последней активности (fallback для баннера «Продолжить»). */
+  lastActiveFallback?: string;
+  onPaceChange?: (pace: PrepPace) => void | Promise<void>;
 };
 
 /**
@@ -92,6 +96,8 @@ export function InterviewPrepInfoOverview({
   onDownloadReport,
   prepArtifacts = [],
   onOpenArtifactInChat,
+  lastActiveFallback,
+  onPaceChange,
 }: InterviewPrepInfoOverviewProps) {
   const isHume = useHumeTheme();
   const isPrepWorkspace = Boolean(compact && !hidePrepPlan);
@@ -99,12 +105,18 @@ export function InterviewPrepInfoOverview({
 
   const [profileExpanded, setProfileExpanded] = useState(false);
   const [planExpanded, setPlanExpanded] = useState(false);
-  const [modesExpanded, setModesExpanded] = useState(false);
 
   const hasCommands = Boolean(commands?.length && onCommandSelect);
   const showNextStep = Boolean(!hidePrepPlan && prepProgress && collectedData && onActivityStart);
   const route =
     prepProgress && collectedData ? derivePrepRoute(prepProgress, collectedData) : null;
+  // Режимы (Мок / STAR / Вопросы) не показываем при активном маршруте —
+  // ведём только через «Следующий шаг». После финиша — повтор по желанию.
+  const showManualModes =
+    hasCommands &&
+    Boolean(commands && onCommandSelect) &&
+    !isStageSnapshot &&
+    (!showNextStep || Boolean(route?.complete));
 
   const prepPlanCard = infoCard.cards.find(
     (card) => card.title === PREP_PLAN_TITLE || (card.planDays && card.planDays.length > 0)
@@ -262,6 +274,8 @@ export function InterviewPrepInfoOverview({
           collectedData={collectedData}
           onActivityStart={onActivityStart}
           onDownloadReport={onDownloadReport}
+          lastActiveFallback={lastActiveFallback}
+          onPaceChange={onPaceChange}
         />
       ) : null}
 
@@ -328,34 +342,20 @@ export function InterviewPrepInfoOverview({
         </div>
       ) : null}
 
-      {/* Режимы вручную — не на сцене (там только CTA в Подготовку); в prep — свёрнуто */}
-      {hasCommands && commands && onCommandSelect && !isStageSnapshot ? (
-        showNextStep && route && !route.complete ? (
-          <div className="space-y-2">
-            <SectionToggle
-              label="Режимы вручную"
-              expanded={modesExpanded}
-              onToggle={() => setModesExpanded((v) => !v)}
-              isHume={isHume}
-            />
-            {modesExpanded ? (
-              <div>
-                <p
-                  className={`mb-2 text-[10px] ${
-                    isHume ? 'text-[var(--color-smoke)]' : 'text-slate-500'
-                  }`}
-                >
-                  Обычно не нужно — LEO ведёт через «Следующий шаг».
-                </p>
-                <CommandBar commands={commands} onSelect={onCommandSelect} />
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="mt-1 w-full">
-            <CommandBar commands={commands} onSelect={onCommandSelect} />
-          </div>
-        )
+      {/* Режимы — только до старта маршрута или после финиша (повтор). Не конкурируют с «Следующий шаг». */}
+      {showManualModes && commands && onCommandSelect ? (
+        <div className="mt-1 w-full space-y-1.5">
+          {route?.complete ? (
+            <p
+              className={`text-[10px] ${
+                isHume ? 'text-[var(--color-smoke)]' : 'text-slate-500'
+              }`}
+            >
+              Повторить режим
+            </p>
+          ) : null}
+          <CommandBar commands={commands} onSelect={onCommandSelect} />
+        </div>
       ) : null}
 
       {infoCard.title === 'Ваш профиль' && onContinue ? (

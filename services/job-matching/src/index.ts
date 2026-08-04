@@ -16,7 +16,7 @@ import jobRoutes from './routes/jobRoutes';
 import pool from './config/database';
 import { logger } from './utils/logger';
 import { testConnection } from './config/database';
-import { scheduleRegularScraping, closeQueue } from './services/scrapingQueue';
+import { scheduleRegularScraping, closeQueue, startInlineScrapingWorkerIfEnabled } from './services/scrapingQueue';
 import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { getHealthStatus } from './utils/healthCheck';
@@ -196,11 +196,12 @@ async function start() {
 
     // Schedule regular scraping
     await scheduleRegularScraping();
+    startInlineScrapingWorkerIfEnabled();
 
     app.listen(PORT, '0.0.0.0', () => {
       logger.info(`Job Matching Service running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      logger.info('Scheduled hourly job scraping');
+      logger.info('Scheduled family job scraping (HH / SJ / extended)');
     });
   } catch (error: unknown) {
     logger.error('Failed to start server:', error);

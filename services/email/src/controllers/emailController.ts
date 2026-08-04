@@ -11,6 +11,7 @@ import {
   sendResumePackageEmail,
   sendConsultationEmail,
   sendPasswordResetEmail,
+  sendPrepContinueEmail,
 } from '../services/emailService';
 import { getUserProfile } from '../services/userService';
 import { getJobsByIds } from '../services/jobService';
@@ -234,6 +235,130 @@ export async function sendConsultation(req: Request, res: Response): Promise<voi
     res.status(500).json({ error: 'Failed to send consultation request' });
   } catch (error: unknown) {
     logger.error('Error sending consultation email:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function sendPrepContinue(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const body = req.body as {
+      stageLabel?: string;
+      nextTitle?: string;
+      durationMin?: number;
+      stepIndex?: number;
+      stepTotal?: number;
+      progressPercent?: number;
+      continueUrl?: string;
+      role?: string;
+      recipientEmail?: string;
+    };
+
+    if (!body.stageLabel || !body.nextTitle || !body.continueUrl) {
+      res.status(400).json({ error: 'stageLabel, nextTitle and continueUrl are required' });
+      return;
+    }
+
+    const token = req.headers.authorization?.replace('Bearer ', '') || '';
+    let userName: string | undefined;
+    try {
+      const userProfile = await getUserProfile(token);
+      userName = userProfile.name;
+    } catch (error: unknown) {
+      logger.warn('Failed to get user profile for prep continue email:', error);
+    }
+
+    const targetEmail =
+      typeof body.recipientEmail === 'string' && body.recipientEmail.includes('@')
+        ? body.recipientEmail.trim()
+        : user.email;
+
+    if (!targetEmail) {
+      res.status(400).json({ error: 'No recipient email' });
+      return;
+    }
+
+    const success = await sendPrepContinueEmail({
+      userEmail: targetEmail,
+      userName,
+      role: typeof body.role === 'string' ? body.role : undefined,
+      stageLabel: body.stageLabel,
+      nextTitle: body.nextTitle,
+      durationMin: typeof body.durationMin === 'number' ? body.durationMin : 20,
+      stepIndex: typeof body.stepIndex === 'number' ? body.stepIndex : 1,
+      stepTotal: typeof body.stepTotal === 'number' ? body.stepTotal : 1,
+      progressPercent: typeof body.progressPercent === 'number' ? body.progressPercent : 0,
+      continueUrl: body.continueUrl,
+    });
+
+    if (success) {
+      res.json({ success: true, message: 'Prep continue email sent' });
+      return;
+    }
+    res.status(500).json({ error: 'Failed to send prep continue email' });
+  } catch (error: unknown) {
+    logger.error('Error sending prep continue email:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * Deferred prep reminder from conversation worker (no user JWT).
+ */
+export async function sendPrepContinueInternal(req: Request, res: Response): Promise<void> {
+  try {
+    if (!assertInternalCaller(req)) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const body = req.body as {
+      to?: string;
+      stageLabel?: string;
+      nextTitle?: string;
+      durationMin?: number;
+      stepIndex?: number;
+      stepTotal?: number;
+      progressPercent?: number;
+      continueUrl?: string;
+      role?: string;
+      userName?: string;
+    };
+
+    if (!body.to || typeof body.to !== 'string' || !body.to.includes('@')) {
+      res.status(400).json({ error: 'Valid to email is required' });
+      return;
+    }
+    if (!body.stageLabel || !body.nextTitle || !body.continueUrl) {
+      res.status(400).json({ error: 'stageLabel, nextTitle and continueUrl are required' });
+      return;
+    }
+
+    const success = await sendPrepContinueEmail({
+      userEmail: body.to.trim(),
+      userName: typeof body.userName === 'string' ? body.userName : undefined,
+      role: typeof body.role === 'string' ? body.role : undefined,
+      stageLabel: body.stageLabel,
+      nextTitle: body.nextTitle,
+      durationMin: typeof body.durationMin === 'number' ? body.durationMin : 20,
+      stepIndex: typeof body.stepIndex === 'number' ? body.stepIndex : 1,
+      stepTotal: typeof body.stepTotal === 'number' ? body.stepTotal : 1,
+      progressPercent: typeof body.progressPercent === 'number' ? body.progressPercent : 0,
+      continueUrl: body.continueUrl,
+    });
+
+    if (success) {
+      res.json({ success: true, message: 'Prep continue email sent' });
+      return;
+    }
+    res.status(500).json({ error: 'Failed to send prep continue email' });
+  } catch (error: unknown) {
+    logger.error('Error sending prep continue email (internal):', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

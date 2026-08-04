@@ -6,14 +6,16 @@
  * семейству профессий (role-family), чтобы не рекомендовать
  * PM-у разработчика, а QA-инженеру — аккаунт-менеджера.
  *
- * Вклад факторов (суммарно до 100):
+ * Вклад факторов (суммарно до 100, с бонусами clamp):
  *   - роль (фразы + токены desiredRole/позиций):  до 30
  *   - навыки (жёсткие и софт):                     до 25
+ *   - пересечение опыта ↔ обязанности JD:         до 5
  *   - локация (совпадение или remote-friendly):    до 20
  *   - опыт (HH experience или experience_level):     до 15
  *   - режим работы (HH work_format / work_mode):   до 10
  *   - занятость / оформление / график / часы (HH):  до 19*
  *     * только если поле есть в вакансии; без профиля — нейтрально
+ *   - softCap после family-multiplier: линейно до 88, хвост → max 97
  *
  * После суммирования применяется множитель от family-совпадения:
  *   - совпадающее семейство         × 1.00
@@ -55,6 +57,9 @@ import {
   findVacancyFeedbackDemotion,
   scoreVacancyFeedbackLike,
 } from './vacancyFeedbackSignals';
+import { skillAppearsInText, skillsMatchByAlias, filterMeaningfulMissingSkills } from './skillLexicon';
+import { scoreExperienceOverlap } from './experienceSignals';
+import { dedupeMatchTiers } from './jobDedup';
 
 /** Порог «Рекомендуем». */
 export const MATCH_SCORE_THRESHOLD = 45;
@@ -285,7 +290,7 @@ export function matchJobs(
 
     const raw = calculateRawScore(job, effective, userPreferences);
     const multiplier = familyMultiplierFor(familyMatch);
-    const finalScore = Math.min(100, Math.round(raw.score * multiplier));
+    const finalScore = softCapMatchScore(Math.round(raw.score * multiplier));
 
     const reasons = [...raw.reasons];
     if (primaryFamily !== 'unknown' && jobFamily !== 'unknown') {
@@ -354,6 +359,10 @@ export function matchJobs(
   recommended.sort(sortTier);
   weakPool.sort(sortTier);
 
+  const deduped = dedupeMatchTiers(recommended, weakPool);
+  const matches = deduped.recommended;
+  const weakMatches = deduped.weak;
+
   const familyRelevanceShare =
     jobs.length > 0 ? relevantCount / jobs.length : 0;
 
@@ -366,13 +375,13 @@ export function matchJobs(
   }
 
   return {
-    matches: recommended,
-    weakMatches: weakPool,
+    matches,
+    weakMatches,
     stats: {
       maxScore,
       jobsConsidered: jobs.length,
-      aboveThreshold: recommended.length,
-      weakTierTotal: weakPool.length,
+      aboveThreshold: matches.length,
+      weakTierTotal: weakMatches.length,
       familyDistribution,
       familyRelevanceShare,
       familyCatalogCount,
@@ -440,6 +449,17 @@ function familyMultiplierFor(match: 'same' | 'adjacent' | 'unknown' | 'conflict'
   }
 }
 
+/**
+ * Сжимает хвост высоких скоров: 100 не должен быть массовым для любого PO.
+ * Линейно до 88, дальше сжатие к потолку 97 (100 почти недостижим без идеального всего).
+ */
+export function softCapMatchScore(raw: number): number {
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  if (raw <= 88) return Math.min(100, Math.round(raw));
+  const compressed = 88 + (raw - 88) * 0.32;
+  return Math.min(97, Math.round(compressed));
+}
+
 function calculateRawScore(
   job: Job,
   collectedData: CollectedData | null,
@@ -462,6 +482,8 @@ function calculateRawScore(
     return { score: 20, reasons: ['Недостаточно данных о пользователе'], salaryHardMismatch: false };
   }
 
+  // Порядок reasons: суть (роль/навыки) раньше HH-меты (график/часы),
+  // чтобы «Почему матч» не выглядел как сравнение только тегов условий.
   const locationScore = matchLocation(job, collectedData, userPreferences);
   score += locationScore.points;
   if (locationScore.reason) reasons.push(locationScore.reason);
@@ -470,21 +492,54 @@ function calculateRawScore(
   score += experienceScore.points;
   if (experienceScore.reason) reasons.push(experienceScore.reason);
 
-  const hhConditions = matchHhVacancyConditions(job, collectedData);
-  score += hhConditions.points;
-  reasons.push(...hhConditions.reasons);
+  const roleScore = matchRole(job, collectedData);
+  score += roleScore.points;
+  if (roleScore.reason) reasons.push(roleScore.reason);
 
   const skillsScore = matchSkills(job, collectedData);
   score += skillsScore.points;
   if (skillsScore.reason) reasons.push(skillsScore.reason);
 
-  const roleScore = matchRole(job, collectedData);
-  score += roleScore.points;
-  if (roleScore.reason) reasons.push(roleScore.reason);
+  const experienceOverlap = scoreExperienceOverlap(job, collectedData);
+  score += experienceOverlap.points;
+  if (experienceOverlap.reason) reasons.push(experienceOverlap.reason);
+
+  const strongSkillFit =
+    skillsScore.points >= 12 || experienceOverlap.points >= 4 || (skillsScore.matchedSkills?.length ?? 0) >= 2;
+  const meaningfulGaps = filterMeaningfulMissingSkills(
+    skillsScore.missingSkills ?? [],
+    collectSkillStrings(collectedData),
+    [
+      typeof collectedData.careerSummary === 'string' ? collectedData.careerSummary : '',
+      ...collectSkillStrings(collectedData),
+      ...Array.from({ length: 5 }, (_, i) => {
+        const n = i + 1;
+        return [
+          collectedData[`position_${n}_responsibilities`],
+          collectedData[`position_${n}_achievements`],
+          collectedData[`position_${n}_role`],
+        ]
+          .filter((v) => typeof v === 'string')
+          .join(' ');
+      }),
+    ]
+      .join('\n')
+      .toLowerCase(),
+    { strongFit: strongSkillFit, max: 3 }
+  );
+  if (meaningfulGaps.length > 0) {
+    reasons.push(`Не хватает в профиле: ${meaningfulGaps.slice(0, 3).join(', ')}`);
+  }
+  // Для API/UI — отфильтрованные gaps
+  skillsScore.missingSkills = meaningfulGaps;
 
   const workModeScore = matchWorkMode(job, collectedData, userPreferences);
   score += workModeScore.points;
   if (workModeScore.reason) reasons.push(workModeScore.reason);
+
+  const hhConditions = matchHhVacancyConditions(job, collectedData);
+  score += hhConditions.points;
+  reasons.push(...hhConditions.reasons);
 
   const salaryScore = matchSalaryExpectation(job, collectedData);
   score += salaryScore.points;
@@ -525,10 +580,10 @@ function calculateRawScore(
   ].filter(Boolean).length;
 
   if (strongFactors >= 4) {
-    score += 5;
+    score += 3;
     reasons.push('Бонус: высокое совпадение по 4+ факторам');
   } else if (strongFactors >= 3) {
-    score += 2;
+    score += 1;
     reasons.push('Бонус: совпадение по 3 факторам');
   }
 
@@ -760,7 +815,7 @@ function matchSkills(
   let textHitWeight = 0;
   const matchedText = new Set<string>();
   for (const userSkill of userSkillsLower) {
-    if (userSkill.length > 2 && jobText.includes(userSkill)) {
+    if (userSkill.length > 2 && skillAppearsInText(userSkill, jobText)) {
       textHits++;
       textHitWeight += skillLevelWeight(userSkill);
       matchedText.add(userSkill);
@@ -794,7 +849,7 @@ function matchSkills(
   for (const jobSkill of jobSkillsLower) {
     let matched = false;
     for (const userSkill of userSkillsLower) {
-      if (jobSkill.includes(userSkill) || userSkill.includes(jobSkill)) {
+      if (skillsMatchByAlias(jobSkill, userSkill)) {
         matchingSkills.push(jobSkill);
         matched = true;
         break;
@@ -805,9 +860,7 @@ function matchSkills(
 
   const textBonus = Math.min(6, textHits * 2);
   const weightedMatches = matchingSkills.reduce((sum, skill) => {
-    const userSkill = userSkillsLower.find(
-      (u) => skill.includes(u) || u.includes(skill)
-    );
+    const userSkill = userSkillsLower.find((u) => skillsMatchByAlias(skill, u));
     return sum + (userSkill ? skillLevelWeight(userSkill) : 1);
   }, 0);
   const matchRatio = weightedMatches / Math.max(jobSkillsLower.length, 1);

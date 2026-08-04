@@ -1,0 +1,15 @@
+---
+description: Either meet DoD fully or explicitly cut scope — never «done with caveats»
+alwaysApply: true
+---
+
+# DoD целиком или режем scope
+
+Before calling any work **done** (phase, slice, bugfix, refactor item):
+
+1. **Binary choice only:** deliver the agreed Definition of Done **in full**, **or** stop and get explicit approval to **cut scope**.
+2. **Forbidden middle path:** do not ship «готово с оговорками», «done with caveats», «mostly done», or mark a checklist item complete while known DoD gaps remain.
+3. If blocked (time, deps, unknowns): report **not done**, list remaining DoD gaps, and ask: close gaps now, or approve a reduced DoD.
+4. End report: each DoD criterion → **met** / **not met** (with approval cite if cut). No vague «готово».
+
+Related: `.cursor/rules/agreed-plan-full-delivery.mdc` (multi-item plans).

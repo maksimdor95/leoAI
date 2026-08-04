@@ -65,11 +65,11 @@ export const INTERVIEW_PREP_SCENARIO: ScenarioDefinition = {
         { id: 'diagnostics', label: 'Диагностика', action: 'interview_mode:diagnostics' },
         { id: 'theory', label: 'Теория', action: 'interview_mode:theory' },
         { id: 'case', label: 'Кейс', action: 'interview_mode:case' },
-        { id: 'mock', label: 'Мок-интервью', action: 'interview_mode:mock' },
+        { id: 'mock', label: 'Мок', action: 'interview_mode:mock' },
         { id: 'star', label: 'STAR', action: 'interview_mode:star' },
         {
           id: 'employer_questions',
-          label: 'Вопросы работодателю',
+          label: 'Вопросы',
           action: 'interview_mode:employer_questions',
         },
       ],

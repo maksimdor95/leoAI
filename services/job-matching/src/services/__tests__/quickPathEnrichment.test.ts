@@ -1,5 +1,11 @@
 import { enrichQuickPathCollectedData, extractSalaryFromText } from '../quickPathEnrichment';
-import { skillsForProfileText, extractSkillsFromTextWithLexicon } from '../skillLexicon';
+import {
+  skillsForProfileText,
+  extractSkillsFromTextWithLexicon,
+  skillsMatchByAlias,
+  skillAppearsInText,
+  filterMeaningfulMissingSkills,
+} from '../skillLexicon';
 
 describe('quickPathEnrichment', () => {
   it('parses years, city, remote and salary from Quick Path fields', () => {
@@ -37,5 +43,38 @@ describe('skillLexicon', () => {
     });
     const found = extractSkillsFromTextWithLexicon('EAP, коучинг, MBTI', lexicon);
     expect(found).toEqual(expect.arrayContaining(['eap', 'коучинг', 'mbti']));
+  });
+
+  it('matches HH product skill tags via aliases to resume wording', () => {
+    expect(skillsMatchByAlias('Управление бэклогом', 'Управление бэклогом')).toBe(true);
+    expect(skillsMatchByAlias('Продуктовые метрики', 'продуктовая аналитика')).toBe(true);
+    expect(skillsMatchByAlias('Продуктовая стратегия', 'Product vision')).toBe(true);
+    expect(skillsMatchByAlias('Стратегический менеджмент', 'Business Strategy')).toBe(true);
+    expect(skillsMatchByAlias('Управление изменениями', 'управление изменениями')).toBe(true);
+    expect(
+      skillAppearsInText(
+        'Product vision',
+        'формирование видения и стратегии продукта, управление бэклогом'
+      )
+    ).toBe(true);
+  });
+
+  it('filters soft HH gaps when fit is already strong', () => {
+    const gaps = filterMeaningfulMissingSkills(
+      [
+        'управление инновациями',
+        'управление изменениями',
+        'user story mapping',
+        'SQL',
+      ],
+      ['Управление бэклогом', 'Agile Project Management', 'управление изменениями'],
+      'product owner backlog agile scrum',
+      { strongFit: true, max: 3 }
+    );
+    expect(gaps.map((g) => g.toLowerCase())).toEqual(
+      expect.arrayContaining(['user story mapping', 'sql'])
+    );
+    expect(gaps.map((g) => g.toLowerCase())).not.toContain('управление инновациями');
+    expect(gaps.map((g) => g.toLowerCase())).not.toContain('управление изменениями');
   });
 });

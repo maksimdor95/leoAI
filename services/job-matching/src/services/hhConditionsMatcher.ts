@@ -258,8 +258,9 @@ export function matchHhWorkSchedule(
   const scheduleLabel =
     meta.workScheduleDays || meta.scheduleLabel || meta.scheduleId || 'график указан';
 
+  // Без предпочтения в профиле — нейтрально и без reason (иначе UI забивается «График: 5/2»).
   if (!userPref) {
-    return { points: 0, reason: `График: ${scheduleLabel}` };
+    return { points: 0 };
   }
 
   const userNorm = userPref.toUpperCase();
@@ -287,8 +288,9 @@ export function matchHhWorkingHours(
   const userPref = resolveUserWorkingHoursPreference(data);
   const hoursLabel = meta.workingHours || meta.workingHourIds.join(', ');
 
+  // Без предпочтения — не показываем «Рабочие часы: 8» как фактор матча.
   if (!userPref) {
-    return { points: 0, reason: `Рабочие часы: ${hoursLabel}` };
+    return { points: 0 };
   }
 
   const userNorm = userPref.toUpperCase();

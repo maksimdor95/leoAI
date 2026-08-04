@@ -24,6 +24,8 @@ const OMIT_DISPLAY_KEYS = new Set([
   'work_mode',
   /** STAR bank для Interview Prep (seed из enrichment) — не поле анкеты Jack */
   'starBank',
+  /** Свайпы лайк/дизлайк — служебный сигнал для matcher, не анкета */
+  'vacancyFeedback',
 ]);
 
 /** Служебные ключи collectedData (RAG, флаги) — не показываем в «Профиль» */
