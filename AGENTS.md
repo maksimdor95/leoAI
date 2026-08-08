@@ -28,6 +28,9 @@ AI-платформа карьерного развития: **Jack** (подб�
 - Расширение источников вакансий: `docs/JOB_SOURCES_EXPANSION.md`, `services/job-matching/src/services/connectors/`
 - Extended-only ingest (без HH): `scrapeExtendedOnly` / `POST /api/jobs/scrape/extended` (см. §10 pipeline refactor)
 - Scrape worker: `services/job-matching` → `npm run worker:scrape` (dev:up поднимает `job-matching-worker`; API с `SCRAPE_INLINE_WORKER=false`)
+- Hygiene revalidate: cron `revalidate-jobs` @:45 — HH + SJ + Getmatch + Habr + Geekjob + career_*; archive только явный gone (404/410); `JOB_REVALIDATE_SOURCES` для поэтапного rollout
+- Match: softCap≤97; LLM rerank top-N (`MATCH_LLM_RERANK_*`, meta `matchLayers.llmRerank`); Redis cache (`MATCH_CACHE_*`, `?fresh=1`); slim/capped response (`MATCH_RETURN_*`)
+- Insight (вакансии): one-click add gaps → `skills_hard`/`skills_soft` + rematch; `profileSignals.missingSkillsDetails`; courses carousel from static catalog; phase-4 `next_actions`
 
 ## Команды
 

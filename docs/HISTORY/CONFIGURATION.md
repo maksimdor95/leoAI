@@ -426,8 +426,12 @@ USE_MOCK_JOBS=false
 | `EXTENDED_CONNECTOR_CONCURRENCY` | Параллельные extended-коннекторы (1–8) | `3` |
 | `TG_HTTP_PROXY` | SOCKS5/HTTP для scrape `t.me/s/` (TG + Getmatch). Паритет Kabi. Без него с РФ часто timeout | — |
 | `TELEGRAM_PROXY_URL` | Fallback для scrape, если `TG_HTTP_PROXY` пуст (также bot API) | — |
+| `JOB_REVALIDATE_AFTER_HOURS` | Revalidate: брать вакансии старше N часов | `24` |
+| `JOB_REVALIDATE_LIMIT` | Сколько вакансий перепроверять за один cron-прогон (все источники) | `40` |
+| `JOB_REVALIDATE_DELAY_MS` | Пауза между probe в revalidate | `250` |
+| `JOB_REVALIDATE_SOURCES` | Опциональный allowlist source/`revalidator.id` (через запятую). Пусто = все Phase 0–3 | — |
 
-**Ops:** `npm run dev:up` поднимает `job-matching` (API, `SCRAPE_INLINE_WORKER=false`) и `job-matching-worker` (`npm run worker:scrape`). Enrich: cron каждые 20м + lazy после match. Extended-only: `POST /api/jobs/scrape/extended` или `scripts/scrape-extended-only.ts`.
+**Ops:** `npm run dev:up` поднимает `job-matching` (API, `SCRAPE_INLINE_WORKER=false`) и `job-matching-worker` (`npm run worker:scrape`). Enrich: cron каждые 20м + lazy после match. Revalidate @:45 — HH / SJ / Getmatch / Habr / Geekjob / career_*: живые touch/refresh, закрытые soft-archive **только** при явном 404/410 (или API archived). Avito/VK/T-Bank/TG — ещё не в hygiene. Extended-only: `POST /api/jobs/scrape/extended` или `scripts/scrape-extended-only.ts`.
 
 ```env
 ENABLE_EXTENDED_JOB_SOURCES=true
@@ -435,6 +439,9 @@ EXTENDED_JOB_SOURCES=mts,wb,yandex
 EXTENDED_JOB_MAX_PER_SOURCE=40
 # Proxy6 / EU SOCKS — как в Kabi (не коммитить секреты)
 TG_HTTP_PROXY=socks5://USER:PASS@HOST:PORT
+JOB_REVALIDATE_AFTER_HOURS=24
+JOB_REVALIDATE_LIMIT=40
+# Optional rollout: JOB_REVALIDATE_SOURCES=hh.ru,habr,career_wb
 ```
 
 ### LLM rerank shortlist (job-matching → ai-nlp)
@@ -444,16 +451,23 @@ TG_HTTP_PROXY=socks5://USER:PASS@HOST:PORT
 | Переменная | Описание | По умолчанию |
 | ---------- | -------- | ------------ |
 | `MATCH_LLM_RERANK` | `true` / `false` — включить Layer 3 rerank | `true` |
-| `MATCH_LLM_RERANK_TOP_N` | Сколько recommended вакансий отправить в LLM (5–20) | `12` |
-| `MATCH_LLM_RERANK_TIMEOUT_MS` | Таймаут вызова ai-nlp (3000–20000) | `9000` |
+| `MATCH_LLM_RERANK_TOP_N` | Сколько recommended вакансий отправить в LLM (5–20) | `8` |
+| `MATCH_LLM_RERANK_TIMEOUT_MS` | Таймаут вызова ai-nlp (3000–20000) | `18000` |
+| `MATCH_CACHE_ENABLED` | Redis-кэш ответа `/api/jobs/match` | `true` |
+| `MATCH_CACHE_TTL_SEC` | TTL кэша матча (30–1800) | `300` |
+| `MATCH_RETURN_RECOMMENDED_MAX` | Макс. карточек recommended в ответе (mitigation OOM) | `120` |
+| `MATCH_RETURN_WEAK_MAX` | Макс. карточек weak в ответе | `80` |
 | `AI_NLP_URL` | Базовый URL ai-nlp для embedding/rerank | `http://localhost:3003` |
 
 ```env
 MATCH_LLM_RERANK=true
-MATCH_LLM_RERANK_TOP_N=12
-MATCH_LLM_RERANK_TIMEOUT_MS=9000
+MATCH_LLM_RERANK_TOP_N=8
+MATCH_LLM_RERANK_TIMEOUT_MS=18000
+MATCH_CACHE_ENABLED=true
+MATCH_CACHE_TTL_SEC=300
 ```
 
+Query `?fresh=1` / `?refresh=1` на `/api/jobs/match` обходит кэш. В ответе: `matchLayers.llmRerank` (`status`, `authPresent`, `reason`) и `rank` у каждой карточки.
 ## Service URLs
 
 **Для межсервисного взаимодействия:**

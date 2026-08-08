@@ -28,3 +28,21 @@ export const JOBS_SOURCE_META_MIGRATION_SQL = `
       END IF;
   END $$;
 `;
+
+/** Soft-delete: closed/gone vacancies stay in DB but out of match feed. */
+export const JOBS_ARCHIVED_AT_MIGRATION_SQL = `
+  DO $$
+  BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'jobs' AND column_name = 'archived_at'
+      ) THEN
+          ALTER TABLE jobs ADD COLUMN archived_at TIMESTAMPTZ;
+      END IF;
+  END $$;
+
+  CREATE INDEX IF NOT EXISTS idx_jobs_archived_at ON jobs(archived_at);
+  CREATE INDEX IF NOT EXISTS idx_jobs_revalidate_due
+    ON jobs(updated_at ASC)
+    WHERE archived_at IS NULL;
+`;

@@ -88,6 +88,7 @@ export class JobRepository {
         embedding = COALESCE(EXCLUDED.embedding, jobs.embedding),
         role_family = EXCLUDED.role_family,
         source_meta = COALESCE(EXCLUDED.source_meta, jobs.source_meta),
+        archived_at = NULL,
         updated_at = NOW()
       RETURNING *
     `;
@@ -149,7 +150,7 @@ export class JobRepository {
     limit?: number;
     offset?: number;
   }): Promise<Job[]> {
-    let query = 'SELECT * FROM jobs WHERE 1=1';
+    let query = 'SELECT * FROM jobs WHERE archived_at IS NULL';
     const values: unknown[] = [];
     let paramIndex = 1;
 
@@ -203,6 +204,7 @@ export class JobRepository {
   /**
    * Умная выборка для матча: сначала свежие вакансии из primary + adjacent
    * семейств, затем добиваем общим каталогом до limit.
+   * Embedding не грузим — экономия RAM на ~5k строк.
    */
   async findForMatch(options: {
     primaryFamily: RoleFamily;
@@ -215,7 +217,7 @@ export class JobRepository {
     const { primaryFamily, adjacentFamilies } = options;
 
     if (primaryFamily === 'unknown') {
-      return this.findAll({ limit });
+      return this.findAllForMatch(limit);
     }
 
     const families = [
@@ -234,14 +236,63 @@ export class JobRepository {
     return [...familyJobs, ...fillerJobs];
   }
 
+  /** Fingerprint каталога для match-cache. */
+  async getCatalogFingerprint(): Promise<{ jobsInDb: number; maxUpdatedAt: string }> {
+    try {
+      const result = await pool.query<{ n: string; max_u: Date | null }>(
+        `
+          SELECT COUNT(*)::text AS n,
+                 MAX(updated_at) AS max_u
+          FROM jobs
+          WHERE archived_at IS NULL
+        `
+      );
+      const row = result.rows[0];
+      const jobsInDb = Number.parseInt(row?.n ?? '0', 10) || 0;
+      const maxUpdatedAt = row?.max_u ? new Date(row.max_u).toISOString() : '0';
+      return { jobsInDb, maxUpdatedAt };
+    } catch (error: unknown) {
+      logger.warn(
+        `getCatalogFingerprint failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+      const jobsInDb = await this.count();
+      return { jobsInDb, maxUpdatedAt: String(jobsInDb) };
+    }
+  }
+
+  /** Колонки без embedding — меньше памяти при скане матча. */
+  private static readonly MATCH_SELECT_COLUMNS = `
+    id, title, company, location, salary_min, salary_max, currency,
+    description, requirements, skills, experience_level, work_mode,
+    source, source_url, posted_at, role_family, source_meta,
+    created_at, updated_at, archived_at
+  `;
+
+  private async findAllForMatch(limit: number): Promise<Job[]> {
+    const query = `
+      SELECT ${JobRepository.MATCH_SELECT_COLUMNS} FROM jobs
+      WHERE archived_at IS NULL
+      ORDER BY posted_at DESC NULLS LAST, created_at DESC
+      LIMIT $1
+    `;
+    try {
+      const result = await pool.query(query, [limit]);
+      return result.rows.map((row) => this.mapRowToJob(row));
+    } catch (error: unknown) {
+      logger.error('Error finding jobs for match (all):', error);
+      throw error;
+    }
+  }
+
   private async findByRoleFamilies(families: RoleFamily[], limit: number): Promise<Job[]> {
     if (families.length === 0 || limit <= 0) {
       return [];
     }
 
     const query = `
-      SELECT * FROM jobs
+      SELECT ${JobRepository.MATCH_SELECT_COLUMNS} FROM jobs
       WHERE role_family = ANY($1::varchar[])
+        AND archived_at IS NULL
       ORDER BY posted_at DESC NULLS LAST, created_at DESC
       LIMIT $2
     `;
@@ -306,8 +357,9 @@ export class JobRepository {
 
     const vectorLiteral = `[${embedding.join(',')}]`;
     const query = `
-      SELECT * FROM jobs
+      SELECT ${JobRepository.MATCH_SELECT_COLUMNS} FROM jobs
       WHERE embedding IS NOT NULL
+        AND archived_at IS NULL
       ORDER BY embedding <=> $1::vector
       LIMIT $2
     `;
@@ -329,12 +381,13 @@ export class JobRepository {
     if (limit <= 0) return [];
 
     if (excludeIds.length === 0) {
-      return this.findAll({ limit });
+      return this.findAllForMatch(limit);
     }
 
     const query = `
-      SELECT * FROM jobs
+      SELECT ${JobRepository.MATCH_SELECT_COLUMNS} FROM jobs
       WHERE id <> ALL($1::uuid[])
+        AND archived_at IS NULL
       ORDER BY posted_at DESC, created_at DESC
       LIMIT $2
     `;
@@ -352,7 +405,7 @@ export class JobRepository {
    * Get count of jobs
    */
   async count(filters?: { source?: string }): Promise<number> {
-    let query = 'SELECT COUNT(*) as count FROM jobs WHERE 1=1';
+    let query = 'SELECT COUNT(*) as count FROM jobs WHERE archived_at IS NULL';
     const values: unknown[] = [];
     let paramIndex = 1;
 
@@ -379,6 +432,7 @@ export class JobRepository {
     const query = `
       SELECT * FROM jobs
       WHERE embedding IS NULL
+        AND archived_at IS NULL
       ORDER BY updated_at DESC
       LIMIT $1
     `;
@@ -387,6 +441,85 @@ export class JobRepository {
       return result.rows.map((row) => this.mapRowToJob(row));
     } catch (error: unknown) {
       logger.error('Error finding jobs missing embeddings:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Active jobs due for revalidation across sources. Oldest first.
+   */
+  async findDueForRevalidate(options: {
+    sources: string[];
+    olderThanHours: number;
+    limit: number;
+  }): Promise<Job[]> {
+    const hours = Math.max(1, options.olderThanHours);
+    const limit = Math.min(Math.max(1, options.limit), 100);
+    const sources = options.sources.filter(Boolean);
+    if (sources.length === 0) return [];
+
+    const query = `
+      SELECT * FROM jobs
+      WHERE source = ANY($1::text[])
+        AND archived_at IS NULL
+        AND updated_at < NOW() - ($2::int * INTERVAL '1 hour')
+      ORDER BY updated_at ASC
+      LIMIT $3
+    `;
+    try {
+      const result = await pool.query(query, [sources, hours, limit]);
+      return result.rows.map((row) => this.mapRowToJob(row));
+    } catch (error: unknown) {
+      logger.error('Error finding jobs due for revalidate:', error);
+      throw error;
+    }
+  }
+
+  /** @deprecated Use findDueForRevalidate({ sources: ['hh.ru'], ... }) */
+  async findHhDueForRevalidate(options: {
+    olderThanHours: number;
+    limit: number;
+  }): Promise<Job[]> {
+    return this.findDueForRevalidate({
+      sources: ['hh.ru'],
+      olderThanHours: options.olderThanHours,
+      limit: options.limit,
+    });
+  }
+
+  async archiveJob(jobId: string): Promise<Job | null> {
+    const query = `
+      UPDATE jobs
+      SET archived_at = COALESCE(archived_at, NOW()),
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `;
+    try {
+      const result = await pool.query(query, [jobId]);
+      if (result.rows.length === 0) return null;
+      return this.mapRowToJob(result.rows[0]);
+    } catch (error: unknown) {
+      logger.error('Error archiving job:', error);
+      throw error;
+    }
+  }
+
+  /** Mark job as freshly checked without changing content (Getmatch live, etc.). */
+  async touchJob(jobId: string): Promise<Job | null> {
+    const query = `
+      UPDATE jobs
+      SET updated_at = NOW()
+      WHERE id = $1
+        AND archived_at IS NULL
+      RETURNING *
+    `;
+    try {
+      const result = await pool.query(query, [jobId]);
+      if (result.rows.length === 0) return null;
+      return this.mapRowToJob(result.rows[0]);
+    } catch (error: unknown) {
+      logger.error('Error touching job:', error);
       throw error;
     }
   }
@@ -417,6 +550,7 @@ export class JobRepository {
       posted_at: row.posted_at ? new Date(row.posted_at) : null,
       created_at: new Date(row.created_at),
       updated_at: new Date(row.updated_at),
+      archived_at: row.archived_at ? new Date(row.archived_at) : null,
       embedding: row.embedding ? (typeof row.embedding === 'string' ? JSON.parse(row.embedding) : row.embedding) : undefined,
     };
   }

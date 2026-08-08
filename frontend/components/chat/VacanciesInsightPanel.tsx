@@ -21,6 +21,9 @@ export type VacanciesInsightMeta = {
     role_family?: string | null;
     seniority?: string | null;
     missingSkillsTop?: string[];
+    missingSkillsDetails?: Array<{ skill: string; count: number }>;
+    missingSkillsAmongTopN?: number;
+    missingSkillsTotalUnique?: number;
   };
   familyRelevanceShare?: number;
   catalogWarning?: 'catalog_family_mismatch' | 'no_matches' | 'empty_catalog' | null;

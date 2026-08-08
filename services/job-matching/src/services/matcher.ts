@@ -110,6 +110,8 @@ export interface MatchingScore {
   demoteReasons?: string[];
   matchedSkills?: string[];
   missingSkills?: string[];
+  /** 1-based ранг в своём ярусе после сортировки (tie-break). */
+  rank?: number;
 }
 
 export interface MatchJobsStats {
@@ -188,11 +190,6 @@ const SENIORITY_RANK: Record<string, number> = {
 };
 
 function collectSkillStrings(raw: CollectedData): string[] {
-  const enrichedProfile = getEnrichedFromCollected(raw as Record<string, unknown>);
-  if (enrichedProfile?.normalized_skills?.length) {
-    return enrichedProfile.normalized_skills.map((s) => s.name);
-  }
-
   const out: string[] = [];
   const addFrom = (s: unknown) => {
     if (typeof s !== 'string' || !s.trim()) return;
@@ -201,6 +198,15 @@ function collectSkillStrings(raw: CollectedData): string[] {
       if (t) out.push(t);
     });
   };
+
+  // Always union chat/profile fields with enrichment — Insight one-click writes
+  // skills_hard/skills_soft, while normalized_skills may lag until re-enrichment.
+  const enrichedProfile = getEnrichedFromCollected(raw as Record<string, unknown>);
+  if (enrichedProfile?.normalized_skills?.length) {
+    for (const skill of enrichedProfile.normalized_skills) {
+      if (skill?.name?.trim()) out.push(skill.name.trim());
+    }
+  }
 
   if (Array.isArray(raw.skills)) {
     for (const x of raw.skills) {
@@ -290,9 +296,11 @@ export function matchJobs(
 
     const raw = calculateRawScore(job, effective, userPreferences);
     const multiplier = familyMultiplierFor(familyMatch);
-    const finalScore = softCapMatchScore(Math.round(raw.score * multiplier));
+    // Небольшой discrimination bonus до softCap — чтобы топ не был плоским «все 92».
+    const discrimination = scoreDiscriminationBonus(raw.matchedSkills, raw.reasons, familyMatch);
+    const finalScore = softCapMatchScore(Math.round(raw.score * multiplier) + discrimination);
 
-    const reasons = [...raw.reasons];
+    const reasons = dedupeOverlapSkillReasons([...raw.reasons], raw.matchedSkills ?? []);
     if (primaryFamily !== 'unknown' && jobFamily !== 'unknown') {
       if (familyMatch === 'same') {
         reasons.unshift(`Направление совпадает: ${familyLabelRu(jobFamily)}`);
@@ -351,17 +359,12 @@ export function matchJobs(
     }
   }
 
-  const sortTier = (a: MatchingScore, b: MatchingScore) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return jobRecencyTimestamp(b.job) - jobRecencyTimestamp(a.job);
-  };
-
-  recommended.sort(sortTier);
-  weakPool.sort(sortTier);
+  recommended.sort(compareMatchTieBreak);
+  weakPool.sort(compareMatchTieBreak);
 
   const deduped = dedupeMatchTiers(recommended, weakPool);
-  const matches = deduped.recommended;
-  const weakMatches = deduped.weak;
+  const matches = assignRanks(deduped.recommended);
+  const weakMatches = assignRanks(deduped.weak);
 
   const familyRelevanceShare =
     jobs.length > 0 ? relevantCount / jobs.length : 0;
@@ -460,6 +463,95 @@ export function softCapMatchScore(raw: number): number {
   return Math.min(97, Math.round(compressed));
 }
 
+/** 0–2 доп. балла до softCap для разведения одинаковых «сырых» скоров. */
+export function scoreDiscriminationBonus(
+  matchedSkills: string[] | undefined,
+  reasons: string[],
+  familyMatch: 'same' | 'adjacent' | 'unknown' | 'conflict'
+): number {
+  let bonus = 0;
+  if (familyMatch === 'same') bonus += 1;
+  const skills = matchedSkills?.length ?? 0;
+  if (skills >= 3) bonus += 1;
+  else if (skills >= 1 && reasons.some((r) => /опыт пересекается/i.test(r))) bonus += 1;
+  return Math.min(2, bonus);
+}
+
+function skillFitSignal(m: MatchingScore): number {
+  const skills = m.matchedSkills?.length ?? 0;
+  const overlap = m.reasons.some((r) => /опыт пересекается/i.test(r)) ? 2 : 0;
+  const family =
+    m.familyMatch === 'same' ? 3 : m.familyMatch === 'adjacent' ? 2 : m.familyMatch === 'unknown' ? 1 : 0;
+  return skills + overlap + family;
+}
+
+/** Сортировка яруса: score → skill/overlap/family fit → свежесть. */
+export function compareMatchTieBreak(a: MatchingScore, b: MatchingScore): number {
+  if (b.score !== a.score) return b.score - a.score;
+  const fitDiff = skillFitSignal(b) - skillFitSignal(a);
+  if (fitDiff !== 0) return fitDiff;
+  return jobRecencyTimestamp(b.job) - jobRecencyTimestamp(a.job);
+}
+
+function assignRanks(matches: MatchingScore[]): MatchingScore[] {
+  return matches.map((m, i) => ({ ...m, rank: i + 1 }));
+}
+
+/**
+ * Убирает дубли skills ↔ overlap: если навык уже покрыт формулировкой
+ * «Опыт пересекается с обязанностями», не повторяем его в «Совпадающие навыки».
+ */
+export function dedupeOverlapSkillReasons(
+  reasons: string[],
+  matchedSkills: string[]
+): string[] {
+  const overlapLine = reasons.find((r) => /опыт пересекается с обязанностями:/i.test(r));
+  if (!overlapLine) return reasons;
+
+  const overlapBlob = overlapLine.toLowerCase();
+  const covered = new Set(
+    matchedSkills
+      .map((s) => s.toLowerCase().trim())
+      .filter((s) => s.length >= 3 && (overlapBlob.includes(s) || skillTokenOverlapsDuty(s, overlapBlob)))
+  );
+  if (covered.size === 0) return reasons;
+
+  return reasons.map((reason) => {
+    if (!/^совпадающие навыки:/i.test(reason.trim())) return reason;
+    const list = reason.split(':').slice(1).join(':');
+    const kept = list
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s && !covered.has(s.toLowerCase()));
+    if (kept.length === 0) {
+      return 'Совпадающие навыки отражены в пересечении опыта';
+    }
+    if (kept.length === list.split(',').map((s) => s.trim()).filter(Boolean).length) {
+      return reason;
+    }
+    return `Совпадающие навыки: ${kept.join(', ')}`;
+  });
+}
+
+function skillTokenOverlapsDuty(skill: string, overlapBlob: string): boolean {
+  const tokens = skill.split(/[\s/,_-]+/).filter((t) => t.length >= 4);
+  if (tokens.length === 0) return false;
+  // agile ↔ Agile/Scrum, roadmap ↔ видение и стратегия продукта (roadmap в needles)
+  const aliases: Record<string, string[]> = {
+    agile: ['agile', 'scrum'],
+    scrum: ['agile', 'scrum'],
+    roadmap: ['стратеги', 'видение', 'roadmap'],
+    backlog: ['бэклог', 'приоритет'],
+    kpi: ['метрик', 'kpi'],
+    metrics: ['метрик', 'kpi'],
+  };
+  for (const t of tokens) {
+    const keys = aliases[t] ?? [t];
+    if (keys.some((k) => overlapBlob.includes(k))) return true;
+  }
+  return false;
+}
+
 function calculateRawScore(
   job: Job,
   collectedData: CollectedData | null,
@@ -525,7 +617,11 @@ function calculateRawScore(
     ]
       .join('\n')
       .toLowerCase(),
-    { strongFit: strongSkillFit, max: 3 }
+    {
+      strongFit: strongSkillFit,
+      max: strongSkillFit ? 1 : 3,
+      coveredByOverlap: experienceOverlap.matchedLabels,
+    }
   );
   if (meaningfulGaps.length > 0) {
     reasons.push(`Не хватает в профиле: ${meaningfulGaps.slice(0, 3).join(', ')}`);

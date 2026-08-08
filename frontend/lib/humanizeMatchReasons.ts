@@ -180,6 +180,10 @@ export function humanizeMatchReason(raw: string): HumanizedReason {
     return { text: trimmed, tone: 'positive' };
   }
 
+  if (lower.startsWith('совпадающие навыки отражены')) {
+    return { text: trimmed, tone: 'positive' };
+  }
+
   if (lower.startsWith('совпадающие навыки:')) {
     const list = trimmed.split(':').slice(1).join(':').trim();
     return {

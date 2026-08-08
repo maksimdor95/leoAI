@@ -35,6 +35,16 @@ import { jackCollectedDataReadyForJobMatch } from '@/lib/jackProfileGating';
 import { buildJobsMatchInfoTooltip, jobsRefreshStatusLabel } from '@/lib/jobsFunnelSummary';
 import { getJackDetailedProgress } from '@/lib/jackDetailedProgress';
 import { buildVacancyPrepText, vacancyPrepDisplayLabel } from '@/lib/buildVacancyPrepText';
+
+/** Stale StagePanel content after leaving resume_upload / LLM drift. */
+function looksLikeStaleResumeUploadQuestion(question: QuestionMessage): boolean {
+  const t = `${question.question} ${question.placeholder || ''}`.toLowerCase();
+  const mentionsFile = t.includes('pdf') || t.includes('docx');
+  const mentionsResume = t.includes('резюме') || t.includes('resume');
+  const mentionsUpload =
+    t.includes('загруз') || t.includes('прилож') || t.includes('вставить текст');
+  return mentionsFile && mentionsResume && mentionsUpload;
+}
 import { fetchViewedJobIds } from '@/lib/jobApi';
 import {
   addVacancyFavorite,
@@ -74,6 +84,8 @@ import {
   VacanciesMarketInsightTrigger,
   hasVacanciesMarketInsight,
 } from '@/components/chat/VacanciesMarketInsight';
+import { mergeSkillsIntoList } from '@/lib/mergeSkillsList';
+import { partitionSkillsByBucket } from '@/lib/skillGapBucket';
 import { MessageList } from '@/components/chat/MessageList';
 import {
   filterMessagesByPrepHistory,
@@ -196,6 +208,19 @@ type JobsMatchMeta = {
     role_family?: string | null;
     seniority?: string | null;
     missingSkillsTop?: string[];
+    missingSkillsDetails?: Array<{ skill: string; count: number }>;
+    missingSkillsAmongTopN?: number;
+    missingSkillsTotalUnique?: number;
+  };
+  matchLayers?: {
+    llmRerank?: {
+      status?: string;
+      authPresent?: boolean;
+      reason?: string;
+      explainCount?: number;
+      durationMs?: number;
+      topN?: number;
+    };
   };
 };
 
@@ -384,6 +409,7 @@ function ChatPageContent() {
   const [jobsMatchMeta, setJobsMatchMeta] = useState<JobsMatchMeta | null>(null);
   const [sessionCurrentStepId, setSessionCurrentStepId] = useState<string | null>(null);
   const [sessionCompletedSteps, setSessionCompletedSteps] = useState<string[]>([]);
+  const [sessionFillProfileGaps, setSessionFillProfileGaps] = useState(false);
   const [sessionCollectedData, setSessionCollectedData] = useState<Record<string, unknown>>({});
   const [vacancyPrepJobId, setVacancyPrepJobId] = useState<string | null>(null);
   const [vacancyPreview, setVacancyPreview] = useState<{
@@ -392,6 +418,13 @@ function ChatPageContent() {
   } | null>(null);
   const [vacanciesFilter, setVacanciesFilter] = useState<VacanciesFilter>('all');
   const [vacanciesInsightOpen, setVacanciesInsightOpen] = useState(false);
+  const [insightAddingSkills, setInsightAddingSkills] = useState(false);
+  const [insightMatchDelta, setInsightMatchDelta] = useState<{
+    beforeRecommended: number;
+    afterRecommended: number;
+    beforeMaxScore: number;
+    afterMaxScore: number;
+  } | null>(null);
   const [weakMatchesExpanded, setWeakMatchesExpanded] = useState(false);
   const knownJobIdsRef = useRef<Set<string>>(new Set());
   const viewedJobIdsRef = useRef<Set<string>>(new Set());
@@ -458,6 +491,11 @@ function ChatPageContent() {
     setSessionCompletedSteps(
       Array.isArray(meta.completedSteps) ? (meta.completedSteps as string[]) : []
     );
+    const flags =
+      meta.flags && typeof meta.flags === 'object' && !Array.isArray(meta.flags)
+        ? (meta.flags as Record<string, unknown>)
+        : null;
+    setSessionFillProfileGaps(flags?.fillProfileGaps === true);
     const rawCollected = meta.collectedData;
     if (rawCollected && typeof rawCollected === 'object' && !Array.isArray(rawCollected)) {
       setSessionCollectedData({ ...(rawCollected as Record<string, unknown>) });
@@ -480,8 +518,17 @@ function ChatPageContent() {
 
   const jackDetailedProgressLabel = useMemo(() => {
     if (currentProduct !== 'jack') return null;
-    return getJackDetailedProgress(sessionCurrentStepId, sessionCompletedSteps)?.label ?? null;
-  }, [currentProduct, sessionCurrentStepId, sessionCompletedSteps]);
+    return (
+      getJackDetailedProgress(sessionCurrentStepId, sessionCompletedSteps, {
+        fillProfileGaps: sessionFillProfileGaps,
+      })?.label ?? null
+    );
+  }, [
+    currentProduct,
+    sessionCurrentStepId,
+    sessionCompletedSteps,
+    sessionFillProfileGaps,
+  ]);
 
   const hydrateVacancyFeedState = useCallback(async (userId: string) => {
     if (vacancyFeedUserIdRef.current === userId && viewedJobIdsLoadedRef.current) {
@@ -2237,6 +2284,15 @@ function ChatPageContent() {
       if (sessionCurrentStepId === 'resume_ready') {
         return undefined;
       }
+      // Не показываем застрявший промпт «загрузите резюме», если шаг уже другой.
+      if (
+        latestQuestion &&
+        sessionCurrentStepId &&
+        sessionCurrentStepId !== 'resume_upload' &&
+        looksLikeStaleResumeUploadQuestion(latestQuestion)
+      ) {
+        return undefined;
+      }
       return latestQuestion;
     }
     if (currentProduct !== 'interview-prep') {
@@ -2710,6 +2766,36 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     [jobsMatchMeta, matchedJobs.length, weakMatchedJobs.length]
   );
 
+  const insightCatalogHints = useMemo(() => {
+    const hints: string[] = [];
+    const locale = settings.locale;
+    if (jobsMatchMeta?.catalogWarning === 'catalog_family_mismatch') {
+      hints.push(
+        locale === 'en'
+          ? 'Few jobs in the catalog match your role family — refresh scrape for your profile.'
+          : 'В каталоге мало вакансий вашего направления — запустите сбор свежих вакансий по профилю.'
+      );
+    } else if (jobsMatchMeta?.catalogWarning === 'no_matches') {
+      hints.push(
+        locale === 'en'
+          ? 'No strong or weak matches yet — clarify role, skills, or location in the profile.'
+          : 'Пока нет совпадений — уточните роль, навыки или локацию в профиле.'
+      );
+    }
+    if (
+      typeof jobsMatchMeta?.familyRelevanceShare === 'number' &&
+      jobsMatchMeta.familyRelevanceShare < 0.15 &&
+      jobsMatchMeta.catalogWarning !== 'catalog_family_mismatch'
+    ) {
+      hints.push(
+        locale === 'en'
+          ? 'Your role family is a small share of the current catalog.'
+          : 'Ваше направление занимает небольшую долю текущего каталога.'
+      );
+    }
+    return hints;
+  }, [jobsMatchMeta, settings.locale]);
+
   const displayedMatchedJobs = useMemo(() => {
     const base = filterJobsByDismissed(matchedJobs, dismissedJobIds);
     if (vacanciesFilter === 'new') {
@@ -2793,7 +2879,11 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
       }
 
       setProfileEditSaving(true);
-      await chatRef.current.mergeCollectedData(payload);
+      const ok = await chatRef.current.mergeCollectedData(payload);
+      if (!ok) {
+        messageApi.error('Не удалось сохранить профиль');
+        return;
+      }
       syncSessionMetadata();
       messageApi.success('Профиль обновлён');
       handleCloseProfileEdit();
@@ -2811,12 +2901,18 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     revealPanel?: boolean;
     silent?: boolean;
     triggerWeakMatchGate?: boolean;
-  }) => {
+    /** Bypass Redis match cache (default: true unless silent). */
+    fresh?: boolean;
+  }): Promise<{
+    recommendedCount: number;
+    maxMatchScore: number;
+    profileSignals?: JobsMatchMeta['profileSignals'];
+  } | null> => {
     if (!isAuthenticated()) {
       if (!options?.silent) {
         messageApi.warning('Нужна авторизация для подбора вакансий');
       }
-      return;
+      return null;
     }
 
     const userId = await getAuthenticatedUserId();
@@ -2824,13 +2920,15 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
       if (!options?.silent) {
         messageApi.error('Не удалось определить пользователя. Перезайдите в аккаунт.');
       }
-      return;
+      return null;
     }
 
     const activeSessionId = chatRef.current?.sessionId || sessionId;
-    const sessionQuery = activeSessionId
-      ? `?sessionId=${encodeURIComponent(activeSessionId)}`
-      : '';
+    const query = new URLSearchParams();
+    if (activeSessionId) query.set('sessionId', activeSessionId);
+    const useFresh = options?.fresh ?? !options?.silent;
+    if (useFresh) query.set('fresh', '1');
+    const sessionQuery = query.toString() ? `?${query.toString()}` : '';
 
     const backgroundRefresh = Boolean(options?.silent && jobsListHydratedRef.current);
     const wasListHydrated = jobsListHydratedRef.current;
@@ -2907,6 +3005,10 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         data?.profileSignals && typeof data.profileSignals === 'object'
           ? (data.profileSignals as JobsMatchMeta['profileSignals'])
           : undefined;
+      const matchLayers =
+        data?.matchLayers && typeof data.matchLayers === 'object'
+          ? (data.matchLayers as JobsMatchMeta['matchLayers'])
+          : undefined;
       setJobsMatchMeta({
         jobsInDb,
         jobsScanned,
@@ -2921,6 +3023,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         familyCatalogCount,
         catalogWarning,
         profileSignals,
+        matchLayers,
       });
       jobsListHydratedRef.current = true;
 
@@ -3004,6 +3107,11 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
           );
         }
       }
+      return {
+        recommendedCount: recommendedVisible.length,
+        maxMatchScore,
+        profileSignals,
+      };
     } catch (error) {
       const rawMessage =
         error instanceof Error ? error.message : 'Не удалось получить вакансии';
@@ -3018,12 +3126,141 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
       if (!options?.silent) {
         messageApi.error(messageText);
       }
+      return null;
     } finally {
       if (!backgroundRefresh) {
         setIsJobsLoading(false);
       }
     }
   }, [getJobMatchingBaseUrl, hydrateVacancyFeedState, messageApi, persistVacancyFeedState, pruneStaleFavoriteJobIds, sessionCurrentStepId, syncSessionMetadata]);
+
+  const handleAddMissingSkillsFromMatch = useCallback(
+    async (
+      skills: string[]
+    ): Promise<{
+      missingSkillsDetails?: Array<{ skill: string; count: number }>;
+      missingSkillsAmongTopN?: number;
+    } | void> => {
+      if (!chatRef.current || skills.length === 0) return;
+
+      const { hard, soft } = partitionSkillsByBucket(skills);
+      const hardCurrent =
+        typeof jackCollectedSnapshot.skills_hard === 'string'
+          ? jackCollectedSnapshot.skills_hard
+          : '';
+      const softCurrent =
+        typeof jackCollectedSnapshot.skills_soft === 'string'
+          ? jackCollectedSnapshot.skills_soft
+          : '';
+      const hardMerged = mergeSkillsIntoList(hardCurrent, hard);
+      const softMerged = mergeSkillsIntoList(softCurrent, soft);
+
+      const applyDelta = (
+        beforeRecommended: number,
+        beforeMaxScore: number,
+        result: {
+          recommendedCount: number;
+          maxMatchScore: number;
+        }
+      ) => {
+        const changed =
+          result.recommendedCount !== beforeRecommended ||
+          result.maxMatchScore !== beforeMaxScore;
+        setInsightMatchDelta(
+          changed
+            ? {
+                beforeRecommended,
+                afterRecommended: result.recommendedCount,
+                beforeMaxScore,
+                afterMaxScore: result.maxMatchScore,
+              }
+            : null
+        );
+      };
+
+      const signalsFrom = (
+        result: {
+          profileSignals?: JobsMatchMeta['profileSignals'];
+        } | null
+      ):
+        | {
+            missingSkillsDetails: Array<{ skill: string; count: number }>;
+            missingSkillsAmongTopN: number;
+          }
+        | undefined => {
+        if (!result) return undefined;
+        return {
+          missingSkillsDetails: result.profileSignals?.missingSkillsDetails ?? [],
+          missingSkillsAmongTopN: result.profileSignals?.missingSkillsAmongTopN ?? 0,
+        };
+      };
+
+      if (hardMerged.added.length === 0 && softMerged.added.length === 0) {
+        messageApi.info(
+          settings.locale === 'en'
+            ? 'Already in profile — refreshing which gaps still matter…'
+            : 'Уже в профиле — обновляю, какие пробелы ещё важны…'
+        );
+        setInsightAddingSkills(true);
+        try {
+          const beforeRecommended = matchedJobs.length;
+          const beforeMaxScore = jobsMatchMeta?.maxMatchScore ?? 0;
+          const result = await fetchMatchedJobs({
+            revealPanel: false,
+            silent: true,
+            fresh: true,
+          });
+          if (result) applyDelta(beforeRecommended, beforeMaxScore, result);
+          return signalsFrom(result);
+        } finally {
+          setInsightAddingSkills(false);
+        }
+      }
+
+      const beforeRecommended = matchedJobs.length;
+      const beforeMaxScore = jobsMatchMeta?.maxMatchScore ?? 0;
+      const payload: Record<string, unknown> = {};
+      if (hardMerged.added.length > 0) payload.skills_hard = hardMerged.next;
+      if (softMerged.added.length > 0) payload.skills_soft = softMerged.next;
+
+      setInsightAddingSkills(true);
+      try {
+        const ok = await chatRef.current.mergeCollectedData(payload);
+        if (!ok) {
+          messageApi.error(
+            settings.locale === 'en' ? 'Could not save skills' : 'Не удалось сохранить навыки'
+          );
+          return;
+        }
+        syncSessionMetadata();
+        const addedCount = hardMerged.added.length + softMerged.added.length;
+        messageApi.success(
+          settings.locale === 'en'
+            ? `Added ${addedCount} skill(s). Match refreshed — next gaps may appear.`
+            : `Добавлено навыков: ${addedCount}. Подбор обновлён — могут появиться следующие пробелы.`
+        );
+        const result = await fetchMatchedJobs({
+          revealPanel: false,
+          silent: true,
+          fresh: true,
+        });
+        if (result) applyDelta(beforeRecommended, beforeMaxScore, result);
+        return signalsFrom(result);
+      } finally {
+        setInsightAddingSkills(false);
+      }
+    },
+    [
+      fetchMatchedJobs,
+      jackCollectedSnapshot.skills_hard,
+      jackCollectedSnapshot.skills_soft,
+      jobsMatchMeta?.maxMatchScore,
+      matchedJobs.length,
+      messageApi,
+      settings.locale,
+      syncSessionMetadata,
+    ]
+  );
 
   const scheduleSwipeRematch = useCallback(() => {
     const now = Date.now();
@@ -3799,9 +4036,22 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                   locale={settings.locale}
                                   marketFitSummary={jackEnrichedProfile?.market_fit_summary}
                                   missingSkillsTop={jobsMatchMeta?.profileSignals?.missingSkillsTop}
+                                  missingSkillsDetails={
+                                    jobsMatchMeta?.profileSignals?.missingSkillsDetails
+                                  }
+                                  missingSkillsAmongTopN={
+                                    jobsMatchMeta?.profileSignals?.missingSkillsAmongTopN
+                                  }
+                                  missingSkillsTotalUnique={
+                                    jobsMatchMeta?.profileSignals?.missingSkillsTotalUnique
+                                  }
+                                  nextActions={jackEnrichedProfile?.next_actions}
+                                  catalogHints={insightCatalogHints}
+                                  matchDelta={insightMatchDelta}
                                   open={vacanciesInsightOpen}
                                   onClose={() => setVacanciesInsightOpen(false)}
-                                  onEditProfile={handleEditProfileFromVacancies}
+                                  onAddSkills={handleAddMissingSkillsFromMatch}
+                                  addingSkills={insightAddingSkills}
                                 />
                               </div>
                             ) : null}
@@ -4019,6 +4269,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                     onSwipeDislike={() => handleVacancySwipeDislike(item)}
                                     likeAriaLabel={v('swipeLike')}
                                     dislikeAriaLabel={v('swipeDislike')}
+                                    onAddMissingSkills={handleAddMissingSkillsFromMatch}
+                                    addMissingSkillsLabel="Добавить в профиль"
                                     tapHint={v('swipeTapHint')}
                                   />
                                 ))
@@ -4088,6 +4340,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                 onSwipeDislike={() => handleVacancySwipeDislike(item)}
                                 likeAriaLabel={v('swipeLike')}
                                 dislikeAriaLabel={v('swipeDislike')}
+                                onAddMissingSkills={handleAddMissingSkillsFromMatch}
+                                addMissingSkillsLabel="Добавить в профиль"
                                 tapHint={v('swipeTapHint')}
                               />
                             ))}
@@ -4149,6 +4403,8 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                     onSwipeDislike={() => handleVacancySwipeDislike(item)}
                                     likeAriaLabel={v('swipeLike')}
                                     dislikeAriaLabel={v('swipeDislike')}
+                                    onAddMissingSkills={handleAddMissingSkillsFromMatch}
+                                    addMissingSkillsLabel="Добавить в профиль"
                                     tapHint={v('swipeTapHint')}
                                   />
                                 ))
@@ -4466,6 +4722,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
             ? v('removeFromFavorites')
             : v('addToFavorites')
         }
+        onAddMissingSkills={handleAddMissingSkillsFromMatch}
       />
       <Modal
         title={

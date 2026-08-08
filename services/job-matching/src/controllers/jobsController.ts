@@ -33,7 +33,21 @@ import {
 } from '../services/jobDetailsService';
 import { ensureProfileEmbedding } from '../services/profileEmbedding';
 import { llmRerankRecommended } from '../services/llmRerank';
+import { aggregateMissingSkillsTop } from '../services/aggregateMissingSkills';
+import {
+  buildMatchCacheKey,
+  getCachedMatchPayload,
+  hashMatchProfile,
+  setCachedMatchPayload,
+} from '../services/matchCache';
+import {
+  MATCH_RETURN_RECOMMENDED_MAX,
+  MATCH_RETURN_WEAK_MAX,
+  mapMatchForResponse,
+  stripJobEmbeddings,
+} from '../services/matchPayload';
 import type { Job } from '../models/job';
+import type { LlmRerankMeta } from '../services/llmRerank';
 
 const CATALOG_MAX_LIMIT = 200;
 
@@ -88,6 +102,11 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
 
     // Cookie / X-Auth-Token / Bearer — тот же источник, что и authenticateToken
     const token = extractAccessToken(req) || '';
+    const forceFresh =
+      req.query.fresh === '1' ||
+      req.query.fresh === 'true' ||
+      req.query.refresh === '1' ||
+      req.query.refresh === 'true';
 
     // Get user profile (preferences optional — matching works from collectedData)
     let userProfile: Awaited<ReturnType<typeof getUserProfile>>;
@@ -109,6 +128,26 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
     const collectedData = await getCollectedDataWithFallback(userId, token, sessionId);
     await ensureProfileEmbedding(collectedData, token);
 
+    const catalogFp = await jobRepository.getCatalogFingerprint();
+    const profileHash = hashMatchProfile(
+      collectedData ? (collectedData as unknown as Record<string, unknown>) : null
+    );
+    const cacheKey = buildMatchCacheKey({
+      userId,
+      sessionId,
+      profileHash,
+      catalog: catalogFp,
+    });
+
+    if (!forceFresh) {
+      const cached = await getCachedMatchPayload(cacheKey);
+      if (cached && typeof cached === 'object') {
+        logger.info(`[match] cache hit userId=${userId} key=${cacheKey.slice(0, 48)}…`);
+        res.json({ ...(cached as Record<string, unknown>), matchCache: 'hit' });
+        return;
+      }
+    }
+
     const effectiveProfile = normalizeForMatch(collectedData);
     const profileRoles = effectiveProfile
       ? classifyProfileRoles({
@@ -126,7 +165,7 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         })
       : { primary: 'unknown' as const, adjacent: [], detected: [] };
 
-    const jobsInDb = await jobRepository.count();
+    const jobsInDb = catalogFp.jobsInDb;
     const scanLimit = resolveMatchScanLimit(jobsInDb);
     const familyJobs = await jobRepository.findForMatch({
       primaryFamily: profileRoles.primary,
@@ -155,8 +194,11 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       }
     }
 
+    // Не держим embedding-векторы в RAM на всём скане (если вдруг пришли).
+    stripJobEmbeddings(allJobs);
+
     if (allJobs.length === 0) {
-      res.json({
+      const emptyPayload = {
         jobs: [],
         count: 0,
         totalMatched: 0,
@@ -171,8 +213,19 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
         catalogWarning: 'empty_catalog',
         profileFamily: null,
         profileFamilyLabel: null,
+        matchLayers: {
+          llmRerank: {
+            status: 'skipped',
+            authPresent: Boolean(token),
+            topN: 0,
+            durationMs: 0,
+            reason: 'empty_catalog',
+          } satisfies LlmRerankMeta,
+        },
+        matchCache: 'miss',
         message: 'No jobs available. Please wait for job scraping to complete.',
-      });
+      };
+      res.json(emptyPayload);
       return;
     }
 
@@ -190,18 +243,18 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
     ]);
 
     const effectiveForSignals = normalizeForMatch(collectedData);
-    const missingSkillsTop = (() => {
-      const counts = new Map<string, number>();
-      for (const m of [...matchedJobs, ...weakMatches].slice(0, 20)) {
-        for (const skill of m.missingSkills ?? []) {
-          counts.set(skill, (counts.get(skill) ?? 0) + 1);
-        }
-      }
-      return [...counts.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([skill]) => skill);
-    })();
+    const missingSkillsPool = [...matchedJobs, ...weakMatches];
+    const {
+      missingSkillsTop,
+      missingSkillsDetails,
+      missingSkillsAmongTopN,
+      missingSkillsTotalUnique,
+    } = aggregateMissingSkillsTop(missingSkillsPool, {
+      // Full current match set (not an arbitrary “top 20 sample”).
+      amongTopN: Math.max(missingSkillsPool.length, 1),
+      limit: 25,
+      minCount: 35,
+    });
 
     const profileSignals = {
       role_family: stats.primaryFamily !== 'unknown' ? stats.primaryFamily : null,
@@ -215,6 +268,9 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
             ).seniority ?? null
           : null,
       missingSkillsTop,
+      missingSkillsDetails,
+      missingSkillsAmongTopN,
+      missingSkillsTotalUnique,
     };
 
     // Диагностика каталога: если пользователь классифицирован, а его семейство
@@ -237,11 +293,12 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       stats.primaryFamily
     );
 
-    const rerankedRecommended = await llmRerankRecommended(
+    const { matches: rerankedRaw, meta: llmRerankMeta } = await llmRerankRecommended(
       prioritizedRecommended,
       collectedData,
       token
     );
+    const rerankedRecommended = rerankedRaw.map((m, i) => ({ ...m, rank: i + 1 }));
 
     if (
       !catalogWarning &&
@@ -252,21 +309,27 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       catalogWarning = 'no_matches';
     }
 
-    const prioritizedWeak = filterWeakMatchesForPresentation(
+    const prioritizedWeakRaw = filterWeakMatchesForPresentation(
       weakMatches,
       stats.primaryFamily,
       catalogWarning
     );
+    const prioritizedWeak = prioritizedWeakRaw.map((m, i) => ({ ...m, rank: i + 1 }));
 
-    const returnedJobs = rerankedRecommended;
-    const returnedWeak = prioritizedWeak;
+    const totalMatched = rerankedRecommended.length;
+    const weakTierTotal = prioritizedWeak.length;
+    const returnedJobs = rerankedRecommended.slice(0, MATCH_RETURN_RECOMMENDED_MAX);
+    const returnedWeak = prioritizedWeak.slice(0, MATCH_RETURN_WEAK_MAX);
 
     logger.info(
       `[match] userId=${userId} jobsInDb=${jobsInDb} scanned=${allJobs.length} scanLimit=${scanLimit} ` +
         `aboveThreshold=${stats.aboveThreshold} weakTierTotal=${stats.weakTierTotal} ` +
-        `returnedRecommended=${returnedJobs.length} returnedWeak=${returnedWeak.length} maxScore=${stats.maxScore} threshold=${MATCH_SCORE_THRESHOLD} ` +
+        `returnedRecommended=${returnedJobs.length}/${totalMatched} returnedWeak=${returnedWeak.length}/${weakTierTotal} ` +
+        `maxScore=${stats.maxScore} threshold=${MATCH_SCORE_THRESHOLD} ` +
         `weakFloor=${WEAK_MATCH_SCORE_FLOOR} primaryFamily=${stats.primaryFamily} ` +
-        `familyRelevance=${(stats.familyRelevanceShare * 100).toFixed(1)}%`
+        `familyRelevance=${(stats.familyRelevanceShare * 100).toFixed(1)}% ` +
+        `llmRerank=${llmRerankMeta.status} authPresent=${llmRerankMeta.authPresent} ` +
+        `rssMb=${Math.round(process.memoryUsage().rss / (1024 * 1024))}`
     );
 
     if (stats.aboveThreshold === 0 && stats.weakTierTotal === 0 && jobsInDb > 0) {
@@ -286,31 +349,13 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       }).catch((err: unknown) => logger.error('Failed to trigger background scraping:', err));
     }
 
-    res.json({
-      jobs: returnedJobs.map((match) => ({
-        job: match.job,
-        score: match.score,
-        reasons: match.reasons,
-        jobFamily: match.jobFamily,
-        familyMatch: match.familyMatch,
-        demoteReasons: match.demoteReasons ?? null,
-        matchedSkills: match.matchedSkills ?? [],
-        missingSkills: match.missingSkills ?? [],
-      })),
+    const payload = {
+      jobs: returnedJobs.map((match, i) => mapMatchForResponse(match, match.rank ?? i + 1)),
       count: returnedJobs.length,
-      totalMatched: returnedJobs.length,
-      weakJobs: returnedWeak.map((match) => ({
-        job: match.job,
-        score: match.score,
-        reasons: match.reasons,
-        jobFamily: match.jobFamily,
-        familyMatch: match.familyMatch,
-        demoteReasons: match.demoteReasons ?? null,
-        matchedSkills: match.matchedSkills ?? [],
-        missingSkills: match.missingSkills ?? [],
-      })),
+      totalMatched,
+      weakJobs: returnedWeak.map((match, i) => mapMatchForResponse(match, match.rank ?? i + 1)),
       weakCount: returnedWeak.length,
-      weakTierTotal: returnedWeak.length,
+      weakTierTotal,
       weakMatchFloor: WEAK_MATCH_SCORE_FLOOR,
       jobsInDb,
       jobsScanned: allJobs.length,
@@ -325,7 +370,18 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       familyDistribution: stats.familyDistribution,
       catalogWarning,
       profileSignals,
-    });
+      matchLayers: {
+        llmRerank: llmRerankMeta,
+      },
+      matchCache: forceFresh ? 'bypass' : 'miss',
+      returnLimits: {
+        recommendedMax: MATCH_RETURN_RECOMMENDED_MAX,
+        weakMax: MATCH_RETURN_WEAK_MAX,
+      },
+    };
+
+    await setCachedMatchPayload(cacheKey, payload);
+    res.json(payload);
   } catch (error: unknown) {
     logger.error('Error getting matched jobs:', error);
     res.status(500).json({ error: 'Internal server error' });

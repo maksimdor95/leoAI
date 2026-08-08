@@ -45,6 +45,7 @@ export interface EnrichedProfile {
   profile_completeness?: number;
   missing_fields?: string[];
   market_fit_summary?: string;
+  next_actions?: string[];
   achievements_with_metrics?: AchievementWithMetrics[];
 }
 

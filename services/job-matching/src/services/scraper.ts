@@ -775,6 +775,39 @@ function parseSuperJobVacancy(vacancy: Record<string, unknown>, keyword: string)
 }
 
 /**
+ * Fetch a single SuperJob vacancy by id (revalidate / detail refresh).
+ */
+export async function fetchSuperJobVacancyDetails(vacancyId: string): Promise<JobInput | null> {
+  const apiKey = process.env.SUPERJOB_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const response = await axios.get(`${SUPERJOB_API_URL}/vacancies/${vacancyId}/`, {
+      headers: {
+        'User-Agent': SCRAPER_USER_AGENT,
+        'X-Api-App-Id': apiKey,
+        Authorization: process.env.SUPERJOB_ACCESS_TOKEN
+          ? `Bearer ${process.env.SUPERJOB_ACCESS_TOKEN}`
+          : undefined,
+      },
+      timeout: 10000,
+      validateStatus: (s) => s < 500,
+    });
+    if (response.status !== 200 || !response.data || typeof response.data !== 'object') {
+      return null;
+    }
+    return parseSuperJobVacancy(response.data as Record<string, unknown>, 'revalidate');
+  } catch (error: unknown) {
+    logger.warn(
+      `SuperJob vacancy ${vacancyId} fetch failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    return null;
+  }
+}
+
+/**
  * Fetch detailed vacancy information from HH.ru
  */
 export async function fetchHhVacancyDetails(vacancyId: string): Promise<JobInput | null> {

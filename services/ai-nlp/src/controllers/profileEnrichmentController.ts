@@ -141,7 +141,7 @@ async function callEnrichmentLlm(
     messages: [buildSystemMessage({ extraSections: [system] }), buildUserMessage(user)],
     completionOptions: {
       temperature: 0.2,
-      maxTokens: phase === 4 ? 400 : 800,
+      maxTokens: phase === 4 ? 550 : 800,
     },
   });
   const content = response.message.text ?? '';
@@ -224,6 +224,15 @@ export async function enrichProfile(req: Request, res: Response): Promise<void> 
         );
         if (typeof llm.market_fit_summary === 'string' && llm.market_fit_summary.trim()) {
           enriched.market_fit_summary = toSecondPersonMarketFit(llm.market_fit_summary.trim());
+        }
+        if (Array.isArray(llm.next_actions)) {
+          const actions = llm.next_actions
+            .filter((a): a is string => typeof a === 'string' && a.trim().length > 0)
+            .map((a) => a.trim())
+            .slice(0, 3);
+          if (actions.length > 0) {
+            enriched.next_actions = actions;
+          }
         }
       } catch (err) {
         logger.warn('enrich-profile phase 4 LLM failed (fail-open):', err);

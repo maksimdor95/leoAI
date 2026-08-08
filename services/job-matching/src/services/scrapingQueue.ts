@@ -15,6 +15,10 @@ import {
   type ScrapeResult,
 } from './scraper';
 import { enrichJobsMissingEmbeddings, enrichJobsFromEntities } from './enrichment';
+import {
+  revalidateStaleJobs,
+  getRevalidateLimit,
+} from './revalidate/runRevalidate';
 import type { Job as JobEntity } from '../models/job';
 import { logger } from '../utils/logger';
 import { ioredisTlsOptions } from '../utils/redisTls';
@@ -49,7 +53,13 @@ export interface EnrichJobPayload {
   limit?: number;
 }
 
-type QueuePayload = ScrapingJobPayload | EnrichJobPayload;
+export interface RevalidateJobPayload {
+  limit?: number;
+  olderThanHours?: number;
+  sources?: string[];
+}
+
+type QueuePayload = ScrapingJobPayload | EnrichJobPayload | RevalidateJobPayload;
 
 export const scrapingQueue = new Queue<QueuePayload>('job-scraping', {
   connection,
@@ -121,6 +131,22 @@ async function processQueueJob(job: Job<QueuePayload>): Promise<unknown> {
     const result = await enrichJobsMissingEmbeddings(limit);
     logger.info(
       `✅ enrich-jobs ${job.id}: attempted=${result.attempted} enriched=${result.enriched}`
+    );
+    return result;
+  }
+
+  if (job.name === 'revalidate-hh-jobs' || job.name === 'revalidate-jobs') {
+    const payload = (job.data || {}) as RevalidateJobPayload;
+    const limit = Math.min(100, Math.max(1, payload.limit ?? getRevalidateLimit()));
+    logger.info(`Processing revalidate-jobs ${job.id} limit=${limit}`);
+    const result = await revalidateStaleJobs({
+      limit,
+      olderThanHours: payload.olderThanHours,
+      sources: payload.sources,
+    });
+    logger.info(
+      `✅ revalidate-jobs ${job.id}: attempted=${result.attempted} ` +
+        `refreshed=${result.refreshed} archived=${result.archived} errors=${result.errors}`
     );
     return result;
   }
@@ -205,8 +231,14 @@ export async function scheduleRegularScraping(): Promise<void> {
     { repeat: { pattern: '*/20 * * * *' }, jobId: 'enrich-pending' }
   );
 
+  await scrapingQueue.add(
+    'revalidate-jobs',
+    { limit: getRevalidateLimit() } satisfies RevalidateJobPayload,
+    { repeat: { pattern: '45 * * * *' }, jobId: 'revalidate-jobs-hourly' }
+  );
+
   logger.info(
-    'Scheduled: HH@:00, SuperJob@:15, Extended every 2h@:30, enrich every 20m'
+    'Scheduled: HH@:00, SuperJob@:15, Extended every 2h@:30, enrich every 20m, revalidate boards+career@:45'
   );
 }
 
@@ -231,6 +263,25 @@ export async function triggerScraping(payload?: ScrapingJobPayload): Promise<voi
 export async function triggerEnrichment(limit: number = 40): Promise<void> {
   await scrapingQueue.add('enrich-jobs', { limit } satisfies EnrichJobPayload);
   logger.info(`Triggered enrich-jobs limit=${limit}`);
+}
+
+export async function triggerHhRevalidate(limit?: number): Promise<void> {
+  const payload: RevalidateJobPayload = {
+    limit: limit ?? getRevalidateLimit(),
+  };
+  await scrapingQueue.add('revalidate-jobs', payload);
+  logger.info(`Triggered revalidate-jobs limit=${payload.limit}`);
+}
+
+export async function triggerRevalidate(limit?: number, sources?: string[]): Promise<void> {
+  const payload: RevalidateJobPayload = {
+    limit: limit ?? getRevalidateLimit(),
+    sources,
+  };
+  await scrapingQueue.add('revalidate-jobs', payload);
+  logger.info(
+    `Triggered revalidate-jobs limit=${payload.limit} sources=${sources?.join(',') ?? 'all'}`
+  );
 }
 
 /**

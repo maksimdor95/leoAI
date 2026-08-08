@@ -26,6 +26,8 @@ export interface Job {
   posted_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  /** Soft-delete: set when source reports closed/gone. Null/undefined = active in match feed. */
+  archived_at?: Date | null;
   embedding?: number[];
 }
 

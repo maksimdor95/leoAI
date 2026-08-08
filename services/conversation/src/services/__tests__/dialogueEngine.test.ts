@@ -6,6 +6,7 @@ import {
   getScenarioIdByProduct,
   hasDesiredRoleInCollected,
   isResumePathMode,
+  looksLikeResumeUploadPrompt,
   pickResumeClarifyStepId,
   resolveNextStep,
   tagUserMessageWithInterviewMode,
@@ -289,6 +290,17 @@ describe('dialogueEngine', () => {
         additional_info: 'нет',
       };
       expect(findFirstProfileGapStepId(JACK_SCENARIO, collected)).toBeNull();
+    });
+
+    it('detects resume-upload LLM drift', () => {
+      expect(
+        looksLikeResumeUploadPrompt(
+          'Загрузите резюме PDF или DOCX — разберу опыт и подберу вакансии.'
+        )
+      ).toBe(true);
+      expect(
+        looksLikeResumeUploadPrompt('Какой уровень зарплаты ожидаете? Можно диапазон.')
+      ).toBe(false);
     });
   });
 

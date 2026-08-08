@@ -266,7 +266,34 @@ const SOFT_GAP_LABELS = new Set([
   'ответственность',
   'работа в команде',
   'грамотная речь',
+  'user story mapping',
+  'user stories',
+  'story mapping',
+  'user story',
+  'написание user story',
+  'ведение документации',
+  'деловая переписка',
+  'ms office',
+  'microsoft office',
+  'powerpoint',
+  'excel',
 ]);
+
+/** Методологические gaps, покрытые overlap duties (Agile/Scrum, roadmap…). */
+const OVERLAP_COVERED_GAP_NEEDLES: { gap: RegExp; overlapNeedles: string[] }[] = [
+  {
+    gap: /user\s*stor|story\s*map|бэклог|backlog/i,
+    overlapNeedles: ['бэклог', 'agile', 'scrum', 'приоритет'],
+  },
+  {
+    gap: /roadmap|road\s*map|продуктов(ая|ый)\s+стратег/i,
+    overlapNeedles: ['стратеги', 'видение', 'roadmap'],
+  },
+  {
+    gap: /scrum|agile|kanban|спринт/i,
+    overlapNeedles: ['agile', 'scrum'],
+  },
+];
 
 /**
  * Gaps для UI/reasons: только реальные пробелы, не то что уже есть в опыте по алиасу.
@@ -275,10 +302,11 @@ export function filterMeaningfulMissingSkills(
   missing: string[],
   userSkills: string[],
   profileTextLower: string,
-  opts?: { strongFit?: boolean; max?: number }
+  opts?: { strongFit?: boolean; max?: number; coveredByOverlap?: string[] }
 ): string[] {
   const max = opts?.max ?? 3;
   const strongFit = opts?.strongFit ?? false;
+  const overlapBlob = (opts?.coveredByOverlap ?? []).join(' ').toLowerCase();
   const userLower = userSkills.map((s) => s.toLowerCase());
 
   const out: string[] = [];
@@ -292,9 +320,19 @@ export function filterMeaningfulMissingSkills(
 
     if (strongFit && SOFT_GAP_LABELS.has(skill)) continue;
 
+    if (overlapBlob && isGapCoveredByOverlap(skill, overlapBlob)) continue;
+
     out.push(raw);
     if (out.length >= max) break;
   }
   return out;
+}
+
+function isGapCoveredByOverlap(skill: string, overlapBlob: string): boolean {
+  for (const rule of OVERLAP_COVERED_GAP_NEEDLES) {
+    if (!rule.gap.test(skill)) continue;
+    if (rule.overlapNeedles.some((n) => overlapBlob.includes(n))) return true;
+  }
+  return false;
 }
 

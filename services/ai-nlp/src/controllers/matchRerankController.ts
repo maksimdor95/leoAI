@@ -64,7 +64,7 @@ export async function rerankMatchedJobs(req: Request, res: Response): Promise<vo
           `${i + 1}. id=${j.id} | ${j.title} @ ${j.company} | score=${j.score}` +
           skillsLine +
           (j.reasons?.length ? ` | reasons: ${j.reasons.slice(0, 4).join('; ')}` : '') +
-          (j.snippet ? `\n   JD: ${j.snippet.slice(0, 800)}` : '')
+          (j.snippet ? `\n   JD: ${j.snippet.slice(0, 480)}` : '')
         );
       })
       .join('\n');
@@ -77,24 +77,21 @@ export async function rerankMatchedJobs(req: Request, res: Response): Promise<vo
     const experienceBlock =
       experienceHighlights.length > 0
         ? `Ключевые позиции / достижения кандидата:\n- ${experienceHighlights
-            .map((h) => h.slice(0, 220))
+            .map((h) => h.slice(0, 160))
             .join('\n- ')}`
         : 'Отдельные буллеты опыта не переданы — опирайся на профиль ниже.';
 
     const prompt = `Ты — карьерный matching-аналитик LEO AI.
 Дан профиль кандидата и shortlist вакансий со скором правила.
-Скорректируй порядок: сравни обязанности и требования JD с опытом и достижениями кандидата
-(роль, домен, seniority, навыки, исключения).
-Не выдумывай факты, которых нет в тексте.
-explain обязателен: одно короткое предложение на русском — почему вакансия лучше или хуже подходит
-по сути опыта ↔ обязанностей (не про график/часы).
+Скорректируй порядок: сравни обязанности JD с опытом кандидата (роль, домен, seniority, навыки, исключения).
+Не выдумывай факты. explain обязателен: одно короткое предложение на русском про опыт↔обязанности (не график/часы).
 
 ${flagsLine}
 
 ${experienceBlock}
 
 Профиль:
-${profileSummary.slice(0, 2800)}
+${profileSummary.slice(0, 2000)}
 
 Вакансии:
 ${jobsBlock}
@@ -102,23 +99,22 @@ ${jobsBlock}
 Верни ТОЛЬКО JSON:
 {
   "items": [
-    { "id": "...", "delta": -10..10, "explain": "Подходит потому что … / Слабее потому что …" }
+    { "id": "...", "delta": -10..10, "explain": "Подходит потому что …" }
   ]
 }
-delta: положительный = лучше fit, отрицательный = хуже. Для каждой вакансии ровно один item с тем же id.
-explain: обязательно, до 220 символов, без воды.`;
+Для каждой вакансии ровно один item с тем же id. explain: обязательно, до 140 символов.`;
 
     const response = await callYandexModel({
       messages: [
         {
           role: 'system',
-          text: 'Ты ранжируешь вакансии для кандидата. Ответ — только валидный JSON без markdown. У каждой вакансии должен быть explain.',
+          text: 'Ты ранжируешь вакансии. Ответ — только валидный JSON без markdown. У каждой вакансии должен быть короткий explain.',
         },
         { role: 'user', text: prompt },
       ],
       completionOptions: {
         temperature: 0.15,
-        maxTokens: 1600,
+        maxTokens: 800,
       },
     });
 
@@ -138,7 +134,7 @@ explain: обязательно, до 220 символов, без воды.`;
         delta,
         explain:
           typeof item.explain === 'string' && item.explain.trim()
-            ? item.explain.trim().slice(0, 240)
+            ? item.explain.trim().slice(0, 160)
             : undefined,
       });
     }

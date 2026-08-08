@@ -71,10 +71,9 @@ describe('skillLexicon', () => {
       'product owner backlog agile scrum',
       { strongFit: true, max: 3 }
     );
-    expect(gaps.map((g) => g.toLowerCase())).toEqual(
-      expect.arrayContaining(['user story mapping', 'sql'])
-    );
+    // Методологические gaps (user story mapping) и HH-пустышки скрываем при strongFit.
+    expect(gaps.map((g) => g.toLowerCase())).toEqual(['sql']);
     expect(gaps.map((g) => g.toLowerCase())).not.toContain('управление инновациями');
-    expect(gaps.map((g) => g.toLowerCase())).not.toContain('управление изменениями');
+    expect(gaps.map((g) => g.toLowerCase())).not.toContain('user story mapping');
   });
 });

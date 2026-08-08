@@ -710,7 +710,9 @@ async function buildQuestionMessage(
   });
 
   let questionText = localized.fallbackText;
-  const useFallbackOnly = step.id === 'greeting';
+  const fillGapsMode = session.metadata.flags?.[FILL_PROFILE_GAPS_FLAG] === true;
+  // Greeting + gap-fill: never invent a different topic (LLM once asked for resume upload on salary).
+  const useFallbackOnly = step.id === 'greeting' || fillGapsMode;
 
   if (!useFallbackOnly) {
     try {
@@ -724,9 +726,16 @@ async function buildQuestionMessage(
       });
 
       if (generated && generated.trim().length > 0) {
-        questionText = generated.trim();
-        logger.info(`✅ AI-generated question text used for step: ${step.id}`);
-        logger.info(`   Generated: "${questionText}"`);
+        const trimmed = generated.trim();
+        if (step.id !== 'resume_upload' && looksLikeResumeUploadPrompt(trimmed)) {
+          logger.warn(
+            `⚠️ AI question for step ${step.id} looks like resume upload — using fallback`
+          );
+        } else {
+          questionText = trimmed;
+          logger.info(`✅ AI-generated question text used for step: ${step.id}`);
+          logger.info(`   Generated: "${questionText}"`);
+        }
       } else {
         logger.warn(`⚠️ AI returned empty text for step ${step.id}, using fallback`);
       }
@@ -745,6 +754,19 @@ async function buildQuestionMessage(
     question: questionText,
     placeholder: localized.placeholder ?? step.placeholder,
   };
+}
+
+/** Detect LLM drift onto the resume-upload prompt while on another step. */
+export function looksLikeResumeUploadPrompt(text: string): boolean {
+  const t = text.toLowerCase();
+  const mentionsFile = t.includes('pdf') || t.includes('docx');
+  const mentionsResume = t.includes('резюме') || t.includes('resume') || t.includes('cv');
+  const mentionsUpload =
+    t.includes('загруз') ||
+    t.includes('прилож') ||
+    t.includes('upload') ||
+    t.includes('вставить текст');
+  return mentionsFile && mentionsResume && mentionsUpload;
 }
 
 /**
@@ -3446,14 +3468,24 @@ export async function handleUserReply(
         });
       }
 
+      // Enrichment is multi-call YandexGPT — do not block the next question (UI stuck on
+      // «LEO анализирует ответ…» for 20–40s). Persist in background like resume_ready.
       if (currentStep.collectKey === 'desired_start' && authToken) {
-        const enriched = await enrichAndPersistProfile(session, authToken, 'desired_start');
-        if (enriched) {
-          metadataUpdates.collectedData = {
-            ...(metadataUpdates.collectedData || {}),
-            __enriched: enriched,
-          };
-        }
+        const sessionId = session.id;
+        const token = authToken;
+        void (async () => {
+          try {
+            const live = await getSession(sessionId);
+            if (!live) return;
+            const enrichedProfile = await enrichAndPersistProfile(live, token, 'desired_start');
+            if (enrichedProfile) {
+              await updateSession(live);
+              logger.info(`desired_start: background enrichment saved session=${sessionId}`);
+            }
+          } catch (err: unknown) {
+            logger.warn(`desired_start: background enrichment failed: ${String(err)}`);
+          }
+        })();
       }
     }
   }

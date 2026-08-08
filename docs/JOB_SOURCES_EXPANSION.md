@@ -215,6 +215,7 @@ Leo цель: тот же уровень надёжности без Python side
 | **3** Enrichment out-of-band | Enrich off on scrape; Bull `enrich-jobs` every 20m; lazy enrich after match | ✅ |
 | **4** Separate crons + metrics | HH@:00 SJ@:15 Extended 2h@:30; `ScrapeReport` / `bySource` in result+logs | ✅ |
 | **5** Polish | Parallel connectors, soft keywords, docs, tests | ✅ |
+| **Hygiene** revalidate | Worker cron @:45: HH + SJ + Getmatch + Habr + Geekjob + career_* (wb/mts/yandex/alfa/sber). Soft-archive only on explicit 404/410/API-archived; HTML redirect-off-path → error. Registry `services/revalidate/`. Opt-in filter: `JOB_REVALIDATE_SOURCES` | ✅ Phase 0–3 (Avito/VK/T-Bank/TG → Phase 4) |
 
 ### Phase 0 / 5 smoke (2026-08-04)
 

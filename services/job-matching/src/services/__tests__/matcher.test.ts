@@ -5,6 +5,9 @@ import {
   WEAK_MATCH_SCORE_FLOOR,
   filterWeakMatchesForPresentation,
   softCapMatchScore,
+  scoreDiscriminationBonus,
+  dedupeOverlapSkillReasons,
+  compareMatchTieBreak,
 } from '../matcher';
 import { CollectedData } from '../userService';
 import type { MatchingScore } from '../matcher';
@@ -439,6 +442,34 @@ describe('matchJobs — stored __enriched', () => {
     expect(pmMatch?.familyMatch).toBe('same');
     expect(pmMatch?.matchedSkills?.length).toBeGreaterThan(0);
   });
+
+  it('unions skills_hard with normalized_skills so Insight one-click closes gaps', () => {
+    const job = mkJob({
+      id: 'gap-python',
+      title: 'Product Analyst',
+      role_family: 'analytics',
+      skills: ['Python', 'SQL', 'Tableau'],
+      description: 'Анализ данных, Python, SQL',
+    });
+    const profile = {
+      desired_role: 'Product Analyst',
+      totalExperience: 4,
+      workMode: 'remote',
+      skills_hard: 'Python',
+      __enriched: {
+        role_family: 'analytics',
+        seniority: 'middle',
+        normalized_skills: [{ name: 'SQL', source: 'chat' }],
+      },
+    } as CollectedData & { __enriched: Record<string, unknown> };
+
+    const res = matchJobs([job], profile);
+    const entry = [...res.matches, ...res.weakMatches][0];
+    expect(entry).toBeDefined();
+    const missing = (entry?.missingSkills ?? []).map((s) => s.toLowerCase());
+    expect(missing).not.toContain('python');
+    expect(entry?.matchedSkills?.some((s) => /python/i.test(s))).toBe(true);
+  });
 });
 
 describe('matchJobs — substantive reasons over HH meta noise', () => {
@@ -448,6 +479,69 @@ describe('matchJobs — substantive reasons over HH meta noise', () => {
     expect(softCapMatchScore(100)).toBeLessThanOrEqual(97);
     expect(softCapMatchScore(120)).toBeLessThanOrEqual(97);
   });
+
+  it('scoreDiscriminationBonus differentiates strong skill/family fits', () => {
+    expect(scoreDiscriminationBonus(['a', 'b', 'c'], [], 'same')).toBeGreaterThan(
+      scoreDiscriminationBonus([], [], 'conflict')
+    );
+  });
+
+  it('dedupeOverlapSkillReasons drops skills already covered by overlap duties', () => {
+    const out = dedupeOverlapSkillReasons(
+      [
+        'Опыт пересекается с обязанностями: видение и стратегия продукта, Agile/Scrum',
+        'Совпадающие навыки: agile project management, roadmap, SQL',
+      ],
+      ['agile project management', 'roadmap', 'SQL']
+    );
+    const skillsLine = out.find((r) => /совпадающие навыки/i.test(r)) ?? '';
+    expect(skillsLine.toLowerCase()).toContain('sql');
+    expect(skillsLine.toLowerCase()).not.toMatch(/agile project management/);
+  });
+
+  it('compareMatchTieBreak uses skill fit when scores are equal', () => {
+    const a = {
+      job: mkJob({ id: 'a', posted_at: new Date('2020-01-01') }),
+      score: 92,
+      reasons: [],
+      jobFamily: 'product' as RoleFamily,
+      familyMatch: 'same' as const,
+      matchedSkills: ['a'],
+    };
+    const b = {
+      job: mkJob({ id: 'b', posted_at: new Date('2020-01-01') }),
+      score: 92,
+      reasons: ['Опыт пересекается с обязанностями: Agile/Scrum'],
+      jobFamily: 'product' as RoleFamily,
+      familyMatch: 'same' as const,
+      matchedSkills: ['a', 'b', 'c'],
+    };
+    expect(compareMatchTieBreak(a, b)).toBeGreaterThan(0);
+  });
+
+  it('assigns ranks and soft-filters methodology gaps on strong product fit', () => {
+    const po = mkJob({
+      id: 'po-gap',
+      title: 'Product Owner',
+      description: 'Видение продукта, backlog, Agile/Scrum, метрики KPI',
+      requirements: 'PO 3+ лет',
+      skills: ['roadmap', 'user story mapping', 'Agile'],
+      role_family: 'product',
+    });
+    const profile: CollectedData = {
+      desiredRole: 'Product Owner',
+      careerSummary: 'PO с roadmap, Agile/Scrum, продуктовыми метриками и KPI',
+      skills: ['roadmap', 'Agile', 'продуктовые метрики'],
+      skills_hard: 'roadmap, Agile, KPI',
+      position_1_role: 'Product Owner',
+      position_1_responsibilities: 'видение продукта, backlog, Scrum, метрики',
+    };
+    const { matches } = matchJobs([po], profile);
+    expect(matches[0]?.rank).toBe(1);
+    const gaps = matches[0]?.missingSkills ?? [];
+    expect(gaps.map((g) => g.toLowerCase())).not.toContain('user story mapping');
+  });
+
   it('surfaces role/skills before schedule and matches X5-like HH skill tags via aliases', () => {
     const x5 = mkJob({
       id: 'x5-po',

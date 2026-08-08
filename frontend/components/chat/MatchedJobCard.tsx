@@ -34,6 +34,9 @@ type MatchedJobCardProps = {
   dislikeAriaLabel?: string;
   /** Подсказка, что карточку можно нажать. */
   tapHint?: string;
+  /** CTA: добавить missing skills в профиль. */
+  onAddMissingSkills?: (skills: string[]) => void;
+  addMissingSkillsLabel?: string;
 };
 
 export function MatchedJobCard({
@@ -57,6 +60,8 @@ export function MatchedJobCard({
   likeAriaLabel = 'Подходит',
   dislikeAriaLabel = 'Не подходит',
   tapHint = 'Нажмите на карточку, чтобы оценить',
+  onAddMissingSkills,
+  addMissingSkillsLabel = 'Добавить в профиль',
 }: MatchedJobCardProps) {
   const isHume = useHumeTheme();
   const [reasonsOpen, setReasonsOpen] = useState(false);
@@ -69,6 +74,7 @@ export function MatchedJobCard({
   const isWeak = variant === 'weak';
   const humanized = humanizeMatchReasons(reasons, { matched: matchedSkills, missing: missingSkills });
   const hasReasons = humanized.length > 0;
+  const gapSkills = (missingSkills ?? []).map((s) => s.trim()).filter(Boolean).slice(0, 3);
   const sourceLabel = formatJobSourceLabel(source);
   const { title: displayTitle, company: displayCompany } = normalizeVacancyCardFields({
     title,
@@ -477,6 +483,24 @@ export function MatchedJobCard({
               </span>
             </li>
           ))}
+          {onAddMissingSkills && gapSkills.length > 0 ? (
+            <li className="pt-1">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onAddMissingSkills(gapSkills);
+                }}
+                className={
+                  isHume
+                    ? 'hume-btn-ghost !px-0 !py-0 !text-[11px]'
+                    : 'cursor-pointer border-0 bg-transparent p-0 text-[11px] font-medium text-amber-300/90 hover:underline'
+                }
+              >
+                {addMissingSkillsLabel}: {gapSkills.join(', ')}
+              </button>
+            </li>
+          ) : null}
         </ul>
       ) : null}
 

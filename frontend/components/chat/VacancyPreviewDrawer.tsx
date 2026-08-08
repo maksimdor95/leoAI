@@ -22,6 +22,7 @@ type VacancyPreviewDrawerProps = {
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
   favoriteAriaLabel?: string;
+  onAddMissingSkills?: (skills: string[]) => void;
 };
 
 function formatSalary(
@@ -126,6 +127,7 @@ export function VacancyPreviewDrawer({
   isFavorite = false,
   onToggleFavorite,
   favoriteAriaLabel = 'Добавить в избранное',
+  onAddMissingSkills,
 }: VacancyPreviewDrawerProps) {
   const isHume = useHumeTheme();
   const [details, setDetails] = useState<JobDetailsResponse | null>(null);
@@ -322,6 +324,7 @@ export function VacancyPreviewDrawer({
         matchedSkills={context.matchedSkills}
         missingSkills={context.missingSkills}
         variant={context.variant}
+        onAddMissingSkills={onAddMissingSkills}
       />
       {sourceLabel ? <span>{sourceLabel}</span> : null}
       {favoriteButton}

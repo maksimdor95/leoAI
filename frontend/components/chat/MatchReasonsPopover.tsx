@@ -20,6 +20,8 @@ type MatchReasonsPopoverProps = {
   missingSkills?: string[];
   variant?: 'recommended' | 'weak';
   className?: string;
+  onAddMissingSkills?: (skills: string[]) => void;
+  addMissingSkillsLabel?: string;
 };
 
 function reasonToneClass(
@@ -50,6 +52,8 @@ export function MatchReasonsPopover({
   missingSkills,
   variant = 'recommended',
   className = '',
+  onAddMissingSkills,
+  addMissingSkillsLabel = 'Добавить в профиль',
 }: MatchReasonsPopoverProps) {
   const isHume = useHumeTheme();
   const [open, setOpen] = useState(false);
@@ -57,6 +61,7 @@ export function MatchReasonsPopover({
   useCloseOnScroll(open, handleClose);
   const isWeak = variant === 'weak';
   const humanized = humanizeMatchReasons(reasons, { matched: matchedSkills, missing: missingSkills });
+  const gapSkills = (missingSkills ?? []).map((s) => s.trim()).filter(Boolean).slice(0, 3);
   const accentClass = isHume
     ? isWeak
       ? 'text-[var(--color-meringue)]'
@@ -83,6 +88,24 @@ export function MatchReasonsPopover({
           <span className={reasonTextClass(item.tone, isHume)}>{item.text}</span>
         </li>
       ))}
+      {onAddMissingSkills && gapSkills.length > 0 ? (
+        <li className="pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              onAddMissingSkills(gapSkills);
+              setOpen(false);
+            }}
+            className={
+              isHume
+                ? 'hume-btn-ghost !px-0 !py-0 !text-xs'
+                : 'cursor-pointer border-0 bg-transparent p-0 text-xs font-medium text-amber-300/90 hover:underline'
+            }
+          >
+            {addMissingSkillsLabel}: {gapSkills.join(', ')}
+          </button>
+        </li>
+      ) : null}
     </ul>
   );
 

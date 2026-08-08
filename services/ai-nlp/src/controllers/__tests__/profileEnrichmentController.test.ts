@@ -82,6 +82,7 @@ describe('profileEnrichmentController', () => {
         message: {
           text: JSON.stringify({
             market_fit_summary: 'Сильный product-профиль, не хватает Jira.',
+            next_actions: ['Добавьте Jira в технические навыки', 'Уточните домен в профиле'],
           }),
         },
       })
@@ -114,6 +115,7 @@ describe('profileEnrichmentController', () => {
             'локация и формат',
           ]),
           market_fit_summary: 'Сильный product-профиль, не хватает Jira.',
+          next_actions: ['Добавьте Jira в технические навыки', 'Уточните домен в профиле'],
           achievements_with_metrics: expect.arrayContaining([
             expect.objectContaining({ achievement: 'Запустил фичу' }),
           ]),

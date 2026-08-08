@@ -56,7 +56,8 @@ const DETAILED_SET = new Set<string>(JACK_DETAILED_QUESTION_IDS);
 
 export function getJackDetailedProgress(
   currentStepId: string | null | undefined,
-  completedSteps: string[] = []
+  completedSteps: string[] = [],
+  options?: { fillProfileGaps?: boolean }
 ): { current: number; total: number; label: string } | null {
   if (
     !currentStepId ||
@@ -68,6 +69,11 @@ export function getJackDetailedProgress(
 
   if (currentStepId === 'completion' || currentStepId === 'completion_gap') {
     return null;
+  }
+
+  // Mode «Заполнить пробелы»: не путаем с полной анкетой «вопрос N из 36».
+  if (options?.fillProfileGaps) {
+    return { current: 1, total: 1, label: 'Уточнение пробела' };
   }
 
   const total = JACK_DETAILED_QUESTION_IDS.length;

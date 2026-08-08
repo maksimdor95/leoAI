@@ -5,6 +5,7 @@ import {
   resolvePublicVacancyUrl,
 } from '../utils/vacancyUrl';
 import { fetchHhVacancyDetails } from './scraper';
+import { probeHhVacancyStatus } from './hhRevalidate';
 import { logger } from '../utils/logger';
 
 import type { HhVacancyMeta } from '../utils/hhVacancyMeta';
@@ -38,11 +39,29 @@ export function jobNeedsHhMetaRefresh(job: Job): boolean {
   return job.source === 'hh.ru' && !job.source_meta;
 }
 
-/** Подтягивает свежие данные с HH и upsert в БД. */
+/** Подтягивает свежие данные с HH и upsert в БД. Gone → soft-archive. */
 export async function refreshJobFromHh(job: Job): Promise<Job | null> {
   const externalId = extractExternalVacancyId(job.source, job.source_url);
   if (!externalId) {
     return null;
+  }
+
+  const probe = await probeHhVacancyStatus(externalId);
+  if (probe.status === 'gone') {
+    const archived = await jobRepository.archiveJob(job.id);
+    logger.info(
+      `[jobDetails] HH gone → archived job=${job.id} hhId=${externalId} reason=${probe.reason}`
+    );
+    return archived;
+  }
+  if (probe.status === 'error' || probe.status === 'skip') {
+    const msg = probe.status === 'error' ? probe.message : probe.message;
+    logger.warn(`[jobDetails] HH probe ${probe.status} job=${job.id}: ${msg}`);
+    return null;
+  }
+
+  if (probe.fresh) {
+    return jobRepository.createOrUpdate(probe.fresh);
   }
 
   const fresh = await fetchHhVacancyDetails(externalId);

@@ -1,4 +1,10 @@
-import { applyLlmRerankDeltas, buildJobRerankSnippet } from '../llmRerank';
+import {
+  applyLlmRerankDeltas,
+  buildBearerAuthorization,
+  buildJobRerankSnippet,
+  getMatchLlmRerankTimeoutMs,
+  getMatchLlmRerankTopN,
+} from '../llmRerank';
 import type { MatchingScore } from '../matcher';
 import type { Job } from '../../models/job';
 
@@ -70,9 +76,20 @@ describe('buildJobRerankSnippet', () => {
       requirements: 'Опыт PO от 3 лет, Agile/Scrum',
       skills: ['Управление бэклогом', 'Продуктовые метрики'],
     });
-    expect(snippet.length).toBeGreaterThan(280);
-    expect(snippet.length).toBeLessThanOrEqual(800);
+    expect(snippet.length).toBeGreaterThan(200);
+    expect(snippet.length).toBeLessThanOrEqual(480);
     expect(snippet).toContain('Agile/Scrum');
     expect(snippet).toContain('Управление бэклогом');
+  });
+});
+
+describe('llmRerank defaults and auth header', () => {
+  it('uses tighter TOP_N and longer timeout by default', () => {
+    expect(getMatchLlmRerankTopN()).toBeLessThanOrEqual(8);
+    expect(getMatchLlmRerankTimeoutMs()).toBeGreaterThanOrEqual(18000);
+  });
+
+  it('buildBearerAuthorization supports cookie JWT path', () => {
+    expect(buildBearerAuthorization('cookie-jwt')).toBe('Bearer cookie-jwt');
   });
 });

@@ -370,10 +370,10 @@ class ChatApiClient {
   /**
    * Объединить импортированные поля профиля (после загрузки резюме) и получить следующий шаг диалога.
    */
-  async mergeCollectedData(collectedData: Record<string, unknown>): Promise<void> {
+  async mergeCollectedData(collectedData: Record<string, unknown>): Promise<boolean> {
     if (!this.sessionId) {
       this.onError?.({ message: 'Сессия не инициализирована' });
-      return;
+      return false;
     }
 
     try {
@@ -399,10 +399,12 @@ class ChatApiClient {
       }
 
       this.lastMessageCount = response.messages.length;
+      return true;
     } catch (error) {
       this.onError?.({
         message: error instanceof Error ? error.message : 'Failed to merge profile data',
       });
+      return false;
     }
   }
 

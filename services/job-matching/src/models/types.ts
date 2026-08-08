@@ -22,5 +22,6 @@ export interface JobRow {
   posted_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  archived_at?: Date | string | null;
   embedding?: number[] | string | null;
 }
