@@ -47,12 +47,9 @@ export function AppSettingsProvider({
   children,
   initialSettings = DEFAULT_APP_SETTINGS,
 }: AppSettingsProviderProps) {
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    if (typeof window === 'undefined') return initialSettings;
-    const stored = readAppSettings();
-    applySettingsToDocument(stored);
-    return stored;
-  });
+  // SSR and first client paint must match (cookies → initialSettings).
+  // localStorage is applied after hydration to avoid LEO-AI-FRONTEND-17.
+  const [settings, setSettings] = useState<AppSettings>(initialSettings);
 
   useEffect(() => {
     const stored = readAppSettings();
