@@ -114,8 +114,29 @@ else
   echo "[3/7] docker compose skipped"
 fi
 
+sync_frontend_public_env() {
+  # Next.js inlines NEXT_PUBLIC_* at build time from frontend/.env* only.
+  # Root .env.staging.local is not auto-loaded — materialize a production.local file.
+  local out="$ROOT_DIR/frontend/.env.production.local"
+  local tmp
+  tmp="$(mktemp)"
+  # Keep only NEXT_PUBLIC_* lines; strip CR; skip blanks/comments.
+  grep -E '^[[:space:]]*NEXT_PUBLIC_[A-Za-z0-9_]+=' "$ENV_FILE" \
+    | tr -d '\r' \
+    | grep -v '^[[:space:]]*#' \
+    >"$tmp" || true
+  if [[ ! -s "$tmp" ]]; then
+    echo "[build] warning: no NEXT_PUBLIC_* in $ENV_FILE" >&2
+    rm -f "$tmp"
+    return 0
+  fi
+  mv "$tmp" "$out"
+  echo "[build] wrote $(wc -l <"$out" | tr -d ' ') NEXT_PUBLIC_* keys -> frontend/.env.production.local"
+}
+
 build_production() {
   echo "[build] frontend..."
+  sync_frontend_public_env
   (cd "$ROOT_DIR/frontend" && npm run build)
 }
 
