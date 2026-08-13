@@ -83,6 +83,85 @@ function collectProfileExperienceText(data: CollectedData): string {
   return chunks.join('\n').toLowerCase();
 }
 
+/**
+ * Experience / roles / achievements only — excludes explicit skill list fields.
+ * Used to detect «mentioned in experience but not listed as a skill».
+ */
+export function collectExperienceOnlyText(data: CollectedData): string {
+  const chunks: string[] = [];
+  const push = (v: unknown) => {
+    if (typeof v === 'string' && v.trim()) chunks.push(v.trim());
+  };
+
+  push(data.careerSummary);
+  push(data.desiredRole);
+  push(data.desired_role);
+  push(data.about);
+  push(data.additional_info);
+
+  for (let i = 1; i <= 5; i += 1) {
+    push(data[`position_${i}_role`]);
+    push(data[`position_${i}_company`]);
+    push(data[`position_${i}_responsibilities`]);
+    push(data[`position_${i}_achievements`]);
+    push(data[`position_${i}_projects`]);
+    push(data[`position_${i}_team`]);
+    push(data[`position_${i}_industry`]);
+  }
+
+  return chunks.join('\n').toLowerCase();
+}
+
+function listedSkillKeys(data: CollectedData): Set<string> {
+  const keys = new Set<string>();
+  const add = (v: unknown) => {
+    if (typeof v !== 'string' || !v.trim()) return;
+    v.split(/[,;\n]/).forEach((p) => {
+      const t = p.trim().toLowerCase();
+      if (t) keys.add(t);
+    });
+  };
+  add(data.skills_hard);
+  add(data.skills_soft);
+  if (Array.isArray(data.skills)) {
+    for (const s of data.skills) {
+      if (typeof s === 'string' && s.trim()) keys.add(s.trim().toLowerCase());
+    }
+  }
+  return keys;
+}
+
+/**
+ * Among vacancy gap labels, find those that already appear in experience text
+ * but are not listed in skills_hard / skills_soft.
+ */
+export function findMissingSkillsMentionedInExperience(
+  missingSkills: string[],
+  collectedData: CollectedData,
+  options?: { limit?: number }
+): string[] {
+  const limit = options?.limit ?? 6;
+  const experienceText = collectExperienceOnlyText(collectedData);
+  if (experienceText.length < 40 || missingSkills.length === 0) return [];
+
+  const listed = listedSkillKeys(collectedData);
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of missingSkills) {
+    const skill = raw.trim();
+    if (!skill || skill.length < 3) continue;
+    const key = skill.toLowerCase();
+    if (listed.has(key) || seen.has(key)) continue;
+    if (!skillAppearsInText(skill, experienceText)) continue;
+    seen.add(key);
+    out.push(skill);
+    if (out.length >= limit) break;
+  }
+
+  return out;
+}
+
 function jobDutyText(job: Job): string {
   return `${job.title} ${job.description} ${job.requirements} ${(job.skills || []).join(' ')}`.toLowerCase();
 }

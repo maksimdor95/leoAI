@@ -498,6 +498,8 @@ Query `?fresh=1` / `?refresh=1` на `/api/jobs/match` обходит кэш. В
 | `NEXT_PUBLIC_SENTRY_DSN`               | Sentry DSN (frontend)              | —                       |
 | `NEXT_PUBLIC_POSTHOG_KEY`              | PostHog project key                | —                       |
 | `NEXT_PUBLIC_POSTHOG_HOST`             | PostHog API host                   | `https://eu.i.posthog.com` |
+| `NEXT_PUBLIC_YANDEX_METRIKA_ID`        | ID счётчика Яндекс.Метрики         | —                       |
+| `NEXT_PUBLIC_YANDEX_METRIKA_DEBUG`     | Слать Метрику и с localhost (`true`) | — (`false`)          |
 | `NEXT_PUBLIC_ENABLE_BROWSER_TTS_FALLBACK` | Браузерный TTS если серверный недоступен | `false` |
 
 **Для production (`leo-ai.ru`):** API-вызовы идут на тот же origin; `NEXT_PUBLIC_API_URL` не обязателен. См. [../STAGING_DEPLOY.md](../STAGING_DEPLOY.md).
@@ -549,7 +551,54 @@ Query `?fresh=1` / `?refresh=1` на `/api/jobs/match` обходит кэш. В
 | `NEXT_PUBLIC_POSTHOG_KEY`    | Project API key       | Нет         |
 | `NEXT_PUBLIC_POSTHOG_HOST`   | Ingest host           | Нет (`https://eu.i.posthog.com`) |
 
-Без ключа аналитика отключена (`PostHogProvider`).
+Без ключа PostHog отключён. События продукта — в `frontend/lib/analytics.ts` (`captureEvent`).
+
+### Яндекс.Метрика (маркетинг + воронка)
+
+| Переменная                         | Описание | Обязательно |
+| ---------------------------------- | -------- | ----------- |
+| `NEXT_PUBLIC_YANDEX_METRIKA_ID`    | ID счётчика | Нет      |
+| `NEXT_PUBLIC_YANDEX_METRIKA_DEBUG` | Включить на localhost | Нет |
+
+Без ID Метрика отключена. На localhost по умолчанию **не** шлётся (чтобы не портить воронку).  
+Каждый `captureEvent(...)` дублируется как JavaScript-цель `reachGoal` с тем же идентификатором.
+
+**Как собрать воронку в интерфейсе Метрики:**
+
+1. [Метрика](https://metrika.yandex.ru/) → создать счётчик для `leo-ai.ru` (Вебвизор, карта кликов — по желанию).
+2. В `.env` / staging env: `NEXT_PUBLIC_YANDEX_METRIKA_ID=<номер>`.
+3. Задеплоить frontend.
+4. Настройки → Цели → добавить цели типа **JavaScript-событие** с идентификаторами (по порядку воронки):
+
+| # | Идентификатор цели | Что значит |
+| - | ------------------ | ---------- |
+| 1 | `landing_viewed` | Открытие лендинга |
+| 2 | `landing_cta_clicked` | Клик CTA |
+| 3 | `auth_modal_opened` | Открыта регистрация/вход |
+| 4 | `user_registered` | Регистрация |
+| 5 | `user_logged_in` | Вход (альтернатива шагу 4) |
+| 6 | `chat_product_selection_viewed` | Экран выбора продукта |
+| 7 | `chat_product_selected` | Выбран Jack / WannaNew / … |
+| 8 | `chat_session_started` | Старт чата |
+| 9 | `chat_first_user_message` | Первое сообщение пользователя |
+| 10 | `vacancies_panel_opened` | Открыта панель вакансий (команда в чате) |
+| 11 | `vacancies_shown` | Показан непустой список матчей |
+| 12 | `vacancy_opened` | Открыта карточка вакансии |
+| 13 | `vacancy_apply_clicked` | Клик «Откликнуться на сайте» |
+| 14 | `vacancy_prep_started` | Старт подготовки к интервью по вакансии |
+| 15 | `insight_opened` | Открыт insight «усилить подбор» |
+| 16 | `insight_skills_added` | Добавлены навыки из insight |
+| 17 | `insight_course_clicked` | Клик по курсу в insight |
+| 18 | `report_downloaded` | Скачан PDF-отчёт (WannaNew / Prep) |
+
+Рекомендуемая воронка Jack: 1→2→3→4/5→6→7→8→9→11→12→13.  
+Хвост улучшения матча: 15→16 (или 17).  
+WannaNew: …→9→18.
+
+5. Отчёты → **Конверсии** / **Воронки** → новая воронка из целей выше.
+6. Проверка: на проде открыть лендинг, кликнуть CTA — в «Онлайн» / отладчике целей должны появиться срабатывания.
+
+Список целей также в коде: `YANDEX_METRIKA_FUNNEL_GOALS` в `frontend/lib/yandexMetrika.ts`.
 
 ### DataDog
 

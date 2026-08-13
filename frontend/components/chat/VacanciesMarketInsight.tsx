@@ -21,6 +21,8 @@ export type VacanciesMarketInsightData = {
   missingSkillsDetails?: MissingSkillDetail[];
   missingSkillsAmongTopN?: number;
   missingSkillsTotalUnique?: number;
+  /** Gap labels that appear in experience text but not in skills_* fields. */
+  skillsMentionedInExperience?: string[];
   nextActions?: string[];
   catalogHints?: string[];
   matchDelta?: {
@@ -123,7 +125,7 @@ export function VacanciesMarketInsightTrigger({
   const isHume = useHumeTheme();
   if (!hasVacanciesMarketInsight({ locale, marketFitSummary, missingSkillsTop })) return null;
 
-  const label = locale === 'en' ? 'Insight' : 'Инсайт';
+  const label = locale === 'en' ? 'Improve match' : 'Усилить подбор';
 
   const triggerClass = isHume
     ? `inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
@@ -165,6 +167,7 @@ type ModalProps = VacanciesMarketInsightData & {
   ) => Promise<{
     missingSkillsDetails?: MissingSkillDetail[];
     missingSkillsAmongTopN?: number;
+    skillsMentionedInExperience?: string[];
   } | void>;
   addingSkills?: boolean;
 };
@@ -175,6 +178,7 @@ export function VacanciesMarketInsightModal({
   missingSkillsTop = [],
   missingSkillsDetails,
   missingSkillsAmongTopN,
+  skillsMentionedInExperience = [],
   nextActions = [],
   catalogHints = [],
   matchDelta = null,
@@ -197,6 +201,7 @@ export function VacanciesMarketInsightModal({
     hints: string[];
     details: MissingSkillDetail[];
     amongN: number;
+    experienceSkills: string[];
   };
 
   const [snap, setSnap] = useState<InsightSnapshot | null>(null);
@@ -218,6 +223,7 @@ export function VacanciesMarketInsightModal({
         hints: [...catalogHints],
         details: liveDetails,
         amongN: missingSkillsAmongTopN ?? 0,
+        experienceSkills: [...skillsMentionedInExperience],
       };
       setSnap(next);
       setSelected(new Set(next.details.map((d) => d.skill)));
@@ -240,15 +246,23 @@ export function VacanciesMarketInsightModal({
     catalogHints,
     liveDetails,
     missingSkillsAmongTopN,
+    skillsMentionedInExperience,
   ]);
 
   const filterClosed = (rows: MissingSkillDetail[]) =>
     rows.filter((d) => d.skill && !closedGapsRef.current.has(d.skill.toLowerCase()));
 
+  const filterClosedSkills = (skills: string[]) =>
+    skills.filter((s) => s && !closedGapsRef.current.has(s.toLowerCase()));
+
   const applyGapDetails = (
     nextDetails: MissingSkillDetail[],
     amongNValue: number,
-    opts?: { closedSkills?: string[]; updateCourses?: boolean }
+    opts?: {
+      closedSkills?: string[];
+      updateCourses?: boolean;
+      experienceSkills?: string[];
+    }
   ) => {
     const filtered = filterClosed(nextDetails);
     setSnap((prev) => {
@@ -258,11 +272,17 @@ export function VacanciesMarketInsightModal({
         hints: [...catalogHints],
         details: [],
         amongN: amongNValue,
+        experienceSkills: [],
       };
+      const nextExperience =
+        opts?.experienceSkills !== undefined
+          ? filterClosedSkills(opts.experienceSkills)
+          : filterClosedSkills(base.experienceSkills);
       return {
         ...base,
         details: filtered,
         amongN: amongNValue,
+        experienceSkills: nextExperience,
       };
     });
     setSelected(new Set(filtered.map((d) => d.skill)));
@@ -281,11 +301,16 @@ export function VacanciesMarketInsightModal({
   const frozenFit = snap?.fit ?? '';
   const frozenActions = snap?.actions ?? nextActions;
   const frozenHints = snap?.hints ?? catalogHints;
+  const experienceSkills = filterClosedSkills(
+    snap?.experienceSkills ?? skillsMentionedInExperience
+  );
+  const experienceKeys = new Set(experienceSkills.map((s) => s.toLowerCase()));
 
   const hasInsightContent =
     Boolean(frozenFit) ||
     details.length > 0 ||
     courseSkills.length > 0 ||
+    experienceSkills.length > 0 ||
     frozenActions.length > 0 ||
     Boolean(matchDelta);
 
@@ -306,23 +331,23 @@ export function VacanciesMarketInsightModal({
   );
   const allSelected = details.length > 0 && selectedList.length === details.length;
 
-  const title = locale === 'en' ? 'Insight' : 'Инсайт';
-  const fitTitle = locale === 'en' ? 'Market fit' : 'Fit к рынку';
-  const gapsTitle = locale === 'en' ? 'Add missing skills' : 'Добавить в профиль';
+  const title = locale === 'en' ? 'Improve your match' : 'Как усилить подбор';
+  const fitTitle = locale === 'en' ? 'Your fit' : 'Ваш fit к рынку';
+  const gapsTitle = locale === 'en' ? 'Add to profile in one tap' : 'Добавить в профиль за один клик';
   const gapsLead =
     locale === 'en'
-      ? 'Gaps that appear in more than 35 of your matches. After you save, the match refreshes — closed ones drop out.'
-      : 'Пробелы, которые встречаются более чем в 35 вакансиях подбора. После сохранения подбор обновится — закрытые исчезнут.';
+      ? 'These skills show up often in your matched jobs but are missing from your profile. Add them — we refresh the match right away. Closed ones drop out.'
+      : 'Это навыки, которые часто встречаются в ваших вакансиях, но их нет в профиле. Добавьте — подбор пересчитается сразу. Закрытые исчезнут из списка.';
   const gapsEmpty =
     locale === 'en'
-      ? 'Frequent gaps above the threshold are closed for now. New ones may appear as the market shifts.'
-      : 'Частые пробелы выше порога закрыты. Новые могут появиться, когда рынок или подбор изменятся.';
+      ? 'Frequent skill gaps are closed for now. Browse jobs — or deepen what you just added with a course below.'
+      : 'Частые пробелы по навыкам закрыты. Можно смотреть вакансии — или усилить только что добавленное курсом ниже.';
   const gapsFootnote =
     details.length === 0
       ? null
       : locale === 'en'
-        ? `Showing gaps in 36+ jobs (${details.length}). Weaker signals are hidden.`
-        : `Показаны пробелы из 36+ вакансий (${details.length}). Более редкие скрыты.`;
+        ? `Shown if they appear in 36+ matched jobs (${details.length}). Rarer signals stay hidden.`
+        : `Показываем, если навык есть в 36+ подходящих вакансиях (${details.length}). Более редкие скрыты.`;
   const editCta = (() => {
     if (selectedList.length === 0) {
       return locale === 'en' ? 'Select at least one skill' : 'Выберите хотя бы один навык';
@@ -335,7 +360,7 @@ export function VacanciesMarketInsightModal({
     }
     if (selectedSoft > 0) {
       parts.push(
-        locale === 'en' ? `${selectedSoft} leadership` : `${selectedSoft} управл.`
+        locale === 'en' ? `${selectedSoft} soft` : `${selectedSoft} soft`
       );
     }
     return locale === 'en'
@@ -344,19 +369,49 @@ export function VacanciesMarketInsightModal({
   })();
   const selectAllLabel = locale === 'en' ? 'Select all' : 'Выбрать все';
   const clearLabel = locale === 'en' ? 'Clear' : 'Снять все';
-  const coursesTitle = locale === 'en' ? 'Courses for your gaps' : 'Курсы по вашим пробелам';
+  const coursesTitle =
+    locale === 'en'
+      ? coursesFromClosed
+        ? 'Courses for skills you added'
+        : 'Courses for your gaps'
+      : coursesFromClosed
+        ? 'Курсы по добавленным навыкам'
+        : 'Курсы по пробелам';
   const coursesLead = coursesFromClosed
     ? locale === 'en'
-      ? 'Based on skills you just added — useful to deepen them.'
-      : 'По навыкам, которые только что добавили — можно усилить их курсом.'
+      ? 'Optional next step — deepen skills you just put in the profile.'
+      : 'Необязательный следующий шаг — углубить навыки, которые только что добавили в профиль.'
     : locale === 'en'
-      ? 'Curated by LEO from your real gaps — open the provider site to learn more.'
-      : 'Подборка LEO по реальным пробелам профиля. Переход на сайт провайдера.';
+      ? 'Optional: learn what is still missing. Opens the provider site.'
+      : 'По желанию: подтянуть то, чего ещё нет в профиле. Переход на сайт провайдера.';
   const goCourse = locale === 'en' ? 'Go to course' : 'Перейти к курсу';
   const coversLabel = locale === 'en' ? 'Covers' : 'Закрывает';
-  const otherTitle = locale === 'en' ? 'What else limits match' : 'Что ещё режет матч';
-  const actionsTitle = locale === 'en' ? 'Next steps' : 'Что сделать';
-  const deltaTitle = locale === 'en' ? 'After last update' : 'После последнего обновления';
+  const otherTitle = locale === 'en' ? 'What else limits the match' : 'Что ещё снижает матч';
+  const actionsTitle = locale === 'en' ? 'Suggested next steps' : 'Что сделать дальше';
+  const deltaTitle = locale === 'en' ? 'Match after update' : 'Подбор после обновления';
+  const modalHint =
+    locale === 'en'
+      ? 'This is a quick match boost from vacancies — not the chat questionnaire.'
+      : 'Это быстрое усиление подбора по вакансиям — не опрос в чате.';
+  const experienceTitle =
+    locale === 'en' ? 'Already in your experience' : 'Уже встречалось в опыте';
+  const experienceLead =
+    locale === 'en'
+      ? 'These gaps also show up in your experience text — add them to skills so matching can see them.'
+      : 'Похоже, эти навыки уже были в опыте — вынесите их в навыки профиля, чтобы подбор их учитывал.';
+  const experienceCta =
+    locale === 'en'
+      ? `Add from experience (${experienceSkills.length})`
+      : `Добавить из опыта (${experienceSkills.length})`;
+  const fromExperienceBadge = locale === 'en' ? 'in experience' : 'в опыте';
+  const coursesEmpty =
+    locale === 'en'
+      ? 'No curated courses for the current gaps yet — browse jobs or check back later.'
+      : 'Пока нет курсов под текущие пробелы — смотрите вакансии или загляните позже.';
+  const browseJobsHint =
+    locale === 'en'
+      ? 'You can close this and continue browsing matched jobs.'
+      : 'Можно закрыть окно и смотреть подходящие вакансии.';
 
   const formatGapCount = (count: number): string | null => {
     if (count <= 0) return null;
@@ -398,6 +453,58 @@ export function VacanciesMarketInsightModal({
     ? 'border-0 bg-transparent p-0 text-[12px] font-medium text-[var(--color-smoke)] shadow-none hover:text-[var(--color-ink)] disabled:opacity-50'
     : 'border-0 bg-transparent p-0 text-[12px] font-medium text-slate-400 shadow-none hover:text-slate-200 disabled:opacity-50';
 
+  const runAddSkills = (toAdd: string[], source: 'gaps' | 'experience') => {
+    if (toAdd.length === 0 || !onAddSkills || localBusy || addingSkills) return;
+    captureEvent('insight_skills_added', {
+      count: toAdd.length,
+      skills: toAdd.slice(0, 8),
+      source,
+    });
+    const closed = new Set(toAdd.map((s) => s.toLowerCase()));
+    const previousDetails = details;
+    const previousAmong = amongN;
+    const previousExperience = experienceSkills;
+    for (const s of closed) closedGapsRef.current.add(s);
+    applyGapDetails(
+      details.filter((d) => !closed.has(d.skill.toLowerCase())),
+      amongN,
+      {
+        closedSkills: toAdd,
+        updateCourses: false,
+        experienceSkills: experienceSkills.filter((s) => !closed.has(s.toLowerCase())),
+      }
+    );
+    setLocalBusy(true);
+    void (async () => {
+      try {
+        const result = await onAddSkills(toAdd);
+        if (!result) {
+          for (const s of closed) closedGapsRef.current.delete(s);
+          applyGapDetails(previousDetails, previousAmong, {
+            experienceSkills: previousExperience,
+          });
+          return;
+        }
+        applyGapDetails(
+          (result.missingSkillsDetails ?? []).filter((d) => d.skill),
+          result.missingSkillsAmongTopN ?? previousAmong,
+          {
+            closedSkills: toAdd,
+            updateCourses: true,
+            experienceSkills: result.skillsMentionedInExperience ?? [],
+          }
+        );
+      } catch {
+        for (const s of closed) closedGapsRef.current.delete(s);
+        applyGapDetails(previousDetails, previousAmong, {
+          experienceSkills: previousExperience,
+        });
+      } finally {
+        setLocalBusy(false);
+      }
+    })();
+  };
+
   const toggleSkill = (skill: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -422,6 +529,16 @@ export function VacanciesMarketInsightModal({
       styles={getInsightModalStyles(isHume)}
     >
       <div className="space-y-6">
+        <p
+          className={
+            isHume
+              ? 'text-[12px] leading-relaxed text-[var(--color-smoke)]'
+              : 'text-[12px] leading-relaxed text-slate-500'
+          }
+        >
+          {modalHint}
+        </p>
+
         {hasFit ? (
           <section className="space-y-2">
             <div className={sectionTitleClass}>{fitTitle}</div>
@@ -536,6 +653,17 @@ export function VacanciesMarketInsightModal({
                         }
                       >
                         {item.skill}
+                        {experienceKeys.has(item.skill.toLowerCase()) ? (
+                          <span
+                            className={
+                              isHume
+                                ? 'ml-2 text-[10px] font-normal text-[var(--color-smoke)]'
+                                : 'ml-2 text-[10px] font-normal text-emerald-200/70'
+                            }
+                          >
+                            · {fromExperienceBadge}
+                          </span>
+                        ) : null}
                       </span>
                       {countLabel}
                     </button>
@@ -551,45 +679,7 @@ export function VacanciesMarketInsightModal({
                 type="button"
                 className={ctaClass}
                 disabled={addingSkills || localBusy || selectedList.length === 0}
-                onClick={() => {
-                  const toAdd = selectedList;
-                  if (toAdd.length === 0 || !onAddSkills || localBusy || addingSkills) return;
-                  captureEvent('insight_skills_added', {
-                    count: toAdd.length,
-                    skills: toAdd.slice(0, 8),
-                  });
-                  const closed = new Set(toAdd.map((s) => s.toLowerCase()));
-                  const previousDetails = details;
-                  const previousAmong = amongN;
-                  for (const s of closed) closedGapsRef.current.add(s);
-                  // Optimistic: drop selected gaps immediately; keep courses stable until rematch.
-                  applyGapDetails(
-                    details.filter((d) => !closed.has(d.skill.toLowerCase())),
-                    amongN,
-                    { closedSkills: toAdd, updateCourses: false }
-                  );
-                  setLocalBusy(true);
-                  void (async () => {
-                    try {
-                      const result = await onAddSkills(toAdd);
-                      if (!result) {
-                        for (const s of closed) closedGapsRef.current.delete(s);
-                        applyGapDetails(previousDetails, previousAmong);
-                        return;
-                      }
-                      applyGapDetails(
-                        (result.missingSkillsDetails ?? []).filter((d) => d.skill),
-                        result.missingSkillsAmongTopN ?? previousAmong,
-                        { closedSkills: toAdd, updateCourses: true }
-                      );
-                    } catch {
-                      for (const s of closed) closedGapsRef.current.delete(s);
-                      applyGapDetails(previousDetails, previousAmong);
-                    } finally {
-                      setLocalBusy(false);
-                    }
-                  })();
-                }}
+                onClick={() => runAddSkills(selectedList, 'gaps')}
               >
                 {addingSkills || localBusy
                   ? locale === 'en'
@@ -610,15 +700,78 @@ export function VacanciesMarketInsightModal({
               </button>
             </div>
           ) : null}
+
+          {details.length === 0 ? (
+            <p
+              className={
+                isHume
+                  ? 'text-[12px] text-[var(--color-smoke)]'
+                  : 'text-[12px] text-slate-500'
+              }
+            >
+              {browseJobsHint}
+            </p>
+          ) : null}
         </section>
+
+        {experienceSkills.length > 0 && onAddSkills ? (
+          <section className="space-y-3">
+            <div>
+              <div className={sectionTitleClass}>{experienceTitle}</div>
+              <p
+                className={
+                  isHume
+                    ? 'mt-1.5 text-[13px] leading-relaxed text-[var(--color-smoke)]'
+                    : 'mt-1.5 text-[13px] leading-relaxed text-slate-400'
+                }
+              >
+                {experienceLead}
+              </p>
+            </div>
+            <ul className="flex flex-wrap gap-2">
+              {experienceSkills.map((skill) => (
+                <li
+                  key={skill}
+                  className={
+                    isHume
+                      ? 'rounded-full border border-[rgba(34,34,34,0.1)] bg-[var(--color-paper)] px-3 py-1 text-[12px] text-[var(--color-ink)]'
+                      : 'rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[12px] text-slate-200'
+                  }
+                >
+                  {skill}
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className={ctaClass}
+              disabled={addingSkills || localBusy}
+              onClick={() => runAddSkills(experienceSkills, 'experience')}
+            >
+              {addingSkills || localBusy
+                ? locale === 'en'
+                  ? 'Updating…'
+                  : 'Обновляем…'
+                : experienceCta}
+            </button>
+          </section>
+        ) : null}
 
         {deltaMeaningful && matchDelta ? (
           <section className="space-y-1.5">
             <div className={sectionTitleClass}>{deltaTitle}</div>
             <p className={bodyClass}>
               {locale === 'en'
-                ? `Recommended: ${matchDelta.beforeRecommended} → ${matchDelta.afterRecommended} · max score: ${matchDelta.beforeMaxScore} → ${matchDelta.afterMaxScore}`
-                : `Рекомендованных: ${matchDelta.beforeRecommended} → ${matchDelta.afterRecommended} · макс. score: ${matchDelta.beforeMaxScore} → ${matchDelta.afterMaxScore}`}
+                ? `Recommended jobs: ${matchDelta.beforeRecommended} → ${matchDelta.afterRecommended}${
+                    matchDelta.beforeMaxScore !== matchDelta.afterMaxScore
+                      ? ` · best score: ${matchDelta.beforeMaxScore} → ${matchDelta.afterMaxScore}`
+                      : ''
+                  }`
+                : `Рекомендованных вакансий: ${matchDelta.beforeRecommended} → ${matchDelta.afterRecommended}${
+                    matchDelta.beforeMaxScore !== matchDelta.afterMaxScore
+                      ? ` · лучший score: ${matchDelta.beforeMaxScore} → ${matchDelta.afterMaxScore}`
+                      : ''
+                  }`}
             </p>
           </section>
         ) : null}
@@ -640,18 +793,18 @@ export function VacanciesMarketInsightModal({
           </section>
         ) : null}
 
-        {courses.length > 0 ? (
-          <section className="space-y-2.5">
-            <div className={sectionTitleClass}>{coursesTitle}</div>
-            <p
-              className={
-                isHume
-                  ? 'text-[13px] leading-relaxed text-[var(--color-smoke)]'
-                  : 'text-[13px] leading-relaxed text-slate-400'
-              }
-            >
-              {coursesLead}
-            </p>
+        <section className="space-y-2.5">
+          <div className={sectionTitleClass}>{coursesTitle}</div>
+          <p
+            className={
+              isHume
+                ? 'text-[13px] leading-relaxed text-[var(--color-smoke)]'
+                : 'text-[13px] leading-relaxed text-slate-400'
+            }
+          >
+            {courses.length > 0 ? coursesLead : coursesEmpty}
+          </p>
+          {courses.length > 0 ? (
             <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 snap-x snap-mandatory">
               {courses.map((course) => (
                 <article
@@ -720,8 +873,8 @@ export function VacanciesMarketInsightModal({
                 </article>
               ))}
             </div>
-          </section>
-        ) : null}
+          ) : null}
+        </section>
       </div>
     </Modal>
   );

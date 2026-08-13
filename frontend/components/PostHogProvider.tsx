@@ -3,10 +3,11 @@
 import { Suspense, useEffect } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { PostHogProvider as PHProvider } from 'posthog-js/react';
+import { YandexMetrikaScript } from '@/components/YandexMetrikaScript';
 import { capturePageView, initPostHog, posthog } from '@/lib/analytics';
 import { isAuthenticated, syncAnalyticsIdentity } from '@/lib/auth';
 
-function PostHogPageView(): null {
+function AnalyticsPageView(): null {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -19,24 +20,40 @@ function PostHogPageView(): null {
 }
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
-  const enabled = Boolean(process.env.NEXT_PUBLIC_POSTHOG_KEY);
+  const posthogEnabled = Boolean(process.env.NEXT_PUBLIC_POSTHOG_KEY);
+  const metrikaEnabled = Boolean(process.env.NEXT_PUBLIC_YANDEX_METRIKA_ID);
+  const enabled = posthogEnabled || metrikaEnabled;
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!posthogEnabled) return;
     initPostHog();
     if (isAuthenticated()) {
       void syncAnalyticsIdentity();
     }
-  }, [enabled]);
+  }, [posthogEnabled]);
 
   if (!enabled) return <>{children}</>;
 
+  const pageView = (
+    <Suspense fallback={null}>
+      <AnalyticsPageView />
+    </Suspense>
+  );
+
   return (
-    <PHProvider client={posthog}>
-      <Suspense fallback={null}>
-        <PostHogPageView />
-      </Suspense>
-      {children}
-    </PHProvider>
+    <>
+      <YandexMetrikaScript />
+      {posthogEnabled ? (
+        <PHProvider client={posthog}>
+          {pageView}
+          {children}
+        </PHProvider>
+      ) : (
+        <>
+          {pageView}
+          {children}
+        </>
+      )}
+    </>
   );
 }

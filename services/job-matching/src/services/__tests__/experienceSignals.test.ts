@@ -2,6 +2,7 @@ import { Job } from '../../models/job';
 import { CollectedData } from '../userService';
 import {
   buildExperienceHighlights,
+  findMissingSkillsMentionedInExperience,
   scoreExperienceOverlap,
 } from '../experienceSignals';
 
@@ -85,5 +86,31 @@ describe('experienceSignals', () => {
     expect(bullets.length).toBe(2);
     expect(bullets[0]).toContain('Product Owner');
     expect(bullets[0]).toContain('Сбер');
+  });
+
+  it('finds gap skills mentioned in experience but not listed in skills_*', () => {
+    const profile: CollectedData = {
+      skills_hard: 'SQL, Jira',
+      position_1_role: 'Product Manager',
+      position_1_responsibilities:
+        'Вёл roadmap, проводил A/B тесты и custdev с пользователями',
+      careerSummary: '5 лет в продукте, работал с Python для аналитики',
+    };
+    const found = findMissingSkillsMentionedInExperience(
+      ['python', 'a/b тесты', 'roadmap', 'Kubernetes'],
+      profile
+    );
+    expect(found.map((s) => s.toLowerCase())).toEqual(
+      expect.arrayContaining(['python', 'a/b тесты', 'roadmap'])
+    );
+    expect(found.map((s) => s.toLowerCase())).not.toContain('kubernetes');
+  });
+
+  it('does not flag skills already listed in skills_hard', () => {
+    const profile: CollectedData = {
+      skills_hard: 'Python, SQL',
+      position_1_achievements: 'Много Python и SQL в отчётах',
+    };
+    expect(findMissingSkillsMentionedInExperience(['Python', 'SQL'], profile)).toEqual([]);
   });
 });

@@ -141,6 +141,7 @@ interface ValidateAnswerRequest {
   answer: string;
   collectedData?: Record<string, unknown>;
   stepId: string;
+  authToken?: string;
 }
 
 export interface ValidationResult {
@@ -166,6 +167,7 @@ export async function validateAnswer(params: ValidateAnswerRequest): Promise<Val
       },
       {
         timeout: 10000,
+        headers: buildAuthHeaders(params.authToken),
       }
     );
 

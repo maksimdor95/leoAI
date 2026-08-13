@@ -84,7 +84,7 @@ export const JACK_PROFILE_FIELD_ORDER: JackFieldDef[] = [
   { section: 'Поиск работы', key: 'desired_start', label: 'Когда готовы выйти' },
 
   { section: 'Завершение', key: 'additional_info', label: 'Дополнительно' },
-  { section: 'Завершение', key: 'completionChoice', label: 'Заполнение пробелов' },
+  { section: 'Завершение', key: 'completionChoice', label: 'Уточнение пустых полей' },
 ];
 
 const JACK_PROFILE_FIELD_ORDER_EN: JackFieldDef[] = [

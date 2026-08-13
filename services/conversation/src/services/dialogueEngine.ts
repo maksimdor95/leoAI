@@ -310,7 +310,7 @@ function hasCareerNarrativeForGapSkip(collected: Record<string, unknown>): boole
   return isCollectedFilledForImport(collected.position_1_role);
 }
 
-/** Шаги, которые не спрашиваем в режиме «Заполнить пробелы». */
+/** Шаги, которые не спрашиваем в режиме «Уточнить пустые поля». */
 export function shouldSkipStepForProfileGaps(
   step: ScenarioStep,
   collected: Record<string, unknown>
@@ -328,7 +328,7 @@ export function shouldSkipStepForProfileGaps(
 
 /**
  * Первый пустой вопрос профиля (без info_card / рестарта сценария).
- * Для кнопки «Заполнить пробелы» после resume_ready / quick_ready.
+ * Для кнопки «Уточнить пустые поля» после resume_ready / quick_ready.
  */
 export function findFirstProfileGapStepId(
   scenario: ScenarioDefinition,
@@ -1273,7 +1273,7 @@ async function handleResumeReadyReply(
       timestamp: new Date().toISOString(),
       sessionId: session.id,
       content:
-        'Нажмите «Показать рекомендации», чтобы открыть подбор вакансий, или «Заполнить пробелы» — уточним только пустые поля. Поправить данные — вкладка «Профиль».',
+        'Нажмите «Показать рекомендации», чтобы открыть подбор вакансий (навыки для матча — в блоке «Усилить подбор»). Или «Уточнить пустые поля» — короткие вопросы в чате только по незаполненным пунктам. Поправить данные — вкладка «Профиль».',
     },
     metadataUpdates: scenarioUpdates,
     nextStepId: null,
@@ -3077,6 +3077,7 @@ export async function handleUserReply(
               answer: userMessageContent,
               collectedData: session.metadata.collectedData,
               stepId: previousStep.id,
+              authToken,
             });
           }
         } else {
@@ -3085,6 +3086,7 @@ export async function handleUserReply(
             answer: userMessageContent,
             collectedData: session.metadata.collectedData,
             stepId: previousStep.id,
+            authToken,
           });
         }
 
@@ -3309,6 +3311,7 @@ export async function handleUserReply(
           answer: userMessageContent,
           collectedData: session.metadata.collectedData,
           stepId: currentStep.id,
+          authToken,
         });
       }
     } else {
@@ -3317,6 +3320,7 @@ export async function handleUserReply(
         answer: userMessageContent,
         collectedData: session.metadata.collectedData,
         stepId: currentStep.id,
+        authToken,
       });
     }
 
@@ -3525,7 +3529,7 @@ export async function handleUserReply(
     `Resolved next step for ${currentStep.id}: ${nextStepId} (collectedData: ${JSON.stringify(session.metadata.collectedData)})`
   );
 
-  // Режим «Заполнить пробелы»: прыгаем только на пустые поля, без линейного прогона уже заполненных
+  // Режим «Уточнить пустые поля»: прыгаем только на пустые поля, без линейного прогона уже заполненных
   if (session.metadata.flags?.[FILL_PROFILE_GAPS_FLAG] === true) {
     const gapId = findFirstProfileGapStepId(
       getScenario(scenarioId),

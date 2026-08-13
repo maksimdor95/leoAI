@@ -211,6 +211,7 @@ type JobsMatchMeta = {
     missingSkillsDetails?: Array<{ skill: string; count: number }>;
     missingSkillsAmongTopN?: number;
     missingSkillsTotalUnique?: number;
+    skillsMentionedInExperience?: string[];
   };
   matchLayers?: {
     llmRerank?: {
@@ -1837,6 +1838,9 @@ function ChatPageContent() {
       const result = await chatRef.current.requestReport();
       if (result.url) {
         messageApi.success({ content: 'Отчёт готов! Скачивание...', key: 'report' });
+        captureEvent('report_downloaded', {
+          product: currentProduct,
+        });
         window.open(result.url, '_blank');
       } else {
         messageApi.error({ content: 'Отчёт ещё не готов. Попробуйте позже.', key: 'report' });
@@ -1847,7 +1851,7 @@ function ChatPageContent() {
         key: 'report',
       });
     }
-  }, [messageApi]);
+  }, [currentProduct, messageApi]);
 
   const handleInterviewRestart = useCallback(() => {
     router.push('/chat?new=true&product=interview-prep');
@@ -1861,6 +1865,11 @@ function ChatPageContent() {
       }
 
       setVacancyPrepJobId(item.job.id);
+      captureEvent('vacancy_prep_started', {
+        job_id: item.job.id,
+        source: item.job.source ?? '',
+        score: item.score,
+      });
       messageApi.loading({
         content: 'Собираем план подготовки по вакансии…',
         key: 'vacancy-prep',
@@ -1902,6 +1911,12 @@ function ChatPageContent() {
         return;
       }
       markVacancyAsViewed(item.job.id);
+      captureEvent('vacancy_opened', {
+        job_id: item.job.id,
+        source: item.job.source ?? '',
+        variant,
+        score: item.score,
+      });
       setVacancyPreview({ item, variant });
     },
     [markVacancyAsViewed, messageApi]
@@ -2106,6 +2121,7 @@ function ChatPageContent() {
     }
 
     if (command.action === 'open_vacancies' || command.action === 'show_recommendations') {
+      captureEvent('vacancies_panel_opened', { action: command.action });
       focusMobileWorkspace();
       setSidePanelTab('vacancies');
       await fetchMatchedJobs({ revealPanel: true, triggerWeakMatchGate: true });
@@ -2976,6 +2992,16 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
       setJobsLoadState('success');
       setJobsLastUpdatedAt(new Date().toLocaleTimeString());
 
+      const totalVisible = recommendedVisible.length + weakVisible.length;
+      if (totalVisible > 0 && (!backgroundRefresh || options?.revealPanel)) {
+        captureEvent('vacancies_shown', {
+          recommended_count: recommendedVisible.length,
+          weak_count: weakVisible.length,
+          total: totalVisible,
+          reveal_panel: Boolean(options?.revealPanel),
+        });
+      }
+
       const jobsInDb = typeof data?.jobsInDb === 'number' ? data.jobsInDb : 0;
       const jobsScanned = typeof data?.jobsScanned === 'number' ? data.jobsScanned : jobsInDb;
       const maxMatchScore = typeof data?.maxMatchScore === 'number' ? data.maxMatchScore : 0;
@@ -3140,6 +3166,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     ): Promise<{
       missingSkillsDetails?: Array<{ skill: string; count: number }>;
       missingSkillsAmongTopN?: number;
+      skillsMentionedInExperience?: string[];
     } | void> => {
       if (!chatRef.current || skills.length === 0) return;
 
@@ -3186,20 +3213,23 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         | {
             missingSkillsDetails: Array<{ skill: string; count: number }>;
             missingSkillsAmongTopN: number;
+            skillsMentionedInExperience: string[];
           }
         | undefined => {
         if (!result) return undefined;
         return {
           missingSkillsDetails: result.profileSignals?.missingSkillsDetails ?? [],
           missingSkillsAmongTopN: result.profileSignals?.missingSkillsAmongTopN ?? 0,
+          skillsMentionedInExperience:
+            result.profileSignals?.skillsMentionedInExperience ?? [],
         };
       };
 
       if (hardMerged.added.length === 0 && softMerged.added.length === 0) {
         messageApi.info(
           settings.locale === 'en'
-            ? 'Already in profile — refreshing which gaps still matter…'
-            : 'Уже в профиле — обновляю, какие пробелы ещё важны…'
+            ? 'Already in your profile — refreshing the match…'
+            : 'Уже в профиле — обновляю подбор…'
         );
         setInsightAddingSkills(true);
         try {
@@ -3236,8 +3266,10 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         const addedCount = hardMerged.added.length + softMerged.added.length;
         messageApi.success(
           settings.locale === 'en'
-            ? `Added ${addedCount} skill(s). Match refreshed — next gaps may appear.`
-            : `Добавлено навыков: ${addedCount}. Подбор обновлён — могут появиться следующие пробелы.`
+            ? `Added ${addedCount} skill(s). Match updated.`
+            : `Добавили ${addedCount} ${
+                addedCount === 1 ? 'навык' : addedCount < 5 ? 'навыка' : 'навыков'
+              }. Подбор обновлён.`
         );
         const result = await fetchMatchedJobs({
           revealPanel: false,
@@ -3486,7 +3518,7 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     };
   }, [connected, currentProduct, fetchMatchedJobs, jackProfileReadyForMatch, latestUserMessageId, productSelected]);
 
-  /** Rematch при смене предпочтений / исключений (в т.ч. после «Заполнить пробелы»). */
+  /** Rematch при смене предпочтений / исключений (в т.ч. после «Уточнить пустые поля»). */
   useEffect(() => {
     if (!productSelected || currentProduct !== 'jack' || !connected) return;
     if (!jackProfileReadyForMatch || !jackMatchPreferenceFingerprint) return;
@@ -4044,6 +4076,9 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
                                   }
                                   missingSkillsTotalUnique={
                                     jobsMatchMeta?.profileSignals?.missingSkillsTotalUnique
+                                  }
+                                  skillsMentionedInExperience={
+                                    jobsMatchMeta?.profileSignals?.skillsMentionedInExperience
                                   }
                                   nextActions={jackEnrichedProfile?.next_actions}
                                   catalogHints={insightCatalogHints}

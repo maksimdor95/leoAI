@@ -7,7 +7,7 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { extractAccessToken } from '../utils/extractAccessToken';
 import jobRepository, { resolveMatchScanLimit } from '../models/jobRepository';
-import { getUserProfile, getCollectedDataWithFallback } from '../services/userService';
+import { getUserProfile, getCollectedDataWithFallback, CollectedData } from '../services/userService';
 import {
   matchJobs,
   MATCH_SCORE_THRESHOLD,
@@ -34,6 +34,7 @@ import {
 import { ensureProfileEmbedding } from '../services/profileEmbedding';
 import { llmRerankRecommended } from '../services/llmRerank';
 import { aggregateMissingSkillsTop } from '../services/aggregateMissingSkills';
+import { findMissingSkillsMentionedInExperience } from '../services/experienceSignals';
 import {
   buildMatchCacheKey,
   getCachedMatchPayload,
@@ -256,6 +257,19 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       minCount: 35,
     });
 
+    const missingPoolForExperience = aggregateMissingSkillsTop(missingSkillsPool, {
+      amongTopN: Math.max(missingSkillsPool.length, 1),
+      limit: 40,
+      minCount: 0,
+    });
+    const skillsMentionedInExperience = effectiveForSignals
+      ? findMissingSkillsMentionedInExperience(
+          missingPoolForExperience.missingSkillsTop,
+          effectiveForSignals as CollectedData,
+          { limit: 6 }
+        )
+      : [];
+
     const profileSignals = {
       role_family: stats.primaryFamily !== 'unknown' ? stats.primaryFamily : null,
       seniority:
@@ -271,6 +285,7 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
       missingSkillsDetails,
       missingSkillsAmongTopN,
       missingSkillsTotalUnique,
+      skillsMentionedInExperience,
     };
 
     // Диагностика каталога: если пользователь классифицирован, а его семейство

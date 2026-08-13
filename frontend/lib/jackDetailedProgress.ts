@@ -71,9 +71,9 @@ export function getJackDetailedProgress(
     return null;
   }
 
-  // Mode «Заполнить пробелы»: не путаем с полной анкетой «вопрос N из 36».
+  // Mode «Заполнить пробелы» in chat: short answers about missing fields — not the vacancies Insight.
   if (options?.fillProfileGaps) {
-    return { current: 1, total: 1, label: 'Уточнение пробела' };
+    return { current: 1, total: 1, label: 'Уточнение в чате' };
   }
 
   const total = JACK_DETAILED_QUESTION_IDS.length;

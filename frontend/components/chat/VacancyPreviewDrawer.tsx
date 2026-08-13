@@ -11,6 +11,7 @@ import { formatJobSourceLabel } from '@/lib/jobSourceLabel';
 import { uniqueLocationLabels } from '@/lib/locationLabels';
 import type { JobDetailsResponse, MatchedJobPreviewContext } from '@/types/jobs';
 import { useHumeTheme } from '@/lib/useHumeTheme';
+import { captureEvent } from '@/lib/analytics';
 
 type VacancyPreviewDrawerProps = {
   open: boolean;
@@ -254,10 +255,15 @@ export function VacancyPreviewDrawer({
         message.warning('Скопируйте письмо вручную');
       }
     }
+    captureEvent('vacancy_apply_clicked', {
+      job_id: contextJobId,
+      source: job?.source ?? context?.source ?? '',
+      has_cover_letter: Boolean(coverLetter.trim()),
+    });
     window.open(publicUrl, '_blank', 'noopener,noreferrer');
     void recordJobInteraction(contextJobId, 'apply_intent');
     message.info('Открыли вакансию на сайте. Вставьте письмо в поле отклика.');
-  }, [coverLetter, contextJobId, publicUrl]);
+  }, [context, coverLetter, contextJobId, job?.source, publicUrl]);
 
   const applyOnSiteButton = publicUrl ? (
     <Button

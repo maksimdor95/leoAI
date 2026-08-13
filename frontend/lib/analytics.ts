@@ -1,4 +1,9 @@
 import posthog from 'posthog-js';
+import {
+  captureYandexMetrikaHit,
+  isYandexMetrikaEnabled,
+  reachYandexMetrikaGoal,
+} from '@/lib/yandexMetrika';
 
 let initialized = false;
 
@@ -73,17 +78,26 @@ export function resetAnalyticsUser(): void {
 }
 
 export function captureEvent(name: string, properties?: Record<string, unknown>): void {
-  if (!isEnabled()) return;
-  initPostHog();
-  posthog.capture(name, properties);
+  if (isEnabled()) {
+    initPostHog();
+    posthog.capture(name, properties);
+  }
+  // Same event name → Metrika JavaScript goal (for funnel reports).
+  if (isYandexMetrikaEnabled()) {
+    reachYandexMetrikaGoal(name, properties);
+  }
 }
 
 export function capturePageView(path: string): void {
-  if (!isEnabled()) return;
-  initPostHog();
-  posthog.capture('$pageview', {
-    $current_url: `${window.location.origin}${path}`,
-  });
+  if (isEnabled()) {
+    initPostHog();
+    posthog.capture('$pageview', {
+      $current_url: `${window.location.origin}${path}`,
+    });
+  }
+  if (isYandexMetrikaEnabled()) {
+    captureYandexMetrikaHit(path);
+  }
 }
 
 export { posthog };
