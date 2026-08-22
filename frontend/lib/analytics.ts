@@ -2,7 +2,10 @@ import posthog from 'posthog-js';
 import {
   captureYandexMetrikaHit,
   isYandexMetrikaEnabled,
+  markLandingViewedSent,
   reachYandexMetrikaGoal,
+  resetLandingViewedTracking,
+  wasLandingViewedTracked,
 } from '@/lib/yandexMetrika';
 
 let initialized = false;
@@ -88,7 +91,27 @@ export function captureEvent(name: string, properties?: Record<string, unknown>)
   }
 }
 
+/**
+ * Funnel step 1: home visit. Deduped so Hero + router both can call safely.
+ * Call before CTA so Metrika sequential funnel never sees CTA without landing.
+ */
+export function trackLandingViewed(properties?: Record<string, unknown>): void {
+  if (!markLandingViewedSent()) return;
+  captureEvent('landing_viewed', properties);
+}
+
+/** Ensure step 1 exists before CTA (covers race where click beats useEffect). */
+export function ensureLandingViewed(properties?: Record<string, unknown>): void {
+  if (wasLandingViewedTracked()) return;
+  trackLandingViewed(properties);
+}
+
 export function capturePageView(path: string): void {
+  const normalized = path.split('?')[0] || '/';
+  if (normalized !== '/') {
+    resetLandingViewedTracking();
+  }
+
   if (isEnabled()) {
     initPostHog();
     posthog.capture('$pageview', {
@@ -97,6 +120,11 @@ export function capturePageView(path: string): void {
   }
   if (isYandexMetrikaEnabled()) {
     captureYandexMetrikaHit(path);
+  }
+
+  // Backup for funnel step 1 — even if HeroSection effect is late/missed.
+  if (normalized === '/') {
+    trackLandingViewed({ source: 'pageview', path });
   }
 }
 

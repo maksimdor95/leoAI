@@ -114,6 +114,14 @@ export function enrichQuickPathCollectedData(
     if (salary) merged.salaryExpectation = salary;
   }
 
+  if (
+    !merged.salaryExpectation &&
+    typeof raw.desired_salary === 'string' &&
+    raw.desired_salary.trim()
+  ) {
+    merged.salaryExpectation = raw.desired_salary.trim();
+  }
+
   const existingSkills = Array.isArray(merged.skills) ? merged.skills : [];
   if (existingSkills.length === 0 && careerText) {
     const extracted = extractSkillsFromText(careerText);

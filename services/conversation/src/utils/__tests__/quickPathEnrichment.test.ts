@@ -12,4 +12,13 @@ describe('conversation quickPathEnrichment', () => {
     expect(enriched.location).toEqual(['Подольск']);
     expect(enriched.salaryExpectation).toMatch(/150/);
   });
+
+  it('mirrors desired_salary into salaryExpectation for completeness UI', () => {
+    const enriched = enrichQuickPathCollectedData({
+      desired_role: 'Head of Product',
+      desired_salary: '500 000 рублей',
+    });
+
+    expect(enriched.salaryExpectation).toBe('500 000 рублей');
+  });
 });

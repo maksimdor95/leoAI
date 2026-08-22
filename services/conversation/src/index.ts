@@ -765,11 +765,8 @@ app.post('/api/chat/session/:id/merge-collected', authenticateRequest, async (re
         try {
           const live = await getSession(enrichSessionId);
           if (!live) return;
-          const enriched = await enrichAndPersistProfile(live, token, 'merge_collected');
-          if (enriched) {
-            await updateSession(live);
-            logger.info(`merge-collected: background enrichment done session=${enrichSessionId}`);
-          }
+          await enrichAndPersistProfile(live, token, 'merge_collected');
+          logger.info(`merge-collected: background enrichment done session=${enrichSessionId}`);
         } catch (err: unknown) {
           logger.warn(`merge-collected: background enrichment failed: ${String(err)}`);
         }

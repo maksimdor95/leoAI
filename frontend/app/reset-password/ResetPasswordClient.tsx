@@ -7,6 +7,9 @@ import { Button, Form, Input, Typography, message, Spin } from 'antd';
 import { EyeInvisibleOutlined, EyeOutlined, LockOutlined } from '@ant-design/icons';
 import { userAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/contexts/AppSettingsContext';
+import { parseAuthError, passwordRegisterRules, toAntFieldErrors } from '@/lib/authErrors';
+import { authUi } from '@/lib/authUiCopy';
 
 const { Title, Text } = Typography;
 
@@ -17,29 +20,12 @@ const passwordVisibilityIcon = (visible: boolean) =>
     <EyeInvisibleOutlined className="text-slate-400 hover:text-slate-200" />
   );
 
-type ApiError = {
-  response?: {
-    data?: {
-      error?: string;
-    };
-  };
-};
-
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (typeof error === 'object' && error !== null && 'response' in error) {
-    const apiError = error as ApiError;
-    const messageText = apiError.response?.data?.error;
-    if (typeof messageText === 'string' && messageText.trim().length > 0) {
-      return messageText;
-    }
-  }
-  return fallback;
-};
-
 export function ResetPasswordClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { openAuthModal } = useAuth();
+  const { settings } = useAppSettings();
+  const t = authUi(settings.locale);
   const token = searchParams.get('token')?.trim() ?? '';
 
   const [validating, setValidating] = useState(true);
@@ -84,9 +70,16 @@ export function ResetPasswordClient() {
     try {
       await userAPI.resetPassword({ token, password: values.password });
       setDone(true);
-      message.success('Пароль обновлён');
+      message.success(settings.locale === 'ru' ? 'Пароль обновлён' : 'Password updated');
     } catch (error: unknown) {
-      message.error(getErrorMessage(error, 'Не удалось обновить пароль'));
+      const parsed = parseAuthError(
+        error,
+        settings.locale,
+        settings.locale === 'ru' ? 'Не удалось обновить пароль' : 'Could not update password'
+      );
+      message.error(parsed.toastMessage);
+      const antFields = toAntFieldErrors(parsed.fieldErrors).filter((f) => f.name === 'password');
+      if (antFields.length) form.setFields(antFields);
     } finally {
       setLoading(false);
     }
@@ -152,17 +145,11 @@ export function ResetPasswordClient() {
             </div>
 
             <Form form={form} layout="vertical" size="large" onFinish={handleSubmit}>
-              <Form.Item
-                name="password"
-                rules={[
-                  { required: true, message: 'Введите пароль' },
-                  { min: 6, message: 'Минимум 6 символов' },
-                ]}
-              >
+              <Form.Item name="password" rules={passwordRegisterRules(settings.locale)}>
                 <Input.Password
                   prefix={<LockOutlined className="text-slate-400" />}
                   iconRender={passwordVisibilityIcon}
-                  placeholder="Новый пароль"
+                  placeholder={t.passwordRegisterPlaceholder}
                   className="!bg-black/30 !border-white/10 !text-white !placeholder:text-slate-500 hover:!border-white/20 focus:!border-green-500/50 [&_.ant-input-password-icon]:!text-slate-400"
                 />
               </Form.Item>

@@ -7,31 +7,13 @@ import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { userAPI } from '@/lib/api';
 import { syncAnalyticsIdentity } from '@/lib/auth';
 import { captureEvent } from '@/lib/analytics';
+import { parseAuthError, passwordRegisterRules, toAntFieldErrors } from '@/lib/authErrors';
 import { resolvePostAuthHref } from '@/lib/pendingAuthRedirect';
 import { SocialAuthButton } from '@/components/auth/SocialAuthButton';
 import { useAppSettings } from '@/contexts/AppSettingsContext';
 import { authUi } from '@/lib/authUiCopy';
 import { useHumeTheme } from '@/lib/useHumeTheme';
 import type { AuthModalSource } from '@/contexts/AuthContext';
-
-type ApiError = {
-  response?: {
-    data?: {
-      error?: string;
-    };
-  };
-};
-
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (typeof error === 'object' && error !== null && 'response' in error) {
-    const apiError = error as ApiError;
-    const messageText = apiError.response?.data?.error;
-    if (typeof messageText === 'string' && messageText.trim().length > 0) {
-      return messageText;
-    }
-  }
-  return fallback;
-};
 
 const { Title } = Typography;
 
@@ -78,6 +60,16 @@ export function AuthModal({
     }
   }, [open, initialMode, form]);
 
+  const applyAuthError = (error: unknown, fallback: string) => {
+    const parsed = parseAuthError(error, settings.locale, fallback);
+    message.error(parsed.toastMessage);
+    const antFields = toAntFieldErrors(parsed.fieldErrors).filter(
+      (f) => f.name === 'email' || f.name === 'password'
+    );
+    if (antFields.length) form.setFields(antFields);
+    return parsed;
+  };
+
   const handleForgotPassword = async (values: { email: string }) => {
     setLoading(true);
     try {
@@ -86,7 +78,7 @@ export function AuthModal({
       setMode('forgot-sent');
       message.success(result.message);
     } catch (error: unknown) {
-      message.error(getErrorMessage(error, t.forgotError));
+      applyAuthError(error, t.forgotError);
     } finally {
       setLoading(false);
     }
@@ -111,8 +103,13 @@ export function AuthModal({
       await userAPI.login(values);
       await finishAuth('user_logged_in', 'email');
     } catch (error: unknown) {
-      captureEvent('auth_failed', { method: 'email', mode: 'login', source });
-      message.error(getErrorMessage(error, t.loginError));
+      const parsed = applyAuthError(error, t.loginError);
+      captureEvent('auth_failed', {
+        method: 'email',
+        mode: 'login',
+        source,
+        error_code: parsed.code ?? 'unknown',
+      });
     } finally {
       setLoading(false);
     }
@@ -124,8 +121,13 @@ export function AuthModal({
       await userAPI.register(values);
       await finishAuth('user_registered', 'email');
     } catch (error: unknown) {
-      captureEvent('auth_failed', { method: 'email', mode: 'register', source });
-      message.error(getErrorMessage(error, t.registerError));
+      const parsed = applyAuthError(error, t.registerError);
+      captureEvent('auth_failed', {
+        method: 'email',
+        mode: 'register',
+        source,
+        error_code: parsed.code ?? 'unknown',
+      });
     } finally {
       setLoading(false);
     }
@@ -266,10 +268,11 @@ export function AuthModal({
 
               <Form.Item
                 name="password"
-                rules={[
-                  { required: true, message: t.passwordRequired },
-                  ...(mode === 'register' ? [{ min: 6, message: t.passwordMin }] : []),
-                ]}
+                rules={
+                  mode === 'register'
+                    ? passwordRegisterRules(settings.locale)
+                    : [{ required: true, message: t.passwordRequired }]
+                }
               >
                 <Input.Password
                   prefix={

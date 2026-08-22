@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppSettings } from '@/contexts/AppSettingsContext';
 import { isAuthenticated } from '@/lib/auth';
-import { captureEvent } from '@/lib/analytics';
+import { captureEvent, ensureLandingViewed, trackLandingViewed } from '@/lib/analytics';
 import { setPendingAuthRedirect } from '@/lib/pendingAuthRedirect';
 import {
   getLandingHowItWorksSteps,
@@ -42,10 +42,11 @@ export function HeroSection() {
   const activeScenario =
     previewScenarios.find((scenario) => scenario.id === activeScenarioId) ?? previewScenarios[0];
 
-  useEffect(() => {
-    captureEvent('landing_viewed', {
+  useLayoutEffect(() => {
+    trackLandingViewed({
       locale: settings.locale,
       theme: settings.theme,
+      source: 'hero',
     });
   }, [settings.locale, settings.theme]);
 
@@ -59,6 +60,11 @@ export function HeroSection() {
   const handleHeroCta = () => {
     const authenticated = isAuthenticated();
 
+    ensureLandingViewed({
+      locale: settings.locale,
+      theme: settings.theme,
+      source: 'cta_fallback',
+    });
     captureEvent('landing_cta_clicked', {
       scenario_id: activeScenario.id,
       is_authenticated: authenticated,
@@ -81,6 +87,11 @@ export function HeroSection() {
     const href = buildScenarioHref(scenario);
     const authenticated = isAuthenticated();
 
+    ensureLandingViewed({
+      locale: settings.locale,
+      theme: settings.theme,
+      source: 'cta_fallback',
+    });
     captureEvent('landing_cta_clicked', {
       scenario_id: scenario.id,
       is_authenticated: authenticated,

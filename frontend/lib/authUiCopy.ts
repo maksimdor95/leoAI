@@ -1,5 +1,33 @@
 import type { AppLocale } from '@/types/appSettings';
 
+const authErrorsRu = {
+  AUTH_EMAIL_INVALID: 'Введите корректный email',
+  AUTH_PASSWORD_REQUIRED: 'Введите пароль',
+  AUTH_PASSWORD_TOO_SHORT: 'Пароль должен быть не менее 8 символов',
+  AUTH_PASSWORD_NEEDS_LETTER: 'В пароле нужна хотя бы одна буква',
+  AUTH_PASSWORD_NEEDS_DIGIT: 'В пароле нужна хотя бы одна цифра',
+  AUTH_EMAIL_TAKEN: 'Этот email уже зарегистрирован',
+  AUTH_INVALID_CREDENTIALS: 'Неверный email или пароль',
+  AUTH_RATE_LIMITED: 'Слишком много попыток. Подождите минуту и попробуйте снова',
+  AUTH_RESET_TOKEN_INVALID: 'Ссылка недействительна или устарела. Запросите новую',
+  AUTH_RESET_TOKEN_REQUIRED: 'Нужна ссылка для сброса пароля',
+  AUTH_INTERNAL: 'Что-то пошло не так. Попробуйте позже',
+} as const;
+
+const authErrorsEn = {
+  AUTH_EMAIL_INVALID: 'Enter a valid email',
+  AUTH_PASSWORD_REQUIRED: 'Enter your password',
+  AUTH_PASSWORD_TOO_SHORT: 'Password must be at least 8 characters',
+  AUTH_PASSWORD_NEEDS_LETTER: 'Password must contain at least one letter',
+  AUTH_PASSWORD_NEEDS_DIGIT: 'Password must contain at least one digit',
+  AUTH_EMAIL_TAKEN: 'This email is already registered',
+  AUTH_INVALID_CREDENTIALS: 'Invalid email or password',
+  AUTH_RATE_LIMITED: 'Too many attempts. Wait a minute and try again',
+  AUTH_RESET_TOKEN_INVALID: 'This link is invalid or expired. Request a new one',
+  AUTH_RESET_TOKEN_REQUIRED: 'Reset token is required',
+  AUTH_INTERNAL: 'Something went wrong. Please try again later',
+} as const;
+
 const copy = {
   ru: {
     loginTitle: 'Войдите в свой аккаунт',
@@ -16,9 +44,11 @@ const copy = {
     emailRequired: 'Введите email',
     emailInvalid: 'Введите корректный email',
     passwordRequired: 'Введите пароль',
-    passwordMin: 'Пароль должен быть не менее 6 символов',
+    passwordMin: 'Пароль должен быть не менее 8 символов',
+    passwordNeedsLetter: 'В пароле нужна хотя бы одна буква',
+    passwordNeedsDigit: 'В пароле нужна хотя бы одна цифра',
     passwordLoginPlaceholder: 'Ваш пароль',
-    passwordRegisterPlaceholder: 'Минимум 6 символов',
+    passwordRegisterPlaceholder: 'Минимум 8 символов, буква и цифра',
     forgotLink: 'Забыли пароль?',
     submitLogin: 'Войти',
     submitRegister: 'Зарегистрироваться',
@@ -33,6 +63,7 @@ const copy = {
     loginError: 'Ошибка входа',
     registerError: 'Ошибка регистрации',
     forgotError: 'Не удалось отправить письмо',
+    authErrors: authErrorsRu,
   },
   en: {
     loginTitle: 'Sign in to your account',
@@ -49,9 +80,11 @@ const copy = {
     emailRequired: 'Enter your email',
     emailInvalid: 'Enter a valid email',
     passwordRequired: 'Enter your password',
-    passwordMin: 'Password must be at least 6 characters',
+    passwordMin: 'Password must be at least 8 characters',
+    passwordNeedsLetter: 'Password must contain at least one letter',
+    passwordNeedsDigit: 'Password must contain at least one digit',
     passwordLoginPlaceholder: 'Your password',
-    passwordRegisterPlaceholder: 'At least 6 characters',
+    passwordRegisterPlaceholder: 'At least 8 characters, a letter and a digit',
     forgotLink: 'Forgot password?',
     submitLogin: 'Sign in',
     submitRegister: 'Sign up',
@@ -66,6 +99,7 @@ const copy = {
     loginError: 'Sign-in failed',
     registerError: 'Registration failed',
     forgotError: 'Could not send the email',
+    authErrors: authErrorsEn,
   },
 } as const;
 

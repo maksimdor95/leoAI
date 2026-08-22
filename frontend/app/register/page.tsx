@@ -7,35 +7,21 @@ import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { userAPI } from '@/lib/api';
 import { saveToken } from '@/lib/auth';
 import { captureEvent } from '@/lib/analytics';
+import { parseAuthError, passwordRegisterRules, toAntFieldErrors } from '@/lib/authErrors';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppSettings } from '@/contexts/AppSettingsContext';
+import { authUi } from '@/lib/authUiCopy';
 import { SocialAuthButton } from '@/components/auth/SocialAuthButton';
-
-type ApiError = {
-  response?: {
-    data?: {
-      error?: string;
-    };
-  };
-};
-
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (typeof error === 'object' && error !== null && 'response' in error) {
-    const apiError = error as ApiError;
-    const messageText = apiError.response?.data?.error;
-    if (typeof messageText === 'string' && messageText.trim().length > 0) {
-      return messageText;
-    }
-  }
-
-  return fallback;
-};
 
 const { Title } = Typography;
 
 export default function RegisterPage() {
   const router = useRouter();
   const { openAuthModal } = useAuth();
+  const { settings } = useAppSettings();
+  const t = authUi(settings.locale);
   const [loading, setLoading] = useState(false);
+  const [form] = Form.useForm();
 
   const startYandexOAuth = () => {
     const url = userAPI.getOAuthStartUrl('yandex');
@@ -47,19 +33,20 @@ export default function RegisterPage() {
     try {
       const result = await userAPI.register(values);
 
-      // Save token
       if (result.token) {
         saveToken(result.token);
         captureEvent('user_registered', { method: 'email' });
       }
 
-      message.success('Регистрация успешна!');
-
-      // Redirect to chat page
+      message.success(t.registerSuccess);
       router.push('/chat');
     } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error, 'Ошибка регистрации');
-      message.error(errorMessage);
+      const parsed = parseAuthError(error, settings.locale, t.registerError);
+      message.error(parsed.toastMessage);
+      const antFields = toAntFieldErrors(parsed.fieldErrors).filter(
+        (f) => f.name === 'email' || f.name === 'password'
+      );
+      if (antFields.length) form.setFields(antFields);
     } finally {
       setLoading(false);
     }
@@ -78,51 +65,44 @@ export default function RegisterPage() {
     >
       <Card style={{ width: 450 }}>
         <Title level={2} style={{ textAlign: 'center', marginBottom: 30 }}>
-          Регистрация
+          {t.registerTitle}
         </Title>
 
-        <Form name="register" onFinish={onFinish} layout="vertical" size="large">
+        <Form form={form} name="register" onFinish={onFinish} layout="vertical" size="large">
           <Form.Item
             name="email"
             label="Email"
             rules={[
-              { required: true, message: 'Введите email' },
-              { type: 'email', message: 'Введите корректный email' },
+              { required: true, message: t.emailRequired },
+              { type: 'email', message: t.emailInvalid },
             ]}
           >
             <Input prefix={<MailOutlined />} placeholder="your@email.com" />
           </Form.Item>
 
-          <Form.Item
-            name="password"
-            label="Пароль"
-            rules={[
-              { required: true, message: 'Введите пароль' },
-              { min: 6, message: 'Пароль должен быть не менее 6 символов' },
-            ]}
-          >
-            <Input.Password prefix={<LockOutlined />} placeholder="Минимум 6 символов" />
+          <Form.Item name="password" label={settings.locale === 'ru' ? 'Пароль' : 'Password'} rules={passwordRegisterRules(settings.locale)}>
+            <Input.Password
+              prefix={<LockOutlined />}
+              placeholder={t.passwordRegisterPlaceholder}
+            />
           </Form.Item>
 
           <Form.Item>
             <Button type="primary" htmlType="submit" block loading={loading}>
-              Зарегистрироваться
+              {t.submitRegister}
             </Button>
           </Form.Item>
         </Form>
 
         <div style={{ marginTop: 10, marginBottom: 6, textAlign: 'center', color: '#8f8fa3' }}>
-          или продолжить через
+          {t.orContinue}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <SocialAuthButton
-            text="Войти через Яндекс ID"
-            onClick={startYandexOAuth}
-          />
+          <SocialAuthButton text={t.yandexLogin} onClick={startYandexOAuth} />
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 16 }}>
-          Уже есть аккаунт?{' '}
+          {settings.locale === 'ru' ? 'Уже есть аккаунт?' : 'Already have an account?'}{' '}
           <Button
             type="link"
             onClick={() => {
@@ -131,7 +111,7 @@ export default function RegisterPage() {
             }}
             style={{ padding: 0, height: 'auto' }}
           >
-            Войти
+            {t.submitLogin}
           </Button>
         </div>
       </Card>

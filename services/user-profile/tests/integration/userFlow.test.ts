@@ -67,6 +67,8 @@ describe('User Registration and Login Flow', () => {
         })
         .expect(400);
 
+      expect(response.body.code).toBe('AUTH_EMAIL_INVALID');
+      expect(response.body.fields?.email).toContain('AUTH_EMAIL_INVALID');
       expect(response.body).toHaveProperty('errors');
       expect(Array.isArray(response.body.errors)).toBe(true);
     });
@@ -81,6 +83,9 @@ describe('User Registration and Login Flow', () => {
         })
         .expect(400);
 
+      expect(response.body.code).toBe('AUTH_PASSWORD_TOO_SHORT');
+      expect(response.body.fields?.password).toContain('AUTH_PASSWORD_TOO_SHORT');
+      expect(response.body.error).toContain('8 characters');
       expect(response.body).toHaveProperty('errors');
       expect(Array.isArray(response.body.errors)).toBe(true);
     });
@@ -99,7 +104,8 @@ describe('User Registration and Login Flow', () => {
         .send(userData)
         .expect(409);
 
-      expect(response.body).toHaveProperty('error', 'User with this email already exists');
+      expect(response.body.code).toBe('AUTH_EMAIL_TAKEN');
+      expect(response.body.error).toBe('User with this email already exists');
     });
   });
 
@@ -148,6 +154,7 @@ describe('User Registration and Login Flow', () => {
         })
         .expect(401);
 
+      expect(response.body.code).toBe('AUTH_INVALID_CREDENTIALS');
       expect(response.body).toHaveProperty('error', 'Invalid email or password');
     });
 
@@ -161,6 +168,7 @@ describe('User Registration and Login Flow', () => {
         })
         .expect(400);
 
+      expect(response.body.code).toBe('AUTH_EMAIL_INVALID');
       expect(response.body).toHaveProperty('errors');
     });
   });

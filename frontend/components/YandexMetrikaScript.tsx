@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Script from 'next/script';
-import { getYandexMetrikaId, flushYandexMetrikaQueue, isYandexMetrikaEnabled } from '@/lib/yandexMetrika';
+import {
+  getYandexMetrikaId,
+  flushYandexMetrikaQueue,
+  isYandexMetrikaEnabled,
+} from '@/lib/yandexMetrika';
 
 /**
  * Loads tag.js and boots the counter. Hits/goals are sent from analytics.ts.
@@ -10,13 +13,10 @@ import { getYandexMetrikaId, flushYandexMetrikaQueue, isYandexMetrikaEnabled } f
  */
 export function YandexMetrikaScript(): React.ReactNode {
   const id = getYandexMetrikaId();
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    setReady(isYandexMetrikaEnabled());
-  }, []);
-
-  if (!id || !ready) return null;
+  // Mount on first client render (no useState delay) so early landing_viewed can queue against ym stub.
+  if (!id || typeof window === 'undefined' || !isYandexMetrikaEnabled()) {
+    return null;
+  }
 
   return (
     <>
@@ -24,6 +24,7 @@ export function YandexMetrikaScript(): React.ReactNode {
         id="yandex-metrika"
         strategy="afterInteractive"
         onReady={flushYandexMetrikaQueue}
+        onLoad={flushYandexMetrikaQueue}
       >{`
 (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
 m[i].l=1*new Date();
@@ -34,8 +35,7 @@ ym(${id}, "init", {
   clickmap:true,
   trackLinks:true,
   accurateTrackBounce:true,
-  webvisor:true,
-  defer:true
+  webvisor:true
 });
 `}</Script>
       <noscript>

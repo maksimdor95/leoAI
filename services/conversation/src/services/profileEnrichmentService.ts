@@ -182,6 +182,10 @@ async function persistProfileData(
 
 /**
  * Enrich profile snapshot and persist. Fail-open: returns null on error.
+ *
+ * Redis write is merge-only (`updateSessionMetadata` on `__enriched` / optional `starBank`).
+ * Callers must NOT `updateSession(staleSnapshot)` after this — that race wiped gap answers
+ * (e.g. desired_salary) and reset currentStepId back to resume_ready mid «Уточнить пустые поля».
  */
 export async function enrichAndPersistProfile(
   session: ConversationSession,
@@ -193,7 +197,7 @@ export async function enrichAndPersistProfile(
     return null;
   }
 
-  const collectedData = { ...(session.metadata.collectedData as Record<string, unknown>) };
+  const snapshotCollected = { ...(session.metadata.collectedData as Record<string, unknown>) };
   const source: EnrichedProfile['source'] =
     trigger === 'merge_collected' || trigger === 'resume_ready'
       ? 'resume_import'
@@ -202,11 +206,11 @@ export async function enrichAndPersistProfile(
   try {
     logger.info(`[profile-enrichment] start trigger=${trigger} session=${session.id}`);
 
-    const ruleSignals = await fetchRuleSignals(collectedData, authToken);
+    const ruleSignals = await fetchRuleSignals(snapshotCollected, authToken);
     const missingSkillsTop = await fetchMissingSkillsTop(session.userId, authToken);
     const enriched = await fetchLlmEnrichment(
       {
-        collectedData,
+        collectedData: snapshotCollected,
         ruleSignals,
         completedSteps: session.metadata.completedSteps ?? [],
         currentStepId: session.metadata.currentStepId ?? 'profile_snapshot',
@@ -219,11 +223,39 @@ export async function enrichAndPersistProfile(
       authToken
     );
 
-    collectedData[ENRICHED_COLLECTED_KEY] = enriched;
-    seedStarBankFromAchievements(collectedData, enriched.achievements_with_metrics);
-    session.metadata.collectedData = collectedData;
+    // Dynamic import avoids sessionService ↔ dialogueEngine ↔ this module cycles.
+    const { getSession, updateSessionMetadata } = await import('./sessionService');
+    const live = await getSession(session.id);
+    const liveCollected = {
+      ...((live?.metadata.collectedData ?? session.metadata.collectedData) as Record<
+        string,
+        unknown
+      >),
+    };
+    const beforeStarBank = liveCollected.starBank;
+    liveCollected[ENRICHED_COLLECTED_KEY] = enriched;
+    seedStarBankFromAchievements(liveCollected, enriched.achievements_with_metrics);
 
-    await persistProfileData(session.userId, authToken, enriched, collectedData);
+    const patch: Record<string, unknown> = {
+      [ENRICHED_COLLECTED_KEY]: enriched,
+    };
+    if (liveCollected.starBank !== beforeStarBank) {
+      patch.starBank = liveCollected.starBank;
+    }
+
+    session.metadata.collectedData = {
+      ...session.metadata.collectedData,
+      ...patch,
+    };
+
+    // Merge-only Redis write: preserves concurrent gap answers / currentStepId / flags.
+    await updateSessionMetadata(session.id, { collectedData: patch });
+
+    const fresh = await getSession(session.id);
+    const fieldsForPersist = {
+      ...((fresh?.metadata.collectedData ?? liveCollected) as Record<string, unknown>),
+    };
+    await persistProfileData(session.userId, authToken, enriched, fieldsForPersist);
 
     logger.info(
       `[profile-enrichment] done trigger=${trigger} family=${enriched.role_family ?? 'n/a'} completeness=${enriched.profile_completeness ?? 'n/a'}`

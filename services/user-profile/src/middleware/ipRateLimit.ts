@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { AUTH_ERROR_CODES, buildAuthErrorBody } from '../utils/authErrors';
 
 type Bucket = { count: number; expiresAt: number };
 const buckets = new Map<string, Bucket>();
@@ -25,7 +26,7 @@ export function createIpRateLimit(windowMs: number, maxRequests: number) {
 
     if (bucket.count >= maxRequests) {
       res.setHeader('Retry-After', String(Math.ceil((bucket.expiresAt - now) / 1000)));
-      res.status(429).json({ error: 'Too many requests, please retry later' });
+      res.status(429).json(buildAuthErrorBody(AUTH_ERROR_CODES.RATE_LIMITED));
       return;
     }
 

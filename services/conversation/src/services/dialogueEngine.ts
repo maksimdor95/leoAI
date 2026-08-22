@@ -2941,6 +2941,21 @@ export async function handleUserReply(
         authToken
       );
     } else if (currentStep.id === 'resume_ready') {
+      // Race recovery: stale full-session enrich used to reset currentStepId to resume_ready
+      // while fillProfileGaps was still active. Re-apply the user answer to the next gap.
+      if (session.metadata.flags?.[FILL_PROFILE_GAPS_FLAG] === true) {
+        const gapId = findFirstProfileGapStepId(
+          getScenario(scenarioId),
+          session.metadata.collectedData
+        );
+        if (gapId && gapId !== 'resume_ready') {
+          logger.warn(
+            `fillProfileGaps: recovered stale resume_ready, resuming gap step ${gapId}`
+          );
+          session.metadata.currentStepId = gapId;
+          return handleUserReply(session, userMessageContent, authToken);
+        }
+      }
       return handleResumeReadyReply(session, scenarioId, userMessageContent, scenarioUpdates);
     } else {
       // For other info_card steps, automatically advance (existing behavior)
@@ -3450,9 +3465,17 @@ export async function handleUserReply(
         metadataUpdates.collectedData = {
           [currentStep.collectKey]: collectValue,
         };
+        // Completeness / match UI also look at salaryExpectation
+        if (
+          currentStep.collectKey === 'desired_salary' &&
+          typeof collectValue === 'string' &&
+          collectValue.trim()
+        ) {
+          metadataUpdates.collectedData.salaryExpectation = collectValue.trim();
+        }
         session.metadata.collectedData = {
           ...session.metadata.collectedData,
-          [currentStep.collectKey]: collectValue,
+          ...metadataUpdates.collectedData,
         };
         logger.info(
           `Saved answer to ${currentStep.collectKey}: ${JSON.stringify(collectValue)}`
@@ -3481,11 +3504,8 @@ export async function handleUserReply(
           try {
             const live = await getSession(sessionId);
             if (!live) return;
-            const enrichedProfile = await enrichAndPersistProfile(live, token, 'desired_start');
-            if (enrichedProfile) {
-              await updateSession(live);
-              logger.info(`desired_start: background enrichment saved session=${sessionId}`);
-            }
+            await enrichAndPersistProfile(live, token, 'desired_start');
+            logger.info(`desired_start: background enrichment saved session=${sessionId}`);
           } catch (err: unknown) {
             logger.warn(`desired_start: background enrichment failed: ${String(err)}`);
           }
@@ -3585,11 +3605,8 @@ export async function handleUserReply(
         try {
           const live = await getSession(sessionId);
           if (!live) return;
-          const enrichedProfile = await enrichAndPersistProfile(live, token, 'resume_ready');
-          if (enrichedProfile) {
-            await updateSession(live);
-            logger.info(`resume_ready: background enrichment saved session=${sessionId}`);
-          }
+          await enrichAndPersistProfile(live, token, 'resume_ready');
+          logger.info(`resume_ready: background enrichment saved session=${sessionId}`);
         } catch (err: unknown) {
           logger.warn(`resume_ready: background enrichment failed: ${String(err)}`);
         }

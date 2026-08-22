@@ -12,6 +12,12 @@ import { HhIntegrationController } from './hhIntegrationController';
 import { HhIntegrationService } from '../services/hhIntegrationService';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
+import {
+  AUTH_ERROR_CODES,
+  buildAuthErrorBody,
+  sendAuthError,
+  sendValidationAuthError,
+} from '../utils/authErrors';
 
 const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'Unknown error';
@@ -72,11 +78,10 @@ export class UserController {
     try {
       logger.info('Register request received');
 
-      // Check validation errors
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         logger.warn('Validation errors:', errors.array());
-        return res.status(400).json({ errors: errors.array() });
+        return sendValidationAuthError(res, errors.array());
       }
 
       const { email, password, first_name, last_name } = req.body;
@@ -99,9 +104,11 @@ export class UserController {
       const message = getErrorMessage(error);
       logger.error('Registration error:', error);
       if (message === 'User with this email already exists') {
-        return res.status(409).json({ error: message });
+        return sendAuthError(res, 409, AUTH_ERROR_CODES.EMAIL_TAKEN, {
+          fields: { email: [AUTH_ERROR_CODES.EMAIL_TAKEN] },
+        });
       }
-      return res.status(500).json({ error: 'Internal server error' });
+      return sendAuthError(res, 500, AUTH_ERROR_CODES.INTERNAL);
     }
   }
 
@@ -120,11 +127,10 @@ export class UserController {
     try {
       logger.info('Login request received');
 
-      // Check validation errors
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         logger.warn('Validation errors:', errors.array());
-        return res.status(400).json({ errors: errors.array() });
+        return sendValidationAuthError(res, errors.array());
       }
 
       const { email, password } = req.body;
@@ -142,9 +148,9 @@ export class UserController {
       const message = getErrorMessage(error);
       logger.error('Login error:', error);
       if (message === 'Invalid email or password') {
-        return res.status(401).json({ error: message });
+        return sendAuthError(res, 401, AUTH_ERROR_CODES.INVALID_CREDENTIALS);
       }
-      return res.status(500).json({ error: 'Internal server error' });
+      return sendAuthError(res, 500, AUTH_ERROR_CODES.INTERNAL);
     }
   }
 
@@ -270,7 +276,7 @@ export class UserController {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+        return sendValidationAuthError(res, errors.array());
       }
 
       const { email } = req.body as { email: string };
@@ -282,7 +288,9 @@ export class UserController {
       });
     } catch (error: unknown) {
       logger.error('Forgot password error:', error);
-      return res.status(500).json({ error: 'Не удалось отправить письмо. Попробуйте позже.' });
+      return sendAuthError(res, 500, AUTH_ERROR_CODES.INTERNAL, {
+        message: 'Не удалось отправить письмо. Попробуйте позже.',
+      });
     }
   }
 
@@ -301,7 +309,7 @@ export class UserController {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+        return sendValidationAuthError(res, errors.array());
       }
 
       const { token, password } = req.body as { token: string; password: string };
@@ -312,9 +320,14 @@ export class UserController {
       const message = getErrorMessage(error);
       logger.error('Reset password error:', error);
       if (message === 'Invalid or expired reset token') {
-        return res.status(400).json({ error: 'Ссылка недействительна или устарела. Запросите новую.' });
+        return sendAuthError(res, 400, AUTH_ERROR_CODES.RESET_TOKEN_INVALID, {
+          message: 'Ссылка недействительна или устарела. Запросите новую.',
+          fields: { token: [AUTH_ERROR_CODES.RESET_TOKEN_INVALID] },
+        });
       }
-      return res.status(500).json({ error: 'Не удалось обновить пароль. Попробуйте позже.' });
+      return sendAuthError(res, 500, AUTH_ERROR_CODES.INTERNAL, {
+        message: 'Не удалось обновить пароль. Попробуйте позже.',
+      });
     }
   }
 
@@ -323,12 +336,20 @@ export class UserController {
       const token = typeof req.query.token === 'string' ? req.query.token : '';
       const valid = await PasswordResetService.validateToken(token);
       if (!valid) {
-        return res.status(400).json({ valid: false, error: 'Ссылка недействительна или устарела.' });
+        return res.status(400).json({
+          valid: false,
+          ...buildAuthErrorBody(AUTH_ERROR_CODES.RESET_TOKEN_INVALID, {
+            message: 'Ссылка недействительна или устарела.',
+          }),
+        });
       }
       return res.json({ valid: true });
     } catch (error: unknown) {
       logger.error('Validate reset token error:', error);
-      return res.status(500).json({ valid: false, error: 'Internal server error' });
+      return res.status(500).json({
+        valid: false,
+        ...buildAuthErrorBody(AUTH_ERROR_CODES.INTERNAL),
+      });
     }
   }
 }
