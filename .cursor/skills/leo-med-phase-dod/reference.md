@@ -46,7 +46,7 @@ All Phase 0 verify rows **met**, plus:
 | 3 | Doctors end-to-end first; mid+junior same release or immediate follow (scope A+B) | code paths |
 | 4 | Consumer: TG bot and/or Med web surface — лента **by profession** (+ optional city) | manual/smoke |
 | 5 | Dedup with existing job-matching rules | tests / docs |
-| 6 | TG secondary: 3–7 channels from med registry activated, not full list unless approved | `med_sources` status |
+| 6 | TG: all wife channels from med registry activated (or explicit scope cut) | `med_sources` status |
 | 7 | `ENABLE_MED_VERTICAL` gates Med paths; Jack IT unaffected when false | tests |
 | 8 | Brief §6 Phase 1 DoD table updated met/not met | docs |
 

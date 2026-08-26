@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "notes": "LEO Med source registry. Phase 1: HH/SJ + 7 high TG active. Do not mix into Jack IT tg_job_channels.json.",
+  "version": 2,
+  "notes": "LEO Med source registry. Full registry active: HH/SJ API + all TG + HTML boards (fail-open). Jack IT tg_job_channels.json untouched.",
   "geography_default": "RU",
   "sources": [
     {
@@ -51,7 +51,15 @@
         "junior"
       ],
       "geo": "RU",
-      "status": "planned"
+      "status": "active",
+      "list_urls": [
+        "https://www.rabota.ru/vacancy/?query=%D0%B2%D1%80%D0%B0%D1%87",
+        "https://www.rabota.ru/vacancy/?query=%D0%BC%D0%B5%D0%B4%D1%81%D0%B5%D1%81%D1%82%D1%80%D0%B0"
+      ],
+      "link_contains": [
+        "vacancy",
+        "vakans"
+      ]
     },
     {
       "id": "zarplata.ru",
@@ -67,7 +75,15 @@
         "junior"
       ],
       "geo": "RU",
-      "status": "planned"
+      "status": "active",
+      "list_urls": [
+        "https://zarplata.ru/vacancy?query=%D0%B2%D1%80%D0%B0%D1%87",
+        "https://zarplata.ru/vacancy?query=%D0%BC%D0%B5%D0%B4%D1%81%D0%B5%D1%81%D1%82%D1%80%D0%B0"
+      ],
+      "link_contains": [
+        "vacancy",
+        "vakans"
+      ]
     },
     {
       "id": "avito_jobs",
@@ -83,8 +99,16 @@
         "junior"
       ],
       "geo": "RU",
-      "status": "planned",
-      "notes": "Avito connector exists for IT; med filter separate"
+      "status": "active",
+      "notes": "Avito connector exists for IT; med filter separate",
+      "list_urls": [
+        "https://www.avito.ru/all/vakansii?q=%D0%B2%D1%80%D0%B0%D1%87",
+        "https://www.avito.ru/all/vakansii?q=%D0%BC%D0%B5%D0%B4%D1%81%D0%B5%D1%81%D1%82%D1%80%D0%B0"
+      ],
+      "link_contains": [
+        "vakansii",
+        "vacancy"
+      ]
     },
     {
       "id": "trudvsem.ru",
@@ -100,8 +124,15 @@
         "junior"
       ],
       "geo": "RU",
-      "status": "planned",
-      "notes": "Discovery: где искать работу врачом"
+      "status": "active",
+      "notes": "Primary path: opendata.trudvsem.ru API in boardIngest; HTML fallback via list_urls",
+      "list_urls": [
+        "https://trudvsem.ru/vacancy/search?title=%D0%B2%D1%80%D0%B0%D1%87"
+      ],
+      "link_contains": [
+        "vacancy",
+        "kartochka"
+      ]
     },
     {
       "id": "emed.market",
@@ -116,8 +147,18 @@
         "mid"
       ],
       "geo": "RU",
-      "status": "planned",
-      "notes": "Med-specialized marketplace"
+      "status": "active",
+      "notes": "Med-specialized marketplace",
+      "list_urls": [
+        "https://emed.market/",
+        "https://emed.market/vacancies"
+      ],
+      "link_contains": [
+        "vacanc",
+        "job",
+        "врач",
+        "med"
+      ]
     },
     {
       "id": "tg_superjob_medicina",
@@ -184,7 +225,7 @@
         "junior"
       ],
       "geo": "RU",
-      "status": "planned",
+      "status": "active",
       "contact": "@Jober_Supporting"
     },
     {
@@ -272,7 +313,7 @@
         "junior"
       ],
       "geo": "RU",
-      "status": "planned",
+      "status": "active",
       "contact": "site_adv@hh.ru",
       "notes": "Likely overlaps HH API — secondary"
     },
@@ -290,7 +331,7 @@
         "mid"
       ],
       "geo": "remote",
-      "status": "planned",
+      "status": "active",
       "notes": "Remote shelf"
     },
     {
@@ -307,7 +348,7 @@
         "mid"
       ],
       "geo": "RU",
-      "status": "planned",
+      "status": "active",
       "notes": "Addiction / rehab niche — Phase 2+"
     },
     {
@@ -325,7 +366,7 @@
         "junior"
       ],
       "geo": "RU",
-      "status": "planned"
+      "status": "active"
     }
   ]
 }

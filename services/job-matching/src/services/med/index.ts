@@ -22,6 +22,7 @@ export {
 } from './mapRole';
 export type { MedMapConfidence, MedRoleMatch } from './mapRole';
 export { scrapeMedCatalog } from './scrapeMed';
+export { fetchMedHtmlBoardJobs } from './boardIngest';
 export { fetchMedTelegramJobs, listActiveMedTgChannels } from './tgIngest';
 export {
   countSharedDictionary,

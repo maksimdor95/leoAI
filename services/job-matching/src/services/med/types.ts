@@ -42,6 +42,11 @@ export interface MedSource {
   title: string;
   url: string;
   username?: string;
+  /** Optional HTML listing URL(s) for med board ingest. */
+  list_url?: string;
+  list_urls?: string[];
+  link_contains?: string[];
+  path_regex?: string;
   priority: MedSourcePriority;
   legality: string;
   roles_coverage: MedRoleLevel[];

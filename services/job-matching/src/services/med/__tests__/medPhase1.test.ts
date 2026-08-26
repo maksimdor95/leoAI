@@ -42,12 +42,18 @@ describe('med/keywords', () => {
 });
 
 describe('med Phase 1 registry', () => {
-  it('activates 3–7 high TG channels (not all wife list)', () => {
+  it('activates all Med TG channels from the wife registry', () => {
     const active = listActiveMedTgChannels();
-    expect(active.length).toBeGreaterThanOrEqual(3);
-    expect(active.length).toBeLessThanOrEqual(7);
+    expect(active.length).toBe(12);
     expect(active.map((c) => c.username)).toEqual(
-      expect.arrayContaining(['superjob_medicina', 'rabota_medsestra', 'csorglaborantmladpersonal'])
+      expect.arrayContaining([
+        'superjob_medicina',
+        'rabota_medsestra',
+        'csorglaborantmladpersonal',
+        'med_vacancy',
+        'medsmena',
+        'hh_vacancy_medicine',
+      ])
     );
   });
 

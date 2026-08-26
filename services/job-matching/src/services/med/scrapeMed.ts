@@ -1,5 +1,5 @@
 /**
- * LEO Med Phase 1 scrape: HH + SuperJob + Med TG, tagged with med_role_id.
+ * LEO Med scrape: HH + SuperJob + Med HTML boards + all Med TG.
  * Gated by ENABLE_MED_VERTICAL. Does not change Jack IT seed keywords / cron.
  */
 
@@ -10,6 +10,7 @@ import {
   scrapeCatalog,
   type ScrapeResult,
 } from '../scraper';
+import { fetchMedHtmlBoardJobs } from './boardIngest';
 import { isMedVerticalEnabled } from './config';
 import { buildMedScrapeKeywords } from './keywords';
 import { applyMedRoleMapping } from './mapRole';
@@ -20,6 +21,8 @@ export interface ScrapeMedOptions {
   locationId?: number;
   /** Include active Med TG channels (default true). */
   includeTg?: boolean;
+  /** Include active HTML / open-data boards from registry (default true). */
+  includeHtmlBoards?: boolean;
 }
 
 function tagMedJobs(jobs: JobInput[]): JobInput[] {
@@ -63,9 +66,11 @@ export async function scrapeMedCatalog(options: ScrapeMedOptions = {}): Promise<
       : buildMedScrapeKeywords();
   const locationId = options.locationId && options.locationId > 0 ? options.locationId : 113;
   const includeTg = options.includeTg !== false;
+  const includeHtmlBoards = options.includeHtmlBoards !== false;
 
   logger.info(
-    `scrapeMedCatalog start keywords=${keywords.length} locationId=${locationId} tg=${includeTg}`
+    `scrapeMedCatalog start keywords=${keywords.length} locationId=${locationId} ` +
+      `html=${includeHtmlBoards} tg=${includeTg}`
   );
 
   const boardResult = await scrapeCatalog(keywords, locationId, {
@@ -76,33 +81,50 @@ export async function scrapeMedCatalog(options: ScrapeMedOptions = {}): Promise<
     persist: persistMedJobs,
   });
 
+  let htmlScraped = 0;
+  let htmlSaved = 0;
   let tgScraped = 0;
   let tgSaved = 0;
-  const tgErrors: string[] = [];
+  const extraErrors: string[] = [];
   const sourcesUsed = [...boardResult.sourcesUsed];
   const bySource = { ...(boardResult.bySource || {}) };
+
+  const mergePersist = (persist: Awaited<ReturnType<typeof persistMedJobs>>) => {
+    for (const [src, counts] of Object.entries(persist.bySource || {})) {
+      if (!sourcesUsed.includes(src)) sourcesUsed.push(src);
+      bySource[src] = counts;
+    }
+    extraErrors.push(...persist.errors);
+    return persist.saved;
+  };
+
+  if (includeHtmlBoards) {
+    try {
+      const htmlJobs = await fetchMedHtmlBoardJobs(keywords);
+      htmlScraped = htmlJobs.length;
+      if (htmlJobs.length > 0) {
+        htmlSaved = mergePersist(await persistMedJobs(htmlJobs));
+      }
+    } catch (error: unknown) {
+      extraErrors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
 
   if (includeTg) {
     try {
       const tgJobs = await fetchMedTelegramJobs(keywords);
       tgScraped = tgJobs.length;
       if (tgJobs.length > 0) {
-        const tgPersist = await persistMedJobs(tgJobs);
-        tgSaved = tgPersist.saved;
-        tgErrors.push(...tgPersist.errors);
-        for (const [src, counts] of Object.entries(tgPersist.bySource)) {
-          if (!sourcesUsed.includes(src)) sourcesUsed.push(src);
-          bySource[src] = counts;
-        }
+        tgSaved = mergePersist(await persistMedJobs(tgJobs));
       }
     } catch (error: unknown) {
-      tgErrors.push(error instanceof Error ? error.message : String(error));
+      extraErrors.push(error instanceof Error ? error.message : String(error));
     }
   }
 
-  const jobsScraped = boardResult.jobsScraped + tgScraped;
-  const jobsSaved = boardResult.jobsSaved + tgSaved;
-  const errors = [...boardResult.errors, ...tgErrors];
+  const jobsScraped = boardResult.jobsScraped + htmlScraped + tgScraped;
+  const jobsSaved = boardResult.jobsSaved + htmlSaved + tgSaved;
+  const errors = [...boardResult.errors, ...extraErrors];
 
   return {
     medEnabled: true,

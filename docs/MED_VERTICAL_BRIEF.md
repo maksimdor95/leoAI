@@ -209,9 +209,10 @@ Ingest / бот / профили — **не** в Phase 0.
 | HH + SuperJob medicine-фильтр → каталог / med-tag | met | `scrapeMedCatalog` + `POST /api/jobs/scrape/med` |
 | Маппинг vacancy → `med_role_id` (aliases + fallback) + тесты | met | `med/mapRole.ts`, `medPhase1.test.ts` |
 | Врачи e2e, затем mid+junior в том же/следом релизе | met | keywords doctor-first → mid → junior; feed filter `level` |
-| Потребитель: лента по профессии (+ город) | met | `GET /api/jobs/med/feed` + web `/med` |
+| Потребитель: лента по профессии (+ город) | met | `GET /api/jobs/med/feed` + match в чате |
 | Дедуп как в job-matching | met | `source_url` upsert + Jack match excludes `med_role_id` |
-| TG secondary: 3–7 high-priority каналов | met | 7 active TG в `med_sources.json` (не Jack catalog) |
+| TG: **весь** реестр жены (12 каналов) | met | все `status=active` в `med_sources.json`; `tgIngest` |
+| HTML-доски реестра (Работа/Зарплата/Авито/Трудвсем/EMED) | met | `boardIngest.ts` (fail-open; Jack HTML parser + trudvsem open data) |
 | `ENABLE_MED_VERTICAL` гейтит Med; Jack при `false` без изменений | met | 503 на med API; scrape no-op; Jack SQL `med_role_id IS NULL` |
 
 ### Phase 2 — таксономия (схема согласована 2026-08-26)

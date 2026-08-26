@@ -17,6 +17,7 @@ const TEXT_RE = /class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/i;
 const HREF_RE = /href="(https?:\/\/[^"]+)"/gi;
 
 const POSTS_PER_CHANNEL = 25;
+const DEFAULT_TG_MAX_JOBS = 200;
 
 function firstLineTitle(text: string): string {
   for (const line of text.split('\n')) {
@@ -85,7 +86,7 @@ function parseChannelHtml(
   return jobs;
 }
 
-/** Active TG channels for Med (Phase 1: 3–7 high-priority). */
+/** Active TG channels for Med (full registry when status=active). */
 export function listActiveMedTgChannels(): Array<{ username: string; title: string }> {
   return listMedSources({ type: 'tg', status: 'active' })
     .filter((s) => s.username)
@@ -97,7 +98,7 @@ export function listActiveMedTgChannels(): Array<{ username: string; title: stri
 
 export async function fetchMedTelegramJobs(
   keywords: string[],
-  maxJobs = 80
+  maxJobs = DEFAULT_TG_MAX_JOBS
 ): Promise<JobInput[]> {
   const channels = listActiveMedTgChannels();
   if (channels.length === 0) {
