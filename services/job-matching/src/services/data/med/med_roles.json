@@ -1,0 +1,2382 @@
+{
+  "version": 2,
+  "notes": "LEO Med: номенклатура 434н (врачи §5, средний §6+§9, младший §12) + расширение v1 из taxonomy_meditsina_rf (фармация, руководящие, junior/market extras). nomenclature_ref ext:* = вне 434н.",
+  "source": {
+    "title": "Приказ Минздрава России от 14.05.2026 N 434н",
+    "publication_url": "http://publication.pravo.gov.ru/document/0001202605300020",
+    "secondary_url": "https://rulaws.ru/acts/Prikaz-Minzdrava-Rossii-ot-14.05.2026-N-434n/",
+    "effective_from": "2026-09-01",
+    "extensions": [
+      "docs/med/taxonomy_meditsina_rf.md",
+      "фармацевтическая номенклатура / рынок (провизор, фармацевт)",
+      "руководящие должности МО (главный врач и др.)"
+    ]
+  },
+  "levels": [
+    {
+      "id": "doctor",
+      "title": "Врач",
+      "nomenclature_sections": [
+        "5"
+      ]
+    },
+    {
+      "id": "mid",
+      "title": "Средний медицинский персонал",
+      "nomenclature_sections": [
+        "6",
+        "9"
+      ]
+    },
+    {
+      "id": "junior",
+      "title": "Младший медицинский персонал",
+      "nomenclature_sections": [
+        "12"
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "id": "doctor_vrach_akusher_ginekolog",
+      "level": "doctor",
+      "title": "Врач-акушер-гинеколог",
+      "aliases": [
+        "акушер-гинеколог"
+      ],
+      "nomenclature_ref": "5.1.1",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_akusher_ginekolog_cehovogo_vrachebnogo_uchastka",
+      "level": "doctor",
+      "title": "Врач-акушер-гинеколог цехового врачебного участка",
+      "aliases": [
+        "акушер-гинеколог цехового врачебного участка"
+      ],
+      "nomenclature_ref": "5.1.2",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_allergolog_immunolog",
+      "level": "doctor",
+      "title": "Врач-аллерголог-иммунолог",
+      "aliases": [
+        "аллерголог-иммунолог"
+      ],
+      "nomenclature_ref": "5.1.3",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_anesteziolog_reanimatolog",
+      "level": "doctor",
+      "title": "Врач-анестезиолог-реаниматолог",
+      "aliases": [
+        "анестезиолог-реаниматолог"
+      ],
+      "nomenclature_ref": "5.1.4",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_bakteriolog",
+      "level": "doctor",
+      "title": "Врач-бактериолог",
+      "aliases": [
+        "бактериолог"
+      ],
+      "nomenclature_ref": "5.1.5",
+      "hiring_closed_from": "2028-09-01"
+    },
+    {
+      "id": "doctor_vrach_virusolog",
+      "level": "doctor",
+      "title": "Врач-вирусолог",
+      "aliases": [
+        "вирусолог"
+      ],
+      "nomenclature_ref": "5.1.6",
+      "hiring_closed_from": "2028-09-01"
+    },
+    {
+      "id": "doctor_vrach_vyezdnoj_brigady_skoroj_medicinskoj_pomoschi",
+      "level": "doctor",
+      "title": "Врач выездной бригады скорой медицинской помощи",
+      "aliases": [
+        "выездной бригады скорой медицинской помощи"
+      ],
+      "nomenclature_ref": "5.1.7",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_gastroenterolog",
+      "level": "doctor",
+      "title": "Врач-гастроэнтеролог",
+      "aliases": [
+        "гастроэнтеролог"
+      ],
+      "nomenclature_ref": "5.1.8",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_gematolog",
+      "level": "doctor",
+      "title": "Врач-гематолог",
+      "aliases": [
+        "гематолог"
+      ],
+      "nomenclature_ref": "5.1.9",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_genetik",
+      "level": "doctor",
+      "title": "Врач-генетик",
+      "aliases": [
+        "генетик"
+      ],
+      "nomenclature_ref": "5.1.10",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_geriatr",
+      "level": "doctor",
+      "title": "Врач-гериатр",
+      "aliases": [
+        "гериатр"
+      ],
+      "nomenclature_ref": "5.1.11",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_dezinfektolog",
+      "level": "doctor",
+      "title": "Врач-дезинфектолог",
+      "aliases": [
+        "дезинфектолог"
+      ],
+      "nomenclature_ref": "5.1.12",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_dermatovenerolog",
+      "level": "doctor",
+      "title": "Врач-дерматовенеролог",
+      "aliases": [
+        "дерматовенеролог"
+      ],
+      "nomenclature_ref": "5.1.13",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_detskij_kardiolog",
+      "level": "doctor",
+      "title": "Врач-детский кардиолог",
+      "aliases": [
+        "детский кардиолог"
+      ],
+      "nomenclature_ref": "5.1.14",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_detskij_onkolog",
+      "level": "doctor",
+      "title": "Врач-детский онколог",
+      "aliases": [
+        "детский онколог"
+      ],
+      "nomenclature_ref": "5.1.15",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_detskij_onkolog_gematolog",
+      "level": "doctor",
+      "title": "Врач-детский онколог-гематолог",
+      "aliases": [
+        "детский онколог-гематолог"
+      ],
+      "nomenclature_ref": "5.1.16",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_detskij_urolog_androlog",
+      "level": "doctor",
+      "title": "Врач-детский уролог-андролог",
+      "aliases": [
+        "детский уролог-андролог"
+      ],
+      "nomenclature_ref": "5.1.17",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_detskij_hirurg",
+      "level": "doctor",
+      "title": "Врач-детский хирург",
+      "aliases": [
+        "детский хирург"
+      ],
+      "nomenclature_ref": "5.1.18",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_detskij_endokrinolog",
+      "level": "doctor",
+      "title": "Врач-детский эндокринолог",
+      "aliases": [
+        "детский эндокринолог"
+      ],
+      "nomenclature_ref": "5.1.19",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_diabetolog",
+      "level": "doctor",
+      "title": "Врач-диабетолог",
+      "aliases": [
+        "диабетолог"
+      ],
+      "nomenclature_ref": "5.1.20",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_dietolog",
+      "level": "doctor",
+      "title": "Врач-диетолог",
+      "aliases": [
+        "диетолог"
+      ],
+      "nomenclature_ref": "5.1.21",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_zdravpunkta",
+      "level": "doctor",
+      "title": "Врач здравпункта",
+      "aliases": [
+        "здравпункта"
+      ],
+      "nomenclature_ref": "5.1.22",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_infekcionist",
+      "level": "doctor",
+      "title": "Врач-инфекционист",
+      "aliases": [
+        "инфекционист"
+      ],
+      "nomenclature_ref": "5.1.23",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_kardiolog",
+      "level": "doctor",
+      "title": "Врач-кардиолог",
+      "aliases": [
+        "кардиолог"
+      ],
+      "nomenclature_ref": "5.1.24",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_kibernetik",
+      "level": "doctor",
+      "title": "Врач-кибернетик",
+      "aliases": [
+        "кибернетик"
+      ],
+      "nomenclature_ref": "5.1.25",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_klinicheskoj_laboratornoj_diagnostiki",
+      "level": "doctor",
+      "title": "Врач клинической лабораторной диагностики",
+      "aliases": [
+        "клинической лабораторной диагностики"
+      ],
+      "nomenclature_ref": "5.1.26",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_klinicheskij_mikolog",
+      "level": "doctor",
+      "title": "Врач-клинический миколог",
+      "aliases": [
+        "клинический миколог"
+      ],
+      "nomenclature_ref": "5.1.27",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_klinicheskij_farmakolog",
+      "level": "doctor",
+      "title": "Врач-клинический фармаколог",
+      "aliases": [
+        "клинический фармаколог"
+      ],
+      "nomenclature_ref": "5.1.28",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_koloproktolog",
+      "level": "doctor",
+      "title": "Врач-колопроктолог",
+      "aliases": [
+        "колопроктолог"
+      ],
+      "nomenclature_ref": "5.1.29",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_kosmetolog",
+      "level": "doctor",
+      "title": "Врач-косметолог",
+      "aliases": [
+        "косметолог"
+      ],
+      "nomenclature_ref": "5.1.30",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_laborant",
+      "level": "doctor",
+      "title": "Врач-лаборант",
+      "aliases": [
+        "лаборант"
+      ],
+      "nomenclature_ref": "5.1.31",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_laboratornyj_genetik",
+      "level": "doctor",
+      "title": "Врач-лабораторный генетик",
+      "aliases": [
+        "лабораторный генетик"
+      ],
+      "nomenclature_ref": "5.1.32",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_laboratornyj_mikolog",
+      "level": "doctor",
+      "title": "Врач-лабораторный миколог",
+      "aliases": [
+        "лабораторный миколог"
+      ],
+      "nomenclature_ref": "5.1.33",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_manualьnoj_terapii",
+      "level": "doctor",
+      "title": "Врач мануальной терапии",
+      "aliases": [
+        "мануальной терапии"
+      ],
+      "nomenclature_ref": "5.1.34",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_medicinskij_mikrobiolog",
+      "level": "doctor",
+      "title": "Врач-медицинский микробиолог",
+      "aliases": [
+        "медицинский микробиолог"
+      ],
+      "nomenclature_ref": "5.1.35",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_metodist",
+      "level": "doctor",
+      "title": "Врач-методист",
+      "aliases": [
+        "методист"
+      ],
+      "nomenclature_ref": "5.1.36",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_nevrolog",
+      "level": "doctor",
+      "title": "Врач-невролог",
+      "aliases": [
+        "невролог"
+      ],
+      "nomenclature_ref": "5.1.37",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_nejrohirurg",
+      "level": "doctor",
+      "title": "Врач-нейрохирург",
+      "aliases": [
+        "нейрохирург"
+      ],
+      "nomenclature_ref": "5.1.38",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_neonatolog",
+      "level": "doctor",
+      "title": "Врач-неонатолог",
+      "aliases": [
+        "неонатолог"
+      ],
+      "nomenclature_ref": "5.1.39",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_nefrolog",
+      "level": "doctor",
+      "title": "Врач-нефролог",
+      "aliases": [
+        "нефролог"
+      ],
+      "nomenclature_ref": "5.1.40",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_obschej_praktiki_semejnyj_vrach",
+      "level": "doctor",
+      "title": "Врач общей практики (семейный врач)",
+      "aliases": [
+        "общей практики (семейный врач)",
+        "семейный врач",
+        "Врач общей практики"
+      ],
+      "nomenclature_ref": "5.1.41",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_onkolog",
+      "level": "doctor",
+      "title": "Врач-онколог",
+      "aliases": [
+        "онколог"
+      ],
+      "nomenclature_ref": "5.1.42",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_ortodont",
+      "level": "doctor",
+      "title": "Врач-ортодонт",
+      "aliases": [
+        "ортодонт"
+      ],
+      "nomenclature_ref": "5.1.43",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_osteopat",
+      "level": "doctor",
+      "title": "Врач-остеопат",
+      "aliases": [
+        "остеопат"
+      ],
+      "nomenclature_ref": "5.1.44",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_otorinolaringolog",
+      "level": "doctor",
+      "title": "Врач-оториноларинголог",
+      "aliases": [
+        "оториноларинголог"
+      ],
+      "nomenclature_ref": "5.1.45",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_oftalьmolog",
+      "level": "doctor",
+      "title": "Врач-офтальмолог",
+      "aliases": [
+        "офтальмолог"
+      ],
+      "nomenclature_ref": "5.1.46",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_oftalьmolog_protezist",
+      "level": "doctor",
+      "title": "Врач-офтальмолог-протезист",
+      "aliases": [
+        "офтальмолог-протезист"
+      ],
+      "nomenclature_ref": "5.1.47",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_parazitolog",
+      "level": "doctor",
+      "title": "Врач-паразитолог",
+      "aliases": [
+        "паразитолог"
+      ],
+      "nomenclature_ref": "5.1.48",
+      "hiring_closed_from": "2028-09-01"
+    },
+    {
+      "id": "doctor_vrach_patologoanatom",
+      "level": "doctor",
+      "title": "Врач-патологоанатом",
+      "aliases": [
+        "патологоанатом"
+      ],
+      "nomenclature_ref": "5.1.49",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_pediatr",
+      "level": "doctor",
+      "title": "Врач-педиатр",
+      "aliases": [
+        "педиатр"
+      ],
+      "nomenclature_ref": "5.1.50",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_pediatr_gorodskoj_rajonnyj",
+      "level": "doctor",
+      "title": "Врач-педиатр городской (районный)",
+      "aliases": [
+        "педиатр городской (районный)",
+        "районный",
+        "Врач-педиатр городской"
+      ],
+      "nomenclature_ref": "5.1.51",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_pediatr_uchastkovyj",
+      "level": "doctor",
+      "title": "Врач-педиатр участковый",
+      "aliases": [
+        "педиатр участковый"
+      ],
+      "nomenclature_ref": "5.1.52",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_plasticheskij_hirurg",
+      "level": "doctor",
+      "title": "Врач-пластический хирург",
+      "aliases": [
+        "пластический хирург"
+      ],
+      "nomenclature_ref": "5.1.53",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_aviacionnoj_i_kosmicheskoj_medicine",
+      "level": "doctor",
+      "title": "Врач по авиационной и космической медицине",
+      "aliases": [
+        "по авиационной и космической медицине"
+      ],
+      "nomenclature_ref": "5.1.54",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_vodolaznoj_medicine",
+      "level": "doctor",
+      "title": "Врач по водолазной медицине",
+      "aliases": [
+        "по водолазной медицине"
+      ],
+      "nomenclature_ref": "5.1.55",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_gigiene_detej_i_podrostkov",
+      "level": "doctor",
+      "title": "Врач по гигиене детей и подростков",
+      "aliases": [
+        "по гигиене детей и подростков"
+      ],
+      "nomenclature_ref": "5.1.56",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_gigiene_pitaniya",
+      "level": "doctor",
+      "title": "Врач по гигиене питания",
+      "aliases": [
+        "по гигиене питания"
+      ],
+      "nomenclature_ref": "5.1.57",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_gigiene_truda",
+      "level": "doctor",
+      "title": "Врач по гигиене труда",
+      "aliases": [
+        "по гигиене труда"
+      ],
+      "nomenclature_ref": "5.1.58",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_gigienicheskomu_vospitaniyu",
+      "level": "doctor",
+      "title": "Врач по гигиеническому воспитанию",
+      "aliases": [
+        "по гигиеническому воспитанию"
+      ],
+      "nomenclature_ref": "5.1.59",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_kommunalьnoj_gigiene",
+      "level": "doctor",
+      "title": "Врач по коммунальной гигиене",
+      "aliases": [
+        "по коммунальной гигиене"
+      ],
+      "nomenclature_ref": "5.1.60",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_lechebnoj_fizkulьture",
+      "level": "doctor",
+      "title": "Врач по лечебной физкультуре",
+      "aliases": [
+        "по лечебной физкультуре"
+      ],
+      "nomenclature_ref": "5.1.61",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_mediko_socialьnoj_ekspertize",
+      "level": "doctor",
+      "title": "Врач по медико-социальной экспертизе",
+      "aliases": [
+        "по медико-социальной экспертизе"
+      ],
+      "nomenclature_ref": "5.1.62",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_medicine_zdorovogo_dolgoletiya",
+      "level": "doctor",
+      "title": "Врач по медицине здорового долголетия",
+      "aliases": [
+        "по медицине здорового долголетия"
+      ],
+      "nomenclature_ref": "5.1.63",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_medicinskoj_profilaktike",
+      "level": "doctor",
+      "title": "Врач по медицинской профилактике",
+      "aliases": [
+        "по медицинской профилактике"
+      ],
+      "nomenclature_ref": "5.1.64",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_medicinskoj_reabilitacii_vrach_fizicheskoj_i_reabilitacionnoj_mediciny",
+      "level": "doctor",
+      "title": "Врач по медицинской реабилитации (врач физической и реабилитационной медицины)",
+      "aliases": [
+        "по медицинской реабилитации (врач физической и реабилитационной медицины)",
+        "врач физической и реабилитационной медицины",
+        "Врач по медицинской реабилитации"
+      ],
+      "nomenclature_ref": "5.1.65",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_obschej_gigiene",
+      "level": "doctor",
+      "title": "Врач по общей гигиене",
+      "aliases": [
+        "по общей гигиене"
+      ],
+      "nomenclature_ref": "5.1.66",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_palliativnoj_medicinskoj_pomoschi",
+      "level": "doctor",
+      "title": "Врач по паллиативной медицинской помощи",
+      "aliases": [
+        "по паллиативной медицинской помощи"
+      ],
+      "nomenclature_ref": "5.1.67",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_radiacionnoj_gigiene",
+      "level": "doctor",
+      "title": "Врач по радиационной гигиене",
+      "aliases": [
+        "по радиационной гигиене"
+      ],
+      "nomenclature_ref": "5.1.68",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_rentgenendovaskulyarnym_diagnostike_i_lecheniyu",
+      "level": "doctor",
+      "title": "Врач по рентгенэндоваскулярным диагностике и лечению",
+      "aliases": [
+        "по рентгенэндоваскулярным диагностике и лечению"
+      ],
+      "nomenclature_ref": "5.1.69",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_sanitarno_gigienicheskim_laboratornym_issledovaniyam",
+      "level": "doctor",
+      "title": "Врач по санитарно-гигиеническим лабораторным исследованиям",
+      "aliases": [
+        "по санитарно-гигиеническим лабораторным исследованиям"
+      ],
+      "nomenclature_ref": "5.1.70",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_sportivnoj_medicine",
+      "level": "doctor",
+      "title": "Врач по спортивной медицине",
+      "aliases": [
+        "по спортивной медицине"
+      ],
+      "nomenclature_ref": "5.1.71",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_priemnogo_otdeleniya",
+      "level": "doctor",
+      "title": "Врач приемного отделения",
+      "aliases": [
+        "приемного отделения"
+      ],
+      "nomenclature_ref": "5.1.72",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_profpatolog",
+      "level": "doctor",
+      "title": "Врач-профпатолог",
+      "aliases": [
+        "профпатолог"
+      ],
+      "nomenclature_ref": "5.1.73",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_psihiatr",
+      "level": "doctor",
+      "title": "Врач-психиатр",
+      "aliases": [
+        "психиатр"
+      ],
+      "nomenclature_ref": "5.1.74",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_psihiatr_uchastkovyj",
+      "level": "doctor",
+      "title": "Врач-психиатр участковый",
+      "aliases": [
+        "психиатр участковый"
+      ],
+      "nomenclature_ref": "5.1.75",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_psihiatr_detskij",
+      "level": "doctor",
+      "title": "Врач-психиатр детский",
+      "aliases": [
+        "психиатр детский"
+      ],
+      "nomenclature_ref": "5.1.76",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_psihiatr_detskij_uchastkovyj",
+      "level": "doctor",
+      "title": "Врач-психиатр детский участковый",
+      "aliases": [
+        "психиатр детский участковый"
+      ],
+      "nomenclature_ref": "5.1.77",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_psihiatr_podrostkovyj",
+      "level": "doctor",
+      "title": "Врач-психиатр подростковый",
+      "aliases": [
+        "психиатр подростковый"
+      ],
+      "nomenclature_ref": "5.1.78",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_psihiatr_podrostkovyj_uchastkovyj",
+      "level": "doctor",
+      "title": "Врач-психиатр подростковый участковый",
+      "aliases": [
+        "психиатр подростковый участковый"
+      ],
+      "nomenclature_ref": "5.1.79",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_psihiatr_narkolog",
+      "level": "doctor",
+      "title": "Врач-психиатр-нарколог",
+      "aliases": [
+        "психиатр-нарколог"
+      ],
+      "nomenclature_ref": "5.1.80",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_psihiatr_narkolog_uchastkovyj",
+      "level": "doctor",
+      "title": "Врач-психиатр-нарколог участковый",
+      "aliases": [
+        "психиатр-нарколог участковый"
+      ],
+      "nomenclature_ref": "5.1.81",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_psihoterapevt",
+      "level": "doctor",
+      "title": "Врач-психотерапевт",
+      "aliases": [
+        "психотерапевт"
+      ],
+      "nomenclature_ref": "5.1.82",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_pulьmonolog",
+      "level": "doctor",
+      "title": "Врач-пульмонолог",
+      "aliases": [
+        "пульмонолог"
+      ],
+      "nomenclature_ref": "5.1.83",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_radiolog",
+      "level": "doctor",
+      "title": "Врач-радиолог",
+      "aliases": [
+        "радиолог"
+      ],
+      "nomenclature_ref": "5.1.84",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_radioterapevt",
+      "level": "doctor",
+      "title": "Врач-радиотерапевт",
+      "aliases": [
+        "радиотерапевт"
+      ],
+      "nomenclature_ref": "5.1.85",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_revmatolog",
+      "level": "doctor",
+      "title": "Врач-ревматолог",
+      "aliases": [
+        "ревматолог"
+      ],
+      "nomenclature_ref": "5.1.86",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_rentgenolog",
+      "level": "doctor",
+      "title": "Врач-рентгенолог",
+      "aliases": [
+        "рентгенолог"
+      ],
+      "nomenclature_ref": "5.1.87",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_refleksoterapevt",
+      "level": "doctor",
+      "title": "Врач-рефлексотерапевт",
+      "aliases": [
+        "рефлексотерапевт"
+      ],
+      "nomenclature_ref": "5.1.88",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_seksolog",
+      "level": "doctor",
+      "title": "Врач-сексолог",
+      "aliases": [
+        "сексолог"
+      ],
+      "nomenclature_ref": "5.1.89",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_serdechno_sosudistyj_hirurg",
+      "level": "doctor",
+      "title": "Врач-сердечно-сосудистый хирург",
+      "aliases": [
+        "сердечно-сосудистый хирург"
+      ],
+      "nomenclature_ref": "5.1.90",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_skoroj_medicinskoj_pomoschi",
+      "level": "doctor",
+      "title": "Врач скорой медицинской помощи",
+      "aliases": [
+        "скорой медицинской помощи"
+      ],
+      "nomenclature_ref": "5.1.91",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_statistik",
+      "level": "doctor",
+      "title": "Врач-статистик",
+      "aliases": [
+        "статистик"
+      ],
+      "nomenclature_ref": "5.1.92",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_stomatolog",
+      "level": "doctor",
+      "title": "Врач-стоматолог",
+      "aliases": [
+        "стоматолог"
+      ],
+      "nomenclature_ref": "5.1.93",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_stomatolog_detskij",
+      "level": "doctor",
+      "title": "Врач-стоматолог детский",
+      "aliases": [
+        "стоматолог детский"
+      ],
+      "nomenclature_ref": "5.1.94",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_stomatolog_ortoped",
+      "level": "doctor",
+      "title": "Врач-стоматолог-ортопед",
+      "aliases": [
+        "стоматолог-ортопед"
+      ],
+      "nomenclature_ref": "5.1.95",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_stomatolog_terapevt",
+      "level": "doctor",
+      "title": "Врач-стоматолог-терапевт",
+      "aliases": [
+        "стоматолог-терапевт"
+      ],
+      "nomenclature_ref": "5.1.96",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_stomatolog_hirurg",
+      "level": "doctor",
+      "title": "Врач-стоматолог-хирург",
+      "aliases": [
+        "стоматолог-хирург"
+      ],
+      "nomenclature_ref": "5.1.97",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_sudebno_medicinskij_ekspert",
+      "level": "doctor",
+      "title": "Врач-судебно-медицинский эксперт",
+      "aliases": [
+        "судебно-медицинский эксперт"
+      ],
+      "nomenclature_ref": "5.1.98",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_sudebno_psihiatricheskij_ekspert",
+      "level": "doctor",
+      "title": "Врач-судебно-психиатрический эксперт",
+      "aliases": [
+        "судебно-психиатрический эксперт"
+      ],
+      "nomenclature_ref": "5.1.99",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_surdolog_otorinolaringolog",
+      "level": "doctor",
+      "title": "Врач-сурдолог-оториноларинголог",
+      "aliases": [
+        "сурдолог-оториноларинголог"
+      ],
+      "nomenclature_ref": "5.1.100",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_surdolog_protezist",
+      "level": "doctor",
+      "title": "Врач-сурдолог-протезист",
+      "aliases": [
+        "сурдолог-протезист"
+      ],
+      "nomenclature_ref": "5.1.101",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_terapevt",
+      "level": "doctor",
+      "title": "Врач-терапевт",
+      "aliases": [
+        "терапевт"
+      ],
+      "nomenclature_ref": "5.1.102",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_terapevt_podrostkovyj",
+      "level": "doctor",
+      "title": "Врач-терапевт подростковый",
+      "aliases": [
+        "терапевт подростковый"
+      ],
+      "nomenclature_ref": "5.1.103",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "doctor_vrach_terapevt_uchastkovyj",
+      "level": "doctor",
+      "title": "Врач-терапевт участковый",
+      "aliases": [
+        "терапевт участковый"
+      ],
+      "nomenclature_ref": "5.1.104",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_terapevt_uchastkovyj_cehovogo_vrachebnogo_uchastka",
+      "level": "doctor",
+      "title": "Врач-терапевт участковый цехового врачебного участка",
+      "aliases": [
+        "терапевт участковый цехового врачебного участка"
+      ],
+      "nomenclature_ref": "5.1.105",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_toksikolog",
+      "level": "doctor",
+      "title": "Врач-токсиколог",
+      "aliases": [
+        "токсиколог"
+      ],
+      "nomenclature_ref": "5.1.106",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_torakalьnyj_hirurg",
+      "level": "doctor",
+      "title": "Врач-торакальный хирург",
+      "aliases": [
+        "торакальный хирург"
+      ],
+      "nomenclature_ref": "5.1.107",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_travmatolog_ortoped",
+      "level": "doctor",
+      "title": "Врач-травматолог-ортопед",
+      "aliases": [
+        "травматолог-ортопед"
+      ],
+      "nomenclature_ref": "5.1.108",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_transfuziolog",
+      "level": "doctor",
+      "title": "Врач-трансфузиолог",
+      "aliases": [
+        "трансфузиолог"
+      ],
+      "nomenclature_ref": "5.1.109",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_ulьtrazvukovoj_diagnostiki",
+      "level": "doctor",
+      "title": "Врач ультразвуковой диагностики",
+      "aliases": [
+        "ультразвуковой диагностики"
+      ],
+      "nomenclature_ref": "5.1.110",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_urolog",
+      "level": "doctor",
+      "title": "Врач-уролог",
+      "aliases": [
+        "уролог"
+      ],
+      "nomenclature_ref": "5.1.111",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_fizioterapevt",
+      "level": "doctor",
+      "title": "Врач-физиотерапевт",
+      "aliases": [
+        "физиотерапевт"
+      ],
+      "nomenclature_ref": "5.1.112",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_ftiziatr",
+      "level": "doctor",
+      "title": "Врач-фтизиатр",
+      "aliases": [
+        "фтизиатр"
+      ],
+      "nomenclature_ref": "5.1.113",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_ftiziatr_uchastkovyj",
+      "level": "doctor",
+      "title": "Врач-фтизиатр участковый",
+      "aliases": [
+        "фтизиатр участковый"
+      ],
+      "nomenclature_ref": "5.1.114",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_funkcionalьnoj_diagnostiki",
+      "level": "doctor",
+      "title": "Врач функциональной диагностики",
+      "aliases": [
+        "функциональной диагностики"
+      ],
+      "nomenclature_ref": "5.1.115",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_hirurg",
+      "level": "doctor",
+      "title": "Врач-хирург",
+      "aliases": [
+        "хирург"
+      ],
+      "nomenclature_ref": "5.1.116",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_chelyustno_licevoj_hirurg",
+      "level": "doctor",
+      "title": "Врач-челюстно-лицевой хирург",
+      "aliases": [
+        "челюстно-лицевой хирург"
+      ],
+      "nomenclature_ref": "5.1.117",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_endokrinolog",
+      "level": "doctor",
+      "title": "Врач-эндокринолог",
+      "aliases": [
+        "эндокринолог"
+      ],
+      "nomenclature_ref": "5.1.118",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_endoskopist",
+      "level": "doctor",
+      "title": "Врач-эндоскопист",
+      "aliases": [
+        "эндоскопист"
+      ],
+      "nomenclature_ref": "5.1.119",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_epidemiolog",
+      "level": "doctor",
+      "title": "Врач-эпидемиолог",
+      "aliases": [
+        "эпидемиолог"
+      ],
+      "nomenclature_ref": "5.1.120",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_starshij_vrach_po_sportivnoj_medicine",
+      "level": "doctor",
+      "title": "Старший врач по спортивной медицине",
+      "aliases": [
+        "по спортивной медицине"
+      ],
+      "nomenclature_ref": "5.1.121",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_starshij_vrach_stancii_otdeleniya_skoroj_medicinskoj_pomoschi_centra_mediciny_ka",
+      "level": "doctor",
+      "title": "Старший врач станции (отделения) скорой медицинской помощи (центра медицины катастроф)",
+      "aliases": [
+        "станции (отделения) скорой медицинской помощи (центра медицины катастроф)",
+        "отделения",
+        "Старший врач станции скорой медицинской помощи (центра медицины катастроф)"
+      ],
+      "nomenclature_ref": "5.1.122",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_starshij_vrach_stancii_otdeleniya_skoroj_medicinskoj_pomoschi_gornospasatelьnyh_",
+      "level": "doctor",
+      "title": "Старший врач станции (отделения) скорой медицинской помощи горноспасательных частей (центра медицины катастроф)",
+      "aliases": [
+        "станции (отделения) скорой медицинской помощи горноспасательных частей (центра медицины катастроф)",
+        "отделения",
+        "Старший врач станции скорой медицинской помощи горноспасательных частей (центра медицины катастроф)"
+      ],
+      "nomenclature_ref": "5.1.123",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_sudovoj_vrach",
+      "level": "doctor",
+      "title": "Судовой врач",
+      "aliases": [],
+      "nomenclature_ref": "5.1.124",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_stazher",
+      "level": "doctor",
+      "title": "Врач-стажер",
+      "aliases": [
+        "стажер"
+      ],
+      "nomenclature_ref": "5.2",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_obschej_praktiki_medicinskij_brat_obschej_praktiki",
+      "level": "mid",
+      "title": "Медицинская сестра общей практики (медицинский брат общей практики)",
+      "aliases": [
+        "медицинский брат общей практики",
+        "Медицинская сестра общей практики"
+      ],
+      "nomenclature_ref": "6.1",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_po_palliativnoj_medicinskoj_pomoschi_medicinskij_brat_po_pal",
+      "level": "mid",
+      "title": "Медицинская сестра по паллиативной медицинской помощи (медицинский брат по паллиативной медицинской помощи)",
+      "aliases": [
+        "медицинский брат по паллиативной медицинской помощи",
+        "Медицинская сестра по паллиативной медицинской помощи"
+      ],
+      "nomenclature_ref": "6.2",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_po_profilaktike_medicinskij_brat_po_profilaktike",
+      "level": "mid",
+      "title": "Медицинская сестра по профилактике (медицинский брат по профилактике)",
+      "aliases": [
+        "медицинский брат по профилактике",
+        "Медицинская сестра по профилактике"
+      ],
+      "nomenclature_ref": "6.3",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_po_medicinskoj_reabilitacii_medicinskij_brat_po_medicinskoj_",
+      "level": "mid",
+      "title": "Медицинская сестра по медицинской реабилитации (медицинский брат по медицинской реабилитации)",
+      "aliases": [
+        "медицинский брат по медицинской реабилитации",
+        "Медицинская сестра по медицинской реабилитации"
+      ],
+      "nomenclature_ref": "6.4",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra___specialist_po_okazaniyu_medicinskoj_pomoschi_obuchayuschim",
+      "level": "mid",
+      "title": "Медицинская сестра - специалист по оказанию медицинской помощи обучающимся (медицинский брат - специалист по оказанию медицинской помощи обучающимся)",
+      "aliases": [
+        "медицинский брат - специалист по оказанию медицинской помощи обучающимся",
+        "Медицинская сестра - специалист по оказанию медицинской помощи обучающимся"
+      ],
+      "nomenclature_ref": "6.5",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskij_statistik",
+      "level": "mid",
+      "title": "Медицинский статистик",
+      "aliases": [],
+      "nomenclature_ref": "6.6",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_starshaya_medicinskaya_sestra_starshij_medicinskij_brat",
+      "level": "mid",
+      "title": "Старшая медицинская сестра (старший медицинский брат)",
+      "aliases": [
+        "медицинская сестра (старший медицинский брат)",
+        "старший медицинский брат",
+        "Старшая медицинская сестра"
+      ],
+      "nomenclature_ref": "6.7",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_starshaya_operacionnaya_medicinskaya_sestra_starshij_operacionnyj_medicinskij_br",
+      "level": "mid",
+      "title": "Старшая операционная медицинская сестра (старший операционный медицинский брат)",
+      "aliases": [
+        "операционная медицинская сестра (старший операционный медицинский брат)",
+        "старший операционный медицинский брат",
+        "Старшая операционная медицинская сестра"
+      ],
+      "nomenclature_ref": "6.8",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_starshij_akusher_starshaya_akusherka",
+      "level": "mid",
+      "title": "Старший акушер (старшая акушерка)",
+      "aliases": [
+        "акушер (старшая акушерка)",
+        "старшая акушерка",
+        "Старший акушер"
+      ],
+      "nomenclature_ref": "6.9",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_starshij_felьdsher",
+      "level": "mid",
+      "title": "Старший фельдшер",
+      "aliases": [
+        "фельдшер"
+      ],
+      "nomenclature_ref": "6.10",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_akusher_akusherka",
+      "level": "mid",
+      "title": "Акушер (акушерка)",
+      "aliases": [
+        "акушерка",
+        "Акушер"
+      ],
+      "nomenclature_ref": "9.1",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_gigienist_stomatologicheskij",
+      "level": "mid",
+      "title": "Гигиенист стоматологический",
+      "aliases": [],
+      "nomenclature_ref": "9.2",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_zubnoj_vrach",
+      "level": "mid",
+      "title": "Зубной врач",
+      "aliases": [],
+      "nomenclature_ref": "9.3",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "mid_zubnoj_tehnik",
+      "level": "mid",
+      "title": "Зубной техник",
+      "aliases": [],
+      "nomenclature_ref": "9.4",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_instruktor_dezinfektor",
+      "level": "mid",
+      "title": "Инструктор-дезинфектор",
+      "aliases": [],
+      "nomenclature_ref": "9.5",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_instruktor_po_gigienicheskomu_vospitaniyu",
+      "level": "mid",
+      "title": "Инструктор по гигиеническому воспитанию",
+      "aliases": [],
+      "nomenclature_ref": "9.6",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_instruktor_po_lechebnoj_fizkulьture",
+      "level": "mid",
+      "title": "Инструктор по лечебной физкультуре",
+      "aliases": [],
+      "nomenclature_ref": "9.7",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_instruktor_po_trudovoj_terapii",
+      "level": "mid",
+      "title": "Инструктор по трудовой терапии",
+      "aliases": [],
+      "nomenclature_ref": "9.8",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_laborant",
+      "level": "mid",
+      "title": "Лаборант",
+      "aliases": [],
+      "nomenclature_ref": "9.9",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_medicinskij_brat",
+      "level": "mid",
+      "title": "Медицинская сестра (медицинский брат)",
+      "aliases": [
+        "медицинский брат",
+        "Медицинская сестра"
+      ],
+      "nomenclature_ref": "9.10",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra___anestezist_medicinskij_brat___anestezist",
+      "level": "mid",
+      "title": "Медицинская сестра - анестезист (медицинский брат - анестезист)",
+      "aliases": [
+        "медицинский брат - анестезист",
+        "Медицинская сестра - анестезист"
+      ],
+      "nomenclature_ref": "9.11",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_vracha_obschej_praktiki_semejnogo_vracha_medicinskij_brat_vr",
+      "level": "mid",
+      "title": "Медицинская сестра врача общей практики (семейного врача) (медицинский брат врача общей практики (семейного врача))",
+      "aliases": [
+        "семейного врача",
+        "Медицинская сестра врача общей практики (медицинский брат врача общей практики (семейного врача))"
+      ],
+      "nomenclature_ref": "9.12",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_dieticheskaya_medicinskij_brat_dieticheskij",
+      "level": "mid",
+      "title": "Медицинская сестра диетическая (медицинский брат диетический)",
+      "aliases": [
+        "медицинский брат диетический",
+        "Медицинская сестра диетическая"
+      ],
+      "nomenclature_ref": "9.13",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_mediko_socialьnoj_pomoschi_medicinskij_brat_medikosocialьnoj",
+      "level": "mid",
+      "title": "Медицинская сестра медико-социальной помощи (медицинский брат медикосоциальной помощи)",
+      "aliases": [
+        "медицинский брат медикосоциальной помощи",
+        "Медицинская сестра медико-социальной помощи"
+      ],
+      "nomenclature_ref": "9.14",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_palatnaya_postovaya_medicinskij_brat_palatnyj_postovoj",
+      "level": "mid",
+      "title": "Медицинская сестра палатная (постовая) (медицинский брат палатный (постовой))",
+      "aliases": [
+        "постовая",
+        "Медицинская сестра палатная (медицинский брат палатный (постовой))"
+      ],
+      "nomenclature_ref": "9.15",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_patronazhnaya_medicinskij_brat_patronazhnyj",
+      "level": "mid",
+      "title": "Медицинская сестра патронажная (медицинский брат патронажный)",
+      "aliases": [
+        "медицинский брат патронажный",
+        "Медицинская сестра патронажная"
+      ],
+      "nomenclature_ref": "9.16",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_perevyazochnoj_medicinskij_brat_perevyazochnoj",
+      "level": "mid",
+      "title": "Медицинская сестра перевязочной (медицинский брат перевязочной)",
+      "aliases": [
+        "медицинский брат перевязочной",
+        "Медицинская сестра перевязочной"
+      ],
+      "nomenclature_ref": "9.17",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_po_kosmetologii_medicinskij_brat_po_kosmetologii",
+      "level": "mid",
+      "title": "Медицинская сестра по косметологии (медицинский брат по косметологии)",
+      "aliases": [
+        "медицинский брат по косметологии",
+        "Медицинская сестра по косметологии"
+      ],
+      "nomenclature_ref": "9.18",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_po_massazhu_medicinskij_brat_po_massazhu",
+      "level": "mid",
+      "title": "Медицинская сестра по массажу (медицинский брат по массажу)",
+      "aliases": [
+        "медицинский брат по массажу",
+        "Медицинская сестра по массажу"
+      ],
+      "nomenclature_ref": "9.19",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_po_priemu_vyzovov_skoroj_medicinskoj_pomoschi_i_peredache_ih",
+      "level": "mid",
+      "title": "Медицинская сестра по приему вызовов скорой медицинской помощи и передаче их выездным бригадам скорой медицинской помощи (медицинский брат по приему вызовов скорой медицинской помощи и передаче их выездным бригадам скорой медицинской помощи)",
+      "aliases": [],
+      "nomenclature_ref": "9.20",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_priemnogo_otdeleniya_medicinskij_brat_priemnogo_otdeleniya",
+      "level": "mid",
+      "title": "Медицинская сестра приемного отделения (медицинский брат приемного отделения)",
+      "aliases": [],
+      "nomenclature_ref": "9.21",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_procedurnoj_medicinskij_brat_procedurnoj",
+      "level": "mid",
+      "title": "Медицинская сестра процедурной (медицинский брат процедурной)",
+      "aliases": [
+        "медицинский брат процедурной",
+        "Медицинская сестра процедурной"
+      ],
+      "nomenclature_ref": "9.22",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_po_medicinskoj_reabilitacii_medicinskij_brat_po_medicinskoj__9_23",
+      "level": "mid",
+      "title": "Медицинская сестра по медицинской реабилитации (медицинский брат по медицинской реабилитации)",
+      "aliases": [
+        "медицинский брат по медицинской реабилитации",
+        "Медицинская сестра по медицинской реабилитации"
+      ],
+      "nomenclature_ref": "9.23",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_sterilizacionnoj_medicinskij_brat_sterilizacionnoj",
+      "level": "mid",
+      "title": "Медицинская сестра стерилизационной (медицинский брат стерилизационной)",
+      "aliases": [
+        "медицинский брат стерилизационной",
+        "Медицинская сестра стерилизационной"
+      ],
+      "nomenclature_ref": "9.24",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_uchastkovaya_medicinskij_brat_uchastkovyj",
+      "level": "mid",
+      "title": "Медицинская сестра участковая (медицинский брат участковый)",
+      "aliases": [
+        "медицинский брат участковый",
+        "Медицинская сестра участковая"
+      ],
+      "nomenclature_ref": "9.25",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_po_fizioterapii_medicinskij_brat_po_fizioterapii",
+      "level": "mid",
+      "title": "Медицинская сестра по физиотерапии (медицинский брат по физиотерапии)",
+      "aliases": [
+        "медицинский брат по физиотерапии",
+        "Медицинская сестра по физиотерапии"
+      ],
+      "nomenclature_ref": "9.26",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskaya_sestra_po_funkcionalьnoj_diagnostike_medicinskij_brat_po_funkcional",
+      "level": "mid",
+      "title": "Медицинская сестра по функциональной диагностике (медицинский брат по функциональной диагностике)",
+      "aliases": [
+        "медицинский брат по функциональной диагностике",
+        "Медицинская сестра по функциональной диагностике"
+      ],
+      "nomenclature_ref": "9.27",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskij_dezinfektor",
+      "level": "mid",
+      "title": "Медицинский дезинфектор",
+      "aliases": [],
+      "nomenclature_ref": "9.28",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskij_laboratornyj_tehnik_felьdsher_laborant",
+      "level": "mid",
+      "title": "Медицинский лабораторный техник (фельдшер-лаборант)",
+      "aliases": [
+        "фельдшер-лаборант",
+        "Медицинский лабораторный техник"
+      ],
+      "nomenclature_ref": "9.29",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskij_optik_optometrist",
+      "level": "mid",
+      "title": "Медицинский оптик-оптометрист",
+      "aliases": [],
+      "nomenclature_ref": "9.30",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskij_registrator",
+      "level": "mid",
+      "title": "Медицинский регистратор",
+      "aliases": [],
+      "nomenclature_ref": "9.31",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskij_statistik_9_32",
+      "level": "mid",
+      "title": "Медицинский статистик",
+      "aliases": [],
+      "nomenclature_ref": "9.32",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_medicinskij_tehnolog",
+      "level": "mid",
+      "title": "Медицинский технолог",
+      "aliases": [],
+      "nomenclature_ref": "9.33",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_nutriciolog",
+      "level": "mid",
+      "title": "Нутрициолог",
+      "aliases": [],
+      "nomenclature_ref": "9.34",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_operacionnaya_medicinskaya_sestra_operacionnyj_medicinskij_brat",
+      "level": "mid",
+      "title": "Операционная медицинская сестра (операционный медицинский брат)",
+      "aliases": [
+        "операционный медицинский брат",
+        "Операционная медицинская сестра"
+      ],
+      "nomenclature_ref": "9.35",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_pomoschnik_vracha_epidemiologa",
+      "level": "mid",
+      "title": "Помощник врача-эпидемиолога",
+      "aliases": [],
+      "nomenclature_ref": "9.36",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_pomoschnik_vracha_parazitologa",
+      "level": "mid",
+      "title": "Помощник врача-паразитолога",
+      "aliases": [],
+      "nomenclature_ref": "9.37",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_pomoschnik_vracha_po_gigiene_detej_i_podrostkov",
+      "level": "mid",
+      "title": "Помощник врача по гигиене детей и подростков",
+      "aliases": [],
+      "nomenclature_ref": "9.38",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_pomoschnik_vracha_po_gigiene_pitaniya",
+      "level": "mid",
+      "title": "Помощник врача по гигиене питания",
+      "aliases": [],
+      "nomenclature_ref": "9.39",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_pomoschnik_vracha_po_gigiene_truda",
+      "level": "mid",
+      "title": "Помощник врача по гигиене труда",
+      "aliases": [],
+      "nomenclature_ref": "9.40",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_pomoschnik_vracha_po_gigienicheskomu_vospitaniyu",
+      "level": "mid",
+      "title": "Помощник врача по гигиеническому воспитанию",
+      "aliases": [],
+      "nomenclature_ref": "9.41",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_pomoschnik_vracha_po_kommunalьnoj_gigiene",
+      "level": "mid",
+      "title": "Помощник врача по коммунальной гигиене",
+      "aliases": [],
+      "nomenclature_ref": "9.42",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_pomoschnik_vracha_po_obschej_gigiene",
+      "level": "mid",
+      "title": "Помощник врача по общей гигиене",
+      "aliases": [],
+      "nomenclature_ref": "9.43",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_pomoschnik_vracha_po_radiacionnoj_gigiene",
+      "level": "mid",
+      "title": "Помощник врача по радиационной гигиене",
+      "aliases": [],
+      "nomenclature_ref": "9.44",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_pomoschnik_entomologa",
+      "level": "mid",
+      "title": "Помощник энтомолога",
+      "aliases": [],
+      "nomenclature_ref": "9.45",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_rentgenolaborant",
+      "level": "mid",
+      "title": "Рентгенолаборант",
+      "aliases": [],
+      "nomenclature_ref": "9.46",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_starshaya_medicinskaya_sestra_starshij_medicinskij_brat_9_47",
+      "level": "mid",
+      "title": "Старшая медицинская сестра (старший медицинский брат)",
+      "aliases": [
+        "медицинская сестра (старший медицинский брат)",
+        "старший медицинский брат",
+        "Старшая медицинская сестра"
+      ],
+      "nomenclature_ref": "9.47",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_starshij_akusher_starshaya_akusherka_9_48",
+      "level": "mid",
+      "title": "Старший акушер (старшая акушерка)",
+      "aliases": [
+        "акушер (старшая акушерка)",
+        "старшая акушерка",
+        "Старший акушер"
+      ],
+      "nomenclature_ref": "9.48",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_starshij_felьdsher_9_49",
+      "level": "mid",
+      "title": "Старший фельдшер",
+      "aliases": [
+        "фельдшер"
+      ],
+      "nomenclature_ref": "9.49",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_starshaya_operacionnaya_medicinskaya_sestra_starshij_operacionnyj_medicinskij_br_9_50",
+      "level": "mid",
+      "title": "Старшая операционная медицинская сестра (старший операционный медицинский брат)",
+      "aliases": [
+        "операционная медицинская сестра (старший операционный медицинский брат)",
+        "старший операционный медицинский брат",
+        "Старшая операционная медицинская сестра"
+      ],
+      "nomenclature_ref": "9.50",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_starshij_zubnoj_tehnik",
+      "level": "mid",
+      "title": "Старший зубной техник",
+      "aliases": [
+        "зубной техник"
+      ],
+      "nomenclature_ref": "9.51",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_starshij_laborant_starshij_medicinskij_laboratornyj_tehnik_starshij_felьdsher_la",
+      "level": "mid",
+      "title": "Старший лаборант (старший медицинский лабораторный техник (старший фельдшер-лаборант), старший медицинский технолог)",
+      "aliases": [
+        "лаборант (старший медицинский лабораторный техник (старший фельдшер-лаборант), старший медицинский технолог)",
+        "старший медицинский лабораторный техник (старший фельдшер-лаборант",
+        "Старший лаборант, старший медицинский технолог)"
+      ],
+      "nomenclature_ref": "9.52",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_felьdsher",
+      "level": "mid",
+      "title": "Фельдшер",
+      "aliases": [],
+      "nomenclature_ref": "9.53",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_felьdsher_narkolog",
+      "level": "mid",
+      "title": "Фельдшер-нарколог",
+      "aliases": [],
+      "nomenclature_ref": "9.54",
+      "hiring_closed_from": "2026-09-01"
+    },
+    {
+      "id": "mid_felьdsher_skoroj_medicinskoj_pomoschi",
+      "level": "mid",
+      "title": "Фельдшер скорой медицинской помощи",
+      "aliases": [],
+      "nomenclature_ref": "9.55",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_felьdsher_stomatologicheskij",
+      "level": "mid",
+      "title": "Фельдшер стоматологический",
+      "aliases": [],
+      "nomenclature_ref": "9.56",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_felьdsher_po_priemu_vyzovov_skoroj_medicinskoj_pomoschi_i_peredache_ih_vyezdnym_",
+      "level": "mid",
+      "title": "Фельдшер по приему вызовов скорой медицинской помощи и передаче их выездным бригадам скорой медицинской помощи",
+      "aliases": [],
+      "nomenclature_ref": "9.57",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_mladshaya_medicinskaya_sestra_mladshij_medicinskij_brat",
+      "level": "junior",
+      "title": "Младшая медицинская сестра (младший медицинский брат)",
+      "aliases": [
+        "медицинская сестра (младший медицинский брат)",
+        "младший медицинский брат",
+        "Младшая медицинская сестра"
+      ],
+      "nomenclature_ref": "12.1",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_mladshaya_medicinskaya_sestra_po_uhodu_za_bolьnymi_mladshij_medicinskij_brat_po_",
+      "level": "junior",
+      "title": "Младшая медицинская сестра по уходу за больными (младший медицинский брат по уходу за больными)",
+      "aliases": [
+        "медицинская сестра по уходу за больными (младший медицинский брат по уходу за больными)",
+        "младший медицинский брат по уходу за больными",
+        "Младшая медицинская сестра по уходу за больными"
+      ],
+      "nomenclature_ref": "12.2",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_sanitar_sanitarka",
+      "level": "junior",
+      "title": "Санитар (санитарка)",
+      "aliases": [
+        "санитарка",
+        "Санитар"
+      ],
+      "nomenclature_ref": "12.3",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_sestra_hozyajka",
+      "level": "junior",
+      "title": "Сестра-хозяйка",
+      "aliases": [],
+      "nomenclature_ref": "12.4",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_medicinskoj_biofizike",
+      "level": "doctor",
+      "title": "Врач по медицинской биофизике",
+      "aliases": [
+        "врач-биофизик",
+        "медицинский биофизик"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_medicinskoj_biohimii",
+      "level": "doctor",
+      "title": "Врач по медицинской биохимии",
+      "aliases": [
+        "врач-биохимик",
+        "медицинский биохимик"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_po_socialnoj_gigiene_i_organizacii_gossanepidsluzhby",
+      "level": "doctor",
+      "title": "Врач по социальной гигиене и организации госсанэпидслужбы",
+      "aliases": [
+        "организатор госсанэпидслужбы"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_organizator_zdravoohraneniya",
+      "level": "doctor",
+      "title": "Врач — организатор здравоохранения",
+      "aliases": [
+        "врач-организатор здравоохранения",
+        "заместитель главного врача",
+        "начмед",
+        "организатор здравоохранения"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_vrach_lechebnik_bazovyj_uroven",
+      "level": "doctor",
+      "title": "Врач-лечебник (базовый уровень)",
+      "aliases": [
+        "врач-лечебник",
+        "выпускник лечебного факультета до ординатуры",
+        "врач по специальности «Лечебное дело»"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_glavnyj_vrach",
+      "level": "doctor",
+      "title": "Главный врач",
+      "aliases": [
+        "начальник медицинской организации",
+        "руководитель МО",
+        "главный врач (начальник) медицинской организации",
+        "главврач"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_provizor",
+      "level": "doctor",
+      "title": "Провизор",
+      "aliases": [
+        "провизор-стажер",
+        "старший провизор"
+      ],
+      "nomenclature_ref": "ext:pharma",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_provizor_upravlenie_aptechnoj_organizaciej",
+      "level": "doctor",
+      "title": "Провизор (управление аптечной организацией)",
+      "aliases": [
+        "заведующий аптекой",
+        "директор аптечной организации",
+        "заместитель директора аптечной организации"
+      ],
+      "nomenclature_ref": "ext:pharma",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_provizor_analitik",
+      "level": "doctor",
+      "title": "Провизор-аналитик",
+      "aliases": [
+        "провизор-химик"
+      ],
+      "nomenclature_ref": "ext:pharma",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_provizor_tehnolog",
+      "level": "doctor",
+      "title": "Провизор-технолог",
+      "aliases": [
+        "провизор (технология)"
+      ],
+      "nomenclature_ref": "ext:pharma",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_specialist_mediko_profilakticheskogo_dela",
+      "level": "doctor",
+      "title": "Специалист медико-профилактического дела",
+      "aliases": [
+        "врач-профилактик (базовый уровень)",
+        "специалист медико-профилактического дела"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_specialist_po_upravleniyu_sestrinskoj_deyatelnostyu",
+      "level": "doctor",
+      "title": "Специалист по управлению сестринской деятельностью",
+      "aliases": [
+        "главная медицинская сестра (при высшем образовании «Сестринское дело»)",
+        "управление сестринской деятельностью"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "doctor_specialist_sestrinskogo_dela_vysshee_obrazovanie",
+      "level": "doctor",
+      "title": "Специалист сестринского дела (высшее образование)",
+      "aliases": [
+        "академическая медицинская сестра",
+        "менеджер сестринского дела"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_glavnaya_akusherka",
+      "level": "mid",
+      "title": "Главная акушерка",
+      "aliases": [
+        "главная акушерка"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_glavnyj_feldsher",
+      "level": "mid",
+      "title": "Главный фельдшер",
+      "aliases": [
+        "главный фельдшер"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_direktor_bolnicy_doma_sestrinskogo_uhoda_hospisa",
+      "level": "mid",
+      "title": "Директор больницы (дома) сестринского ухода, хосписа",
+      "aliases": [
+        "руководитель хосписа",
+        "руководитель дома сестринского ухода",
+        "директор хосписа"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_zaveduyuschij_molochnoj_kuhnej",
+      "level": "mid",
+      "title": "Заведующий молочной кухней",
+      "aliases": [],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_zaveduyuschij_proizvodstvom_zuboprotezirovaniya",
+      "level": "mid",
+      "title": "Заведующий производством зубопротезирования",
+      "aliases": [
+        "заведующий зуботехнической лабораторией"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_farmacevt",
+      "level": "mid",
+      "title": "Фармацевт",
+      "aliases": [
+        "старший фармацевт",
+        "младший фармацевт"
+      ],
+      "nomenclature_ref": "ext:pharma",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "mid_feldsher_voditel_skoroj_medicinskoj_pomoschi",
+      "level": "mid",
+      "title": "Фельдшер-водитель скорой медицинской помощи",
+      "aliases": [
+        "фельдшер-водитель",
+        "фельдшер водитель СМП"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_assistent_vracha",
+      "level": "junior",
+      "title": "Ассистент врача",
+      "aliases": [
+        "помощник врача",
+        "medical assistant"
+      ],
+      "nomenclature_ref": "ext:market",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_assistent_stomatologa",
+      "level": "junior",
+      "title": "Ассистент стоматолога",
+      "aliases": [
+        "ассистент врача-стоматолога",
+        "ассистент на приёме"
+      ],
+      "nomenclature_ref": "ext:market",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_assistent_hirurga",
+      "level": "junior",
+      "title": "Ассистент хирурга",
+      "aliases": [
+        "ассистент в операционной"
+      ],
+      "nomenclature_ref": "ext:market",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_biolog",
+      "level": "junior",
+      "title": "Биолог",
+      "aliases": [
+        "биолог КДЛ"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_zoolog",
+      "level": "junior",
+      "title": "Зоолог",
+      "aliases": [],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_instruktor_metodist_po_lechebnoj_fizkulture",
+      "level": "junior",
+      "title": "Инструктор-методист по лечебной физкультуре",
+      "aliases": [
+        "методист ЛФК",
+        "инструктор-методист ЛФК"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_medicinskij_psiholog",
+      "level": "junior",
+      "title": "Медицинский психолог",
+      "aliases": [
+        "клинический психолог (в ЛПУ)",
+        "клинический психолог"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_medicinskij_fizik",
+      "level": "junior",
+      "title": "Медицинский физик",
+      "aliases": [
+        "медфизик"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_nyanya_v_medicinskoj_organizacii",
+      "level": "junior",
+      "title": "Няня в медицинской организации",
+      "aliases": [
+        "няня в роддоме",
+        "няня детского отделения",
+        "няня"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_sanitar_voditel",
+      "level": "junior",
+      "title": "Санитар-водитель",
+      "aliases": [
+        "санитар-водитель СМП",
+        "санитар водитель"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_sidelka",
+      "level": "junior",
+      "title": "Сиделка",
+      "aliases": [
+        "сиделка в больнице",
+        "помощник по уходу",
+        "caregiver"
+      ],
+      "nomenclature_ref": "ext:market",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_sudebnyj_ekspert",
+      "level": "junior",
+      "title": "Судебный эксперт",
+      "aliases": [
+        "эксперт-биохимик",
+        "эксперт-генетик",
+        "эксперт-химик"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_fasovschik",
+      "level": "junior",
+      "title": "Фасовщик",
+      "aliases": [
+        "фасовщица (аптека)",
+        "фасовщица"
+      ],
+      "nomenclature_ref": "ext:pharma",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_himik_ekspert_medicinskoj_organizacii",
+      "level": "junior",
+      "title": "Химик-эксперт медицинской организации",
+      "aliases": [
+        "химик-эксперт"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_ekspert_fizik_po_kontrolyu_za_istochnikami_izluchenij",
+      "level": "junior",
+      "title": "Эксперт-физик по контролю за источниками излучений",
+      "aliases": [
+        "эксперт-физик"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_embriolog",
+      "level": "junior",
+      "title": "Эмбриолог",
+      "aliases": [
+        "эмбриолог ЭКО"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    },
+    {
+      "id": "junior_entomolog",
+      "level": "junior",
+      "title": "Энтомолог",
+      "aliases": [
+        "энтомолог (высшее образование)"
+      ],
+      "nomenclature_ref": "ext:taxonomy_rf",
+      "hiring_closed_from": null
+    }
+  ]
+}

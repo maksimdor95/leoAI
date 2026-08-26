@@ -39,6 +39,7 @@ import {
   ValidationResult,
 } from './aiClient';
 import {
+  normalizeYesNo,
   parsePositionsCountAnswer,
   parseTotalExperienceYearsFromText,
   resolveCollectValueForStep,
@@ -89,6 +90,12 @@ import { appendUserStarBankEntry, loadUserStarBank, saveUserStarBank } from './p
 import { getSession, getUserSessions, updateSession } from './sessionService';
 import { logger } from '../utils/logger';
 import { triggerProfileDrivenScrape } from './integrationService';
+import {
+  applyMedSkillsFeedback,
+  detectMedRole,
+  normalizeMedEmployment,
+  saveMedSpecialistProfile,
+} from './medProfileService';
 import { enrichAndPersistProfile } from './profileEnrichmentService';
 
 // ============================================
@@ -101,6 +108,94 @@ const SCENARIOS: Record<string, ScenarioDefinition> = {
 };
 
 const DEFAULT_SCENARIO_ID = 'jack-profile-v2';
+
+// ============================================
+// LEO MED — ветка медработника внутри Jack
+// ============================================
+
+/**
+ * Шаги, после которых имеет смысл проверять специальность: первый ответ про роль
+ * (быстрый путь), первый рассказ о карьере и поздний вопрос о желаемой должности.
+ */
+const MED_DETECT_STEP_IDS = new Set(['quick_role', 'career_overview', 'desired_role']);
+
+/** Патч collectedData: и в ответ клиенту, и в живую сессию. */
+function applyCollectedPatch(
+  session: ConversationSession,
+  metadataUpdates: PreparedStepResult['metadataUpdates'],
+  patch: Record<string, unknown>
+): void {
+  if (!metadataUpdates) return;
+  metadataUpdates.collectedData = {
+    ...(metadataUpdates.collectedData || {}),
+    ...patch,
+  };
+  session.metadata.collectedData = {
+    ...session.metadata.collectedData,
+    ...patch,
+  };
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+}
+
+function splitPrefillLabels(value: unknown): string[] {
+  if (typeof value !== 'string' || !value.trim()) return [];
+  return value
+    .split(',')
+    .map((label) => label.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Правки пользователя к предзаполненной таксономии.
+ * Итоговые навыки кладём в skills_hard — на них работает обычный matcher.
+ */
+function buildMedSkillsPatch(
+  collected: Record<string, unknown>,
+  feedback: string
+): Record<string, unknown> {
+  const selection = applyMedSkillsFeedback(
+    toStringArray(collected.medSkillIds),
+    splitPrefillLabels(collected.medSkillsPrefill),
+    feedback
+  );
+  const duties = splitPrefillLabels(collected.medDutiesPrefill);
+  const skillsHard = [...selection.skillLabels, ...duties];
+
+  return {
+    medSkillIds: selection.skillIds,
+    medSkillLabels: selection.skillLabels,
+    ...(skillsHard.length > 0 ? { skills_hard: skillsHard.join(', ') } : {}),
+  };
+}
+
+/** Профиль медика с согласием A → med_specialists. Возвращает id записи или null. */
+async function saveMedProfileFromSession(session: ConversationSession): Promise<string | null> {
+  const collected = session.metadata.collectedData;
+  const medRoleId = typeof collected.medRoleId === 'string' ? collected.medRoleId.trim() : '';
+  if (!medRoleId) {
+    logger.warn(`Med consent given but medRoleId is missing (session=${session.id})`);
+    return null;
+  }
+
+  const asText = (value: unknown): string | null =>
+    typeof value === 'string' && value.trim() ? value.trim() : null;
+
+  return saveMedSpecialistProfile({
+    sessionId: session.id,
+    userId: session.userId || null,
+    medRoleId,
+    skillIds: toStringArray(collected.medSkillIds),
+    dutyIds: toStringArray(collected.medDutyIds),
+    experienceText: asText(collected.careerSummary),
+    documentsText: asText(collected.medDocuments),
+    city: asText(collected.desired_location),
+    employmentType: normalizeMedEmployment(String(collected.medEmployment || '')),
+  });
+}
 
 // Кэш шагов по сценариям: scenarioId:stepId -> ScenarioStep
 const STEP_CACHE = new Map<string, ScenarioStep>();
@@ -179,11 +274,23 @@ function isCollectedFilledForImport(value: unknown): boolean {
   return false;
 }
 
+/** Кандидат подтвердил медицинскую специальность — идёт по ветке med_*. */
+export function isMedPathMode(collected: Record<string, unknown>): boolean {
+  const roleId = typeof collected.medRoleId === 'string' ? collected.medRoleId.trim() : '';
+  const confirmed = String(collected.medConfirmed ?? '')
+    .toLowerCase()
+    .trim();
+  return Boolean(roleId) && confirmed === 'да';
+}
+
 function shouldSkipStepOnResumeImport(
   step: ScenarioStep,
   collected: Record<string, unknown>
 ): boolean {
   if (step.id === 'clarify' || step.id === 'completion_gap') {
+    return true;
+  }
+  if (step.id.startsWith('med_') && !isMedPathMode(collected)) {
     return true;
   }
   if (isResumePathMode(collected) && step.id === 'resume_upload') {
@@ -301,7 +408,42 @@ const PROFILE_GAP_ALWAYS_SKIP = new Set([
   'quick_role',
   'quick_experience',
   'quick_location',
+  // LEO Med: развилка и согласие — не «пустые поля профиля».
+  'med_confirm',
+  'med_confirm_career',
+  'med_confirm_pref',
+  'med_consent',
 ]);
+
+/** Yes/no шаги LEO Med: короткое «да»/«нет» не гоняем через Validator (иначе → clarify). */
+function tryMedYesNoValidationFastPath(
+  collectKey: string | undefined,
+  answer: string
+): ValidationResult | null {
+  if (collectKey !== 'medConfirmed' && collectKey !== 'medConsent') return null;
+  const yn = normalizeYesNo(answer);
+  if (yn === 'да' || yn === 'нет') {
+    return { quality: 'good', reason: `${collectKey} yes/no fast path` };
+  }
+  return null;
+}
+
+/** Вся ветка med_*: ответы структурные / свободный текст по специальности — Validator IT-сценария шумит. */
+function isMedScenarioStepId(stepId: string | undefined): boolean {
+  return typeof stepId === 'string' && stepId.startsWith('med_');
+}
+
+function tryMedStepValidationFastPath(
+  stepId: string | undefined,
+  collectKey: string | undefined,
+  answer: string
+): ValidationResult | null {
+  const yesNo = tryMedYesNoValidationFastPath(collectKey, answer);
+  if (yesNo) return yesNo;
+  if (!isMedScenarioStepId(stepId)) return null;
+  if (!answer.trim()) return null;
+  return { quality: 'good', reason: `med step ${stepId} fast path` };
+}
 
 function hasCareerNarrativeForGapSkip(collected: Record<string, unknown>): boolean {
   if (typeof collected.careerSummary === 'string' && collected.careerSummary.trim().length > 10) {
@@ -3080,8 +3222,13 @@ export async function handleUserReply(
         const currentAttempts = currentAttemptsStr ? parseInt(currentAttemptsStr, 10) || 0 : 0;
         const newAttempts = currentAttempts + 1;
 
-        // Validate the clarified answer (числовые шаги — без LLM, см. IMPROVEMENT_PLAN P0.1)
+        // Validate the clarified answer (числовые / med-шаги — без LLM)
         let validation: ValidationResult;
+        const medClarify = tryMedStepValidationFastPath(
+          previousStep.id,
+          previousStep.collectKey,
+          userMessageContent
+        );
         if (previousStep.collectKey === 'positionsCount') {
           const n = parsePositionsCountAnswer(userMessageContent);
           if (n !== null) {
@@ -3095,6 +3242,8 @@ export async function handleUserReply(
               authToken,
             });
           }
+        } else if (medClarify) {
+          validation = medClarify;
         } else {
           validation = await validateAnswer({
             question: previousStep.label,
@@ -3270,7 +3419,9 @@ export async function handleUserReply(
     currentStep.id !== 'completion_gap' &&
     currentStep.id !== 'pause_reminder' &&
     currentStep.id !== 'greeting' &&
-    currentStep.id !== 'resume_upload'
+    currentStep.id !== 'resume_upload' &&
+    // LEO Med: не прогоняем через context-redirect (короткие/спец. ответы)
+    !isMedScenarioStepId(currentStep.id)
   ) {
     // Check if user is staying on topic
     const contextCheck = await checkContext({
@@ -3316,6 +3467,11 @@ export async function handleUserReply(
     currentStep.id !== 'greeting'
   ) {
     let validation: ValidationResult;
+    const medFast = tryMedStepValidationFastPath(
+      currentStep.id,
+      currentStep.collectKey,
+      userMessageContent
+    );
     if (currentStep.collectKey === 'positionsCount') {
       const n = parsePositionsCountAnswer(userMessageContent);
       if (n !== null) {
@@ -3329,6 +3485,8 @@ export async function handleUserReply(
           authToken,
         });
       }
+    } else if (medFast) {
+      validation = medFast;
     } else {
       validation = await validateAnswer({
         question: currentStep.label,
@@ -3493,6 +3651,53 @@ export async function handleUserReply(
         triggerProfileDrivenScrape(session.userId, authToken).catch((err) => {
           logger.warn(`Profile-driven scrape trigger failed: ${String(err)}`);
         });
+      }
+
+      // LEO Med: ветка медработника внутри Jack (docs/MED_VERTICAL_BRIEF.md).
+      // Детект по первому же ответу про роль или карьеру — развилка на med_confirm*,
+      // fail-open в обычный подбор. Шаги самой ветки (med_experience и т.п.) не трогаем.
+      if (
+        MED_DETECT_STEP_IDS.has(currentStep.id) &&
+        typeof collectValue === 'string' &&
+        collectValue.trim() &&
+        !isMedPathMode(session.metadata.collectedData)
+      ) {
+        const detection = await detectMedRole(collectValue);
+        applyCollectedPatch(
+          session,
+          metadataUpdates,
+          detection
+            ? {
+                medDetected: 'да',
+                medRoleId: detection.medRoleId,
+                medRoleTitle: detection.medRoleTitle,
+                medLevel: detection.medLevel,
+                medSkillIds: detection.medSkillIds,
+                medDutyIds: detection.medDutyIds,
+                medSkillsPrefill: detection.medSkillsPrefill,
+                medDutiesPrefill: detection.medDutiesPrefill,
+              }
+            : { medDetected: 'нет', medRoleId: '' }
+        );
+      }
+
+      if (currentStep.collectKey === 'medConfirmed' && collectValue !== 'да') {
+        applyCollectedPatch(session, metadataUpdates, { medDetected: 'нет', medRoleId: '' });
+      }
+
+      if (currentStep.collectKey === 'medSkillsFeedback') {
+        applyCollectedPatch(
+          session,
+          metadataUpdates,
+          buildMedSkillsPatch(session.metadata.collectedData, String(collectValue))
+        );
+      }
+
+      if (currentStep.collectKey === 'medConsent' && collectValue === 'да') {
+        const profileId = await saveMedProfileFromSession(session);
+        if (profileId) {
+          applyCollectedPatch(session, metadataUpdates, { medProfileId: profileId });
+        }
       }
 
       // Enrichment is multi-call YandexGPT — do not block the next question (UI stuck on

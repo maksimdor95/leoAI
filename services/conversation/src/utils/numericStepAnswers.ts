@@ -174,12 +174,32 @@ export function normalizeInterviewMode(raw: string): string {
   return raw.trim();
 }
 
+/**
+ * Свободный ответ → «да» / «нет» для шагов-развилок (LEO Med: подтверждение и согласие).
+ * Условия сценария сравнивают строго, поэтому «да, верно» должно схлопнуться в «да».
+ */
+export function normalizeYesNo(raw: string): string {
+  const t = raw.toLowerCase().trim().replace(/ё/g, 'е');
+  if (!t) return raw.trim();
+  // \b опирается на ASCII \w и на кириллице не работает — границы задаём явно.
+  const negative =
+    /(^|[^а-яa-z])(нет|no|nope|отказ\w*|не\s+(согласен|согласна|готов\w*|мед\w*|даю|сейчас)|потом)([^а-яa-z]|$)/;
+  const positive =
+    /(^|[^а-яa-z])(да|ага|верно|точно|согласен|согласна|конечно|подтверждаю|даю|не\s+против|yes|ok|окей|ок)([^а-яa-z]|$)/;
+  if (negative.test(t)) return 'нет';
+  if (positive.test(t)) return 'да';
+  return raw.trim();
+}
+
 export function resolveCollectValueForStep(
   collectKey: string | undefined,
   raw: string
 ): string | number {
   if (collectKey === 'scenarioMode') {
     return normalizeScenarioMode(raw);
+  }
+  if (collectKey === 'medConfirmed' || collectKey === 'medConsent') {
+    return normalizeYesNo(raw);
   }
   if (collectKey === 'interviewMode') {
     return normalizeInterviewMode(raw);

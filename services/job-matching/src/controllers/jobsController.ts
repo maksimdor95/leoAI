@@ -168,30 +168,52 @@ export async function getMatchedJobs(req: AuthRequest, res: Response): Promise<v
 
     const jobsInDb = catalogFp.jobsInDb;
     const scanLimit = resolveMatchScanLimit(jobsInDb);
-    const familyJobs = await jobRepository.findForMatch({
-      primaryFamily: profileRoles.primary,
-      adjacentFamilies: profileRoles.adjacent,
-      limit: scanLimit,
-    });
 
-    // Layer 2: hybrid candidate set = family scan ∪ nearest by profile embedding
-    let allJobs: Job[] = familyJobs;
-    const profileEmbedding = collectedData?.embedding;
-    if (Array.isArray(profileEmbedding) && profileEmbedding.length > 0) {
-      const semanticJobs = await jobRepository.findNearestByEmbedding(
-        profileEmbedding,
-        Math.min(150, scanLimit)
+    // LEO Med: профиль медика (ветка в чате) матчится только против med-каталога,
+    // IT-семейства и семантический добор здесь только шумят.
+    const { isMedVerticalEnabled: medEnabled, resolveMedRoleIdFromCollected } = await import(
+      '../services/med'
+    );
+    const medRoleId = medEnabled()
+      ? resolveMedRoleIdFromCollected(collectedData as Record<string, unknown> | null)
+      : null;
+    let allJobs: Job[];
+
+    if (medRoleId) {
+      const medFeed = await jobRepository.findMedFeed({
+        medRoleId,
+        limit: Math.min(100, scanLimit),
+      });
+      allJobs = medFeed.jobs;
+      logger.info(
+        `[match] med profile userId=${userId} medRoleId=${medRoleId} candidates=${allJobs.length}/${medFeed.total}`
       );
-      if (semanticJobs.length > 0) {
-        const byId = new Map<string, Job>();
-        for (const job of familyJobs) byId.set(job.id, job);
-        for (const job of semanticJobs) {
-          if (!byId.has(job.id)) byId.set(job.id, job);
-        }
-        allJobs = [...byId.values()];
-        logger.info(
-          `Hybrid match candidates: family=${familyJobs.length}, semantic=${semanticJobs.length}, merged=${allJobs.length}`
+    } else {
+      const familyJobs = await jobRepository.findForMatch({
+        primaryFamily: profileRoles.primary,
+        adjacentFamilies: profileRoles.adjacent,
+        limit: scanLimit,
+      });
+
+      // Layer 2: hybrid candidate set = family scan ∪ nearest by profile embedding
+      allJobs = familyJobs;
+      const profileEmbedding = collectedData?.embedding;
+      if (Array.isArray(profileEmbedding) && profileEmbedding.length > 0) {
+        const semanticJobs = await jobRepository.findNearestByEmbedding(
+          profileEmbedding,
+          Math.min(150, scanLimit)
         );
+        if (semanticJobs.length > 0) {
+          const byId = new Map<string, Job>();
+          for (const job of familyJobs) byId.set(job.id, job);
+          for (const job of semanticJobs) {
+            if (!byId.has(job.id)) byId.set(job.id, job);
+          }
+          allJobs = [...byId.values()];
+          logger.info(
+            `Hybrid match candidates: family=${familyJobs.length}, semantic=${semanticJobs.length}, merged=${allJobs.length}`
+          );
+        }
       }
     }
 
@@ -643,5 +665,380 @@ export async function getHHSalaryEvaluation(req: Request, res: Response): Promis
       },
       details: message,
     });
+  }
+}
+
+/**
+ * GET /api/jobs/med/roles — nomenclature for LEO Med dropdown (Phase 1).
+ */
+export async function listMedRolesHandler(_req: Request, res: Response): Promise<void> {
+  try {
+    const { isMedVerticalEnabled, listMedRoles, getMedRolesCatalog } = await import(
+      '../services/med'
+    );
+    if (!isMedVerticalEnabled()) {
+      res.status(503).json({
+        error: 'LEO Med vertical is disabled',
+        code: 'MED_VERTICAL_OFF',
+        hint: 'Set ENABLE_MED_VERTICAL=true',
+      });
+      return;
+    }
+    const catalog = getMedRolesCatalog();
+    res.json({
+      levels: catalog.levels,
+      source: catalog.source,
+      roles: listMedRoles().map((r) => ({
+        id: r.id,
+        level: r.level,
+        title: r.title,
+        hiring_closed_from: r.hiring_closed_from,
+      })),
+    });
+  } catch (error: unknown) {
+    logger.error('Error listing med roles:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * GET /api/jobs/med/map-role — free-text role → med role + taxonomy prefill.
+ * Used by the chat (conversation service) to branch a candidate into LEO Med.
+ * Query: title.
+ */
+export async function mapMedRoleHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const {
+      isMedVerticalEnabled,
+      mapVacancyToMedRole,
+      rankMedTaxonomyItemsForPrefill,
+      resolveMedTaxonomyForRole,
+      MED_UNKNOWN_ROLE_ID,
+    } = await import('../services/med');
+
+    if (!isMedVerticalEnabled()) {
+      res.status(503).json({
+        error: 'LEO Med vertical is disabled',
+        code: 'MED_VERTICAL_OFF',
+        hint: 'Set ENABLE_MED_VERTICAL=true',
+      });
+      return;
+    }
+
+    const title =
+      typeof req.query.title === 'string' && req.query.title.trim()
+        ? req.query.title.trim()
+        : '';
+    if (!title) {
+      res.status(400).json({ error: 'title is required' });
+      return;
+    }
+
+    const match = mapVacancyToMedRole(title);
+    const isMed = match.med_role_id !== MED_UNKNOWN_ROLE_ID;
+    const taxonomy = isMed ? resolveMedTaxonomyForRole(match.med_role_id, match.title) : null;
+
+    res.json({
+      is_med: isMed,
+      med_role_id: isMed ? match.med_role_id : null,
+      role_title: match.title,
+      level: match.level,
+      confidence: match.confidence,
+      prefill: taxonomy
+        ? {
+            // Профессионально-специфичные пункты идут первыми — чат берёт верхушку списка.
+            skills: rankMedTaxonomyItemsForPrefill(taxonomy.skills).map((s) => ({
+              id: s.id,
+              label: s.label,
+              core: s.core === true,
+            })),
+            duties: rankMedTaxonomyItemsForPrefill(taxonomy.duties).map((d) => ({
+              id: d.id,
+              label: d.label,
+              core: d.core === true,
+            })),
+            disclaimer: taxonomy.disclaimer,
+          }
+        : null,
+    });
+  } catch (error: unknown) {
+    logger.error('Error mapping med role:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * GET /api/jobs/med/feed — vacancies by profession (+ optional city).
+ * Query: role_id, level, city, limit, offset.
+ */
+export async function getMedFeed(req: Request, res: Response): Promise<void> {
+  try {
+    const { isMedVerticalEnabled } = await import('../services/med');
+    if (!isMedVerticalEnabled()) {
+      res.status(503).json({
+        error: 'LEO Med vertical is disabled',
+        code: 'MED_VERTICAL_OFF',
+        hint: 'Set ENABLE_MED_VERTICAL=true',
+      });
+      return;
+    }
+
+    const roleId =
+      typeof req.query.role_id === 'string' && req.query.role_id.trim()
+        ? req.query.role_id.trim()
+        : undefined;
+    const level =
+      typeof req.query.level === 'string' && req.query.level.trim()
+        ? req.query.level.trim()
+        : undefined;
+    const city =
+      typeof req.query.city === 'string' && req.query.city.trim()
+        ? req.query.city.trim()
+        : undefined;
+    const limitParsed = parseInt(String(req.query.limit ?? '30'), 10);
+    const offsetParsed = parseInt(String(req.query.offset ?? '0'), 10);
+
+    const { jobs, total } = await jobRepository.findMedFeed({
+      medRoleId: roleId,
+      level,
+      city,
+      limit: Number.isFinite(limitParsed) ? limitParsed : 30,
+      offset: Number.isFinite(offsetParsed) ? offsetParsed : 0,
+    });
+
+    res.json({
+      jobs,
+      total,
+      count: jobs.length,
+      filters: { role_id: roleId ?? null, level: level ?? null, city: city ?? null },
+    });
+  } catch (error: unknown) {
+    logger.error('Error fetching med feed:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * GET /api/jobs/med/taxonomy
+ * Query: role_id (med_roles id) | title | level
+ */
+export async function getMedTaxonomy(req: Request, res: Response): Promise<void> {
+  try {
+    const {
+      isMedVerticalEnabled,
+      getTaxonomyByMedRoleId,
+      getTaxonomyBySourceTitle,
+      listTaxonomiesForLevel,
+      getMedTaxonomyCatalog,
+      getMedTaxonomyDisclaimer,
+    } = await import('../services/med');
+
+    if (!isMedVerticalEnabled()) {
+      res.status(503).json({
+        error: 'LEO Med vertical is disabled',
+        code: 'MED_VERTICAL_OFF',
+        hint: 'Set ENABLE_MED_VERTICAL=true',
+      });
+      return;
+    }
+
+    const roleId =
+      typeof req.query.role_id === 'string' && req.query.role_id.trim()
+        ? req.query.role_id.trim()
+        : undefined;
+    const title =
+      typeof req.query.title === 'string' && req.query.title.trim()
+        ? req.query.title.trim()
+        : undefined;
+    const levelRaw =
+      typeof req.query.level === 'string' && req.query.level.trim()
+        ? req.query.level.trim()
+        : undefined;
+
+    if (roleId) {
+      const taxonomy = getTaxonomyByMedRoleId(roleId);
+      if (!taxonomy) {
+        res.status(404).json({ error: 'Taxonomy not found for role_id', role_id: roleId });
+        return;
+      }
+      res.json({ taxonomy, disclaimer: taxonomy.disclaimer });
+      return;
+    }
+
+    if (title) {
+      const taxonomy = getTaxonomyBySourceTitle(title);
+      if (!taxonomy) {
+        res.status(404).json({ error: 'Taxonomy not found for title', title });
+        return;
+      }
+      res.json({ taxonomy, disclaimer: taxonomy.disclaimer });
+      return;
+    }
+
+    if (levelRaw === 'doctor' || levelRaw === 'mid' || levelRaw === 'junior') {
+      const list = listTaxonomiesForLevel(levelRaw);
+      res.json({
+        level: levelRaw,
+        count: list.length,
+        disclaimer: getMedTaxonomyDisclaimer(),
+        taxonomies: list,
+      });
+      return;
+    }
+
+    const catalog = getMedTaxonomyCatalog();
+    res.json({
+      disclaimer: catalog.disclaimer,
+      stats: catalog.stats,
+      provenance_default: catalog.provenance_default,
+      hint: 'Pass role_id, title, or level=doctor|mid|junior',
+    });
+  } catch (error: unknown) {
+    logger.error('Error fetching med taxonomy:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * POST /api/jobs/med/profiles — complete LEO Med specialist profile (Phase 3).
+ * Requires consent_a=true. Consent B optional / not required for metric N.
+ */
+export async function createMedProfile(req: Request, res: Response): Promise<void> {
+  try {
+    const {
+      isMedVerticalEnabled,
+      validateMedSpecialistInput,
+      createMedSpecialist,
+      countCompletedMedProfilesWithConsentA,
+      CONSENT_A_VERSION,
+    } = await import('../services/med');
+
+    if (!isMedVerticalEnabled()) {
+      res.status(503).json({
+        error: 'LEO Med vertical is disabled',
+        code: 'MED_VERTICAL_OFF',
+        hint: 'Set ENABLE_MED_VERTICAL=true',
+      });
+      return;
+    }
+
+    const parsed = validateMedSpecialistInput(req.body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.error.message, code: parsed.error.code });
+      return;
+    }
+
+    const profile = await createMedSpecialist(parsed.value);
+    const n = await countCompletedMedProfilesWithConsentA();
+
+    res.status(201).json({
+      profile,
+      metric: {
+        completed_with_consent_a: n,
+        milestones: { smoke: 10, signal: 50, confident: 100 },
+      },
+      consent_a_version: CONSENT_A_VERSION,
+      note: 'consent_b is optional and not part of Phase 3 metric N',
+    });
+  } catch (error: unknown) {
+    logger.error('Error creating med profile:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * GET /api/jobs/med/profiles/stats — metric N (completed + consent A).
+ */
+export async function getMedProfileStats(_req: Request, res: Response): Promise<void> {
+  try {
+    const { isMedVerticalEnabled, countCompletedMedProfilesWithConsentA } = await import(
+      '../services/med'
+    );
+    if (!isMedVerticalEnabled()) {
+      res.status(503).json({
+        error: 'LEO Med vertical is disabled',
+        code: 'MED_VERTICAL_OFF',
+        hint: 'Set ENABLE_MED_VERTICAL=true',
+      });
+      return;
+    }
+    const n = await countCompletedMedProfilesWithConsentA();
+    res.json({
+      completed_with_consent_a: n,
+      milestones: { smoke: 10, signal: 50, confident: 100 },
+    });
+  } catch (error: unknown) {
+    logger.error('Error fetching med profile stats:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * GET /api/jobs/med/profiles/:id
+ */
+export async function getMedProfile(req: Request, res: Response): Promise<void> {
+  try {
+    const { isMedVerticalEnabled, getMedSpecialistById } = await import('../services/med');
+    if (!isMedVerticalEnabled()) {
+      res.status(503).json({
+        error: 'LEO Med vertical is disabled',
+        code: 'MED_VERTICAL_OFF',
+        hint: 'Set ENABLE_MED_VERTICAL=true',
+      });
+      return;
+    }
+    const id = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    if (!id) {
+      res.status(400).json({ error: 'id required' });
+      return;
+    }
+    const profile = await getMedSpecialistById(id);
+    if (!profile) {
+      res.status(404).json({ error: 'Profile not found' });
+      return;
+    }
+    res.json({ profile });
+  } catch (error: unknown) {
+    logger.error('Error fetching med profile:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * POST /api/jobs/scrape/med — enqueue Med ingest (HH+SJ+active TG).
+ */
+export async function scrapeMedJobs(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const { isMedVerticalEnabled } = await import('../services/med');
+    if (!isMedVerticalEnabled()) {
+      res.status(503).json({
+        error: 'LEO Med vertical is disabled',
+        code: 'MED_VERTICAL_OFF',
+        hint: 'Set ENABLE_MED_VERTICAL=true',
+      });
+      return;
+    }
+
+    const body = (req.body || {}) as { keywords?: unknown; includeTg?: unknown };
+    const keywords = Array.isArray(body.keywords)
+      ? body.keywords.filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
+      : undefined;
+    const includeTg = body.includeTg !== false;
+
+    await triggerScraping({
+      origin: 'med-only',
+      keywords: keywords && keywords.length > 0 ? keywords : undefined,
+      includeTg,
+    });
+
+    res.json({
+      message: 'Med job scraping enqueued',
+      note: 'Worker runs HH+SJ medicine keywords + active Med TG. Jobs tagged med_role_id.',
+      includeTg,
+      keywords: keywords && keywords.length > 0 ? keywords : 'buildMedScrapeKeywords()',
+    });
+  } catch (error: unknown) {
+    logger.error('Error triggering med scraping:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 }

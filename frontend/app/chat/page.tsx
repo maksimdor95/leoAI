@@ -2296,8 +2296,13 @@ function ChatPageContent() {
 
   const centerStageQuestion = useMemo(() => {
     if (currentProduct === 'jack') {
-      // После разбора резюме показываем info_card (профиль + кнопки), а не старый вопрос upload.
-      if (sessionCurrentStepId === 'resume_ready') {
+      // Терминальные info_card-шаги: не держим на сцене предыдущий question.
+      if (
+        sessionCurrentStepId === 'resume_ready' ||
+        sessionCurrentStepId === 'quick_ready' ||
+        sessionCurrentStepId === 'med_ready' ||
+        sessionCurrentStepId === 'med_no_consent'
+      ) {
         return undefined;
       }
       // Не показываем застрявший промпт «загрузите резюме», если шаг уже другой.
@@ -2308,6 +2313,14 @@ function ChatPageContent() {
         looksLikeStaleResumeUploadQuestion(latestQuestion)
       ) {
         return undefined;
+      }
+      // info_card после последнего вопроса (LEO Med consent → «профиль сохранён» + Вакансии).
+      if (latestQuestion && latestInfoCard) {
+        const questionIndex = messages.findIndex((m) => m.id === latestQuestion.id);
+        const cardIndex = messages.findIndex((m) => m.id === latestInfoCard.id);
+        if (questionIndex >= 0 && cardIndex > questionIndex) {
+          return undefined;
+        }
       }
       return latestQuestion;
     }
@@ -2343,6 +2356,7 @@ function ChatPageContent() {
     currentProduct,
     vacancyAnalyzeFlowActive,
     latestQuestion,
+    latestInfoCard,
     messages,
     interviewPrepCollectedSnapshot.lesson_phase,
     sessionCurrentStepId,
@@ -2548,6 +2562,19 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
     const text = `${q.question} ${q.placeholder || ''}`.toLowerCase();
 
     if (currentProduct === 'jack') {
+      // LEO Med: развилка «медработник?» и согласие на обработку ПДн
+      if (sessionCurrentStepId?.startsWith('med_confirm')) {
+        return [
+          { label: 'Да, я медработник', value: 'Да', hint: 'Профиль по мед. номенклатуре' },
+          { label: 'Нет', value: 'Нет', hint: 'Обычный подбор вакансий' },
+        ];
+      }
+      if (sessionCurrentStepId === 'med_consent') {
+        return [
+          { label: 'Даю согласие', value: 'Да', hint: 'Хранение профиля, 152-ФЗ' },
+          { label: 'Не сейчас', value: 'Нет', hint: 'Профиль не сохраняем' },
+        ];
+      }
       if (sessionCurrentStepId && sessionCurrentStepId !== 'greeting') {
         return undefined;
       }

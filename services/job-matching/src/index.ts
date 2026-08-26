@@ -20,7 +20,7 @@ import { scheduleRegularScraping, closeQueue, startInlineScrapingWorkerIfEnabled
 import { validateAndLogConfig } from './utils/configValidator';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { getHealthStatus } from './utils/healthCheck';
-import { JOBS_ROLE_FAMILY_MIGRATION_SQL, JOBS_SOURCE_META_MIGRATION_SQL, JOBS_ARCHIVED_AT_MIGRATION_SQL } from './db/jobsSchemaMigrations';
+import { JOBS_ROLE_FAMILY_MIGRATION_SQL, JOBS_SOURCE_META_MIGRATION_SQL, JOBS_ARCHIVED_AT_MIGRATION_SQL, JOBS_MED_ROLE_MIGRATION_SQL, MED_SPECIALISTS_MIGRATION_SQL } from './db/jobsSchemaMigrations';
 import jobRepository from './models/jobRepository';
 
 const app = express();
@@ -184,6 +184,8 @@ async function start() {
       await pool.query(JOBS_ROLE_FAMILY_MIGRATION_SQL);
       await pool.query(JOBS_SOURCE_META_MIGRATION_SQL);
       await pool.query(JOBS_ARCHIVED_AT_MIGRATION_SQL);
+      await pool.query(JOBS_MED_ROLE_MIGRATION_SQL);
+      await pool.query(MED_SPECIALISTS_MIGRATION_SQL);
 
       const backfilled = await jobRepository.backfillAllRoleFamilies();
       if (backfilled > 0) {

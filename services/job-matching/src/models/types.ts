@@ -23,5 +23,7 @@ export interface JobRow {
   created_at: Date | string;
   updated_at: Date | string;
   archived_at?: Date | string | null;
+  med_role_id?: string | null;
+  med_level?: string | null;
   embedding?: number[] | string | null;
 }

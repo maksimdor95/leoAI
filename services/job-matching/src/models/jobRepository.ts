@@ -68,9 +68,10 @@ export class JobRepository {
       INSERT INTO jobs (
         title, company, location, salary_min, salary_max, currency,
         description, requirements, skills, experience_level, work_mode,
-        source, source_url, posted_at, embedding, role_family, source_meta
+        source, source_url, posted_at, embedding, role_family, source_meta,
+        med_role_id, med_level
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       ON CONFLICT (source_url) 
       DO UPDATE SET
         title = EXCLUDED.title,
@@ -88,6 +89,8 @@ export class JobRepository {
         embedding = COALESCE(EXCLUDED.embedding, jobs.embedding),
         role_family = EXCLUDED.role_family,
         source_meta = COALESCE(EXCLUDED.source_meta, jobs.source_meta),
+        med_role_id = COALESCE(EXCLUDED.med_role_id, jobs.med_role_id),
+        med_level = COALESCE(EXCLUDED.med_level, jobs.med_level),
         archived_at = NULL,
         updated_at = NOW()
       RETURNING *
@@ -111,6 +114,8 @@ export class JobRepository {
       jobInput.embedding ? `[${jobInput.embedding.join(',')}]` : null,
       roleFamily,
       jobInput.source_meta ? JSON.stringify(jobInput.source_meta) : null,
+      jobInput.med_role_id ?? null,
+      jobInput.med_level ?? null,
     ];
 
     try {
@@ -245,6 +250,7 @@ export class JobRepository {
                  MAX(updated_at) AS max_u
           FROM jobs
           WHERE archived_at IS NULL
+            AND med_role_id IS NULL
         `
       );
       const row = result.rows[0];
@@ -265,13 +271,17 @@ export class JobRepository {
     id, title, company, location, salary_min, salary_max, currency,
     description, requirements, skills, experience_level, work_mode,
     source, source_url, posted_at, role_family, source_meta,
+    med_role_id, med_level,
     created_at, updated_at, archived_at
   `;
+
+  /** Jack IT match pool — exclude LEO Med rows. */
+  private static readonly JACK_ACTIVE = `archived_at IS NULL AND med_role_id IS NULL`;
 
   private async findAllForMatch(limit: number): Promise<Job[]> {
     const query = `
       SELECT ${JobRepository.MATCH_SELECT_COLUMNS} FROM jobs
-      WHERE archived_at IS NULL
+      WHERE ${JobRepository.JACK_ACTIVE}
       ORDER BY posted_at DESC NULLS LAST, created_at DESC
       LIMIT $1
     `;
@@ -292,7 +302,7 @@ export class JobRepository {
     const query = `
       SELECT ${JobRepository.MATCH_SELECT_COLUMNS} FROM jobs
       WHERE role_family = ANY($1::varchar[])
-        AND archived_at IS NULL
+        AND ${JobRepository.JACK_ACTIVE}
       ORDER BY posted_at DESC NULLS LAST, created_at DESC
       LIMIT $2
     `;
@@ -387,7 +397,7 @@ export class JobRepository {
     const query = `
       SELECT ${JobRepository.MATCH_SELECT_COLUMNS} FROM jobs
       WHERE id <> ALL($1::uuid[])
-        AND archived_at IS NULL
+        AND ${JobRepository.JACK_ACTIVE}
       ORDER BY posted_at DESC, created_at DESC
       LIMIT $2
     `;
@@ -551,7 +561,65 @@ export class JobRepository {
       created_at: new Date(row.created_at),
       updated_at: new Date(row.updated_at),
       archived_at: row.archived_at ? new Date(row.archived_at) : null,
+      med_role_id: row.med_role_id ?? null,
+      med_level: row.med_level ?? null,
       embedding: row.embedding ? (typeof row.embedding === 'string' ? JSON.parse(row.embedding) : row.embedding) : undefined,
+    };
+  }
+
+  /**
+   * LEO Med feed: jobs tagged with med_role_id, filter by role + optional city substring.
+   */
+  async findMedFeed(options: {
+    medRoleId?: string;
+    city?: string;
+    level?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ jobs: Job[]; total: number }> {
+    const limit = Math.min(100, Math.max(1, options.limit ?? 30));
+    const offset = Math.max(0, options.offset ?? 0);
+    const values: unknown[] = [];
+    let where = `archived_at IS NULL AND med_role_id IS NOT NULL`;
+    let param = 1;
+
+    if (options.medRoleId && options.medRoleId !== 'all') {
+      where += ` AND med_role_id = $${param}`;
+      values.push(options.medRoleId);
+      param += 1;
+    }
+    if (options.level) {
+      where += ` AND med_level = $${param}`;
+      values.push(options.level);
+      param += 1;
+    }
+    if (options.city && options.city.trim()) {
+      where += ` AND location::text ILIKE $${param}`;
+      values.push(`%${options.city.trim()}%`);
+      param += 1;
+    }
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM jobs WHERE ${where}`,
+      values
+    );
+    const total = countResult.rows[0]?.n ?? 0;
+
+    values.push(limit, offset);
+    const listResult = await pool.query(
+      `
+        SELECT ${JobRepository.MATCH_SELECT_COLUMNS}
+        FROM jobs
+        WHERE ${where}
+        ORDER BY posted_at DESC NULLS LAST, created_at DESC
+        LIMIT $${param} OFFSET $${param + 1}
+      `,
+      values
+    );
+
+    return {
+      jobs: listResult.rows.map((row) => this.mapRowToJob(row)),
+      total,
     };
   }
 }

@@ -444,6 +444,23 @@ JOB_REVALIDATE_LIMIT=40
 # Optional rollout: JOB_REVALIDATE_SOURCES=hh.ru,habr,career_wb
 ```
 
+### LEO Med vertical (Phase 0–3)
+
+По умолчанию **выключено**. Не влияет на Jack IT / extended sources. Данные: `services/job-matching/src/services/data/med/`. Таблица профилей: `med_specialists`. См. [MED_VERTICAL_BRIEF.md](../MED_VERTICAL_BRIEF.md).
+
+| Переменная | Описание | По умолчанию |
+| ---------- | -------- | ------------ |
+| `ENABLE_MED_VERTICAL` | Master switch мед. вертикали (`true` / `false`) | `false` |
+| `MED_SCRAPE_KEYWORD_LIMIT` | Сколько keywords на Med scrape (6–60) | `24` |
+
+```env
+# Opt-in Med Phase 1
+ENABLE_MED_VERTICAL=true
+# MED_SCRAPE_KEYWORD_LIMIT=24
+```
+
+Med API (когда флаг on): `GET /api/jobs/med/roles`, `GET /api/jobs/med/feed?role_id=&level=&city=`, `GET /api/jobs/med/map-role?title=` (развилка в чате), `GET /api/jobs/med/taxonomy?role_id=`\|`title=`\|`level=`, `POST /api/jobs/med/profiles` (consent A), `GET /api/jobs/med/profiles/stats` (метрика N), `GET /api/jobs/med/profiles/:id`, `POST /api/jobs/scrape/med` (catalog token). Web: отдельных страниц нет — онбординг и лента живут в чате (`/chat`, продукт «Подбор вакансий», ветка шагов `med_*`). Regen taxonomy: `npm run med:generate-taxonomy` in job-matching.
+
 ### LLM rerank shortlist (job-matching → ai-nlp)
 
 После rule-based match top-N вакансий можно скорректировать через YandexGPT (`POST /api/ai/match-rerank`). Fail-open: при ошибке/таймауте остаётся rule score.

@@ -13,6 +13,12 @@ jest.mock('../../services/integrationService', () => ({
   triggerProfileDrivenScrape: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('../../services/medProfileService', () => ({
+  ...jest.requireActual('../../services/medProfileService'),
+  detectMedRole: jest.fn().mockResolvedValue(null),
+  saveMedSpecialistProfile: jest.fn().mockResolvedValue(null),
+}));
+
 jest.mock('../../services/aiClient', () => ({
   validateAnswer: jest.fn().mockResolvedValue({ quality: 'good', reason: 'eval mock' }),
   checkContext: jest.fn().mockResolvedValue({

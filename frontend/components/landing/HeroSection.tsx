@@ -16,6 +16,7 @@ import {
 } from '@/lib/landingUiCopy';
 import { useHumeTheme } from '@/lib/useHumeTheme';
 import { HumeHeroWaveCanvas } from '@/components/chat/HumeHeroWaveCanvas';
+import { HeroBrandRotator, useHeroBrandRotation } from '@/components/landing/HeroBrandRotator';
 import { BulbOutlined, SearchOutlined } from '@ant-design/icons';
 
 const SCENARIO_ICONS: Record<LandingPreviewScenarioId, ReactNode> = {
@@ -38,6 +39,7 @@ export function HeroSection() {
     [settings.locale]
   );
   const [activeScenarioId, setActiveScenarioId] = useState<LandingPreviewScenarioId>('jobs');
+  const { suffix: brandSuffix, phase: brandPhase } = useHeroBrandRotation();
 
   const activeScenario =
     previewScenarios.find((scenario) => scenario.id === activeScenarioId) ?? previewScenarios[0];
@@ -165,11 +167,31 @@ export function HeroSection() {
       </div>
 
       <div className="leo-hero-content relative z-10 mx-auto flex min-h-screen max-w-7xl flex-col justify-start px-6 animate-fadeIn">
-        <div className="leo-hero-grid grid items-start gap-10 lg:grid-cols-[0.88fr_1.12fr] lg:gap-12">
-          <div className="leo-hero-copy text-center lg:text-left">
-            <div className="landing-hero-title-offset">
+        <div className="leo-hero-stack flex min-w-0 flex-col items-stretch gap-10 lg:gap-14">
+          <div className="leo-hero-copy min-w-0 text-center">
+            <h1
+              className="mb-3 flex w-full justify-center text-6xl md:text-8xl lg:text-9xl"
+              aria-label={`LEO ${brandSuffix}`}
+            >
+              <span className="landing-hero-brand inline-flex items-baseline justify-center gap-[0.18em]">
+                <span className="landing-hero-brand-word">LEO</span>
+                <HeroBrandRotator
+                  suffix={brandSuffix}
+                  phase={brandPhase}
+                  textClassName="landing-hero-brand-word"
+                />
+              </span>
+              <span className="landing-hero-brand-leo inline-flex items-baseline justify-center gap-[0.18em]">
+                <span className="landing-hero-brand-word-leo">LEO</span>
+                <HeroBrandRotator
+                  suffix={brandSuffix}
+                  phase={brandPhase}
+                  textClassName="landing-hero-brand-word-leo"
+                />
+              </span>
+            </h1>
             <div
-              className={`mb-5 inline-flex max-w-full items-center gap-2 rounded-full px-4 py-2.5 text-left text-[11px] font-semibold leading-snug tracking-wide backdrop-blur sm:text-xs sm:leading-normal ${
+              className={`mx-auto mb-6 inline-flex max-w-full items-center gap-2 rounded-full px-4 py-2 text-[11px] font-semibold leading-snug tracking-wide backdrop-blur sm:text-xs sm:leading-normal ${
                 isHume
                   ? 'border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)] text-[var(--color-smoke)]'
                   : 'border border-white/10 bg-white/[0.04] text-green-200/95'
@@ -184,17 +206,12 @@ export function HeroSection() {
               />
               {copy.heroBadge}
             </div>
-            <h1 className="mb-6 text-6xl md:text-8xl lg:text-9xl">
-              <span className="landing-hero-brand">LEO AI</span>
-              <span className="landing-hero-brand-leo">LEO AI</span>
-            </h1>
-            </div>
 
-            <p className="leo-hero-subtitle mx-auto mb-6 max-w-3xl text-xl leading-relaxed md:text-2xl lg:mx-0">
+            <p className="leo-hero-subtitle mx-auto mb-6 max-w-3xl text-xl leading-relaxed md:text-2xl">
               {copy.heroSubtitle}
             </p>
 
-            <div className="flex flex-col items-center lg:items-start">
+            <div className="flex flex-col items-center">
               <button
                 type="button"
                 onClick={handleHeroCta}
@@ -205,7 +222,7 @@ export function HeroSection() {
             </div>
           </div>
 
-          <div className="landing-preview-frame flex w-full overflow-hidden rounded-[2rem] border p-3 shadow-2xl sm:p-4 lg:h-[640px] lg:min-h-[640px] lg:max-h-[640px] lg:shrink-0">
+          <div className="landing-preview-frame flex min-w-0 w-full overflow-hidden rounded-[2rem] border p-3 shadow-2xl sm:p-4 lg:h-[640px] lg:min-h-[640px] lg:max-h-[640px]">
             <div className="landing-preview-inner flex min-h-0 w-full flex-1 flex-col rounded-[1.5rem] border p-4 sm:p-5">
               <div className="mb-4 flex shrink-0 flex-col gap-4 lg:mb-5 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0 pr-1">

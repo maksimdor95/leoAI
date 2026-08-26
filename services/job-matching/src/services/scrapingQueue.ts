@@ -14,6 +14,7 @@ import {
   type ScrapeFamilyId,
   type ScrapeResult,
 } from './scraper';
+import { scrapeMedCatalog } from './med/scrapeMed';
 import { enrichJobsMissingEmbeddings, enrichJobsFromEntities } from './enrichment';
 import {
   revalidateStaleJobs,
@@ -43,10 +44,11 @@ export interface ScrapingJobPayload {
   keywords?: string[];
   locationId?: number;
   userId?: string;
-  origin?: 'user-profile' | 'hourly-cron' | 'manual' | 'seed' | 'extended-only';
+  origin?: 'user-profile' | 'hourly-cron' | 'manual' | 'seed' | 'extended-only' | 'med-only';
   families?: ScrapeFamilyId[];
   enrich?: boolean;
   enrichExtended?: boolean;
+  includeTg?: boolean;
 }
 
 export interface EnrichJobPayload {
@@ -76,6 +78,22 @@ function normalizeFamilies(raw: unknown): ScrapeFamilyId[] | undefined {
 }
 
 async function processScrapePayload(payload: ScrapingJobPayload, jobId?: string): Promise<ScrapeResult> {
+  if (payload.origin === 'med-only') {
+    logger.info(`Processing Med scraping job ${jobId}`);
+    const result = await scrapeMedCatalog({
+      keywords: payload.keywords,
+      locationId: payload.locationId,
+      includeTg: payload.includeTg !== false,
+    });
+    logger.info(
+      `✅ Med scrape ${jobId}: enabled=${result.medEnabled} scraped=${result.jobsScraped} saved=${result.jobsSaved}`
+    );
+    if (result.errors.length > 0) {
+      logger.warn(`   Med errors: ${result.errors.join('; ')}`);
+    }
+    return result;
+  }
+
   const keywords =
     Array.isArray(payload.keywords) && payload.keywords.length > 0
       ? payload.keywords
@@ -251,6 +269,7 @@ export async function triggerScraping(payload?: ScrapingJobPayload): Promise<voi
     families: payload?.families,
     enrich: payload?.enrich,
     enrichExtended: payload?.enrichExtended,
+    includeTg: payload?.includeTg,
   };
   await scrapingQueue.add('scrape-jobs', data);
   logger.info(

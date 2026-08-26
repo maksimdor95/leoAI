@@ -115,33 +115,28 @@ html[data-theme='hume'] .leo-hero-content {
 
 @media (min-width: 1024px) {
   html[data-theme='hume'] .leo-hero-content {
-    padding-top: 6rem;
-  }
-
-  html[data-theme='leo-dark'] .leo-hero-grid {
-    align-items: center;
+    padding-top: 4rem;
   }
 }
 
 html[data-theme='leo-dark'] .leo-hero-content {
-  padding-top: 6rem;
+  padding-top: 4.5rem;
   padding-bottom: 6rem;
 }
 
+/* Stacked hero: copy sits under waves without the old 2-col offset */
+html[data-theme='hume'] .leo-hero-copy,
+html[data-theme='leo-dark'] .leo-hero-copy {
+  padding-top: 0;
+}
+
+/* Light theme: brand sits below the wave canvas */
 html[data-theme='hume'] .leo-hero-copy {
-  padding-top: 2.5rem;
+  padding-top: 40px;
 }
 
-@media (min-width: 640px) {
-  html[data-theme='hume'] .leo-hero-copy {
-    padding-top: 3.5rem;
-  }
-}
-
-@media (min-width: 1024px) {
-  html[data-theme='hume'] .leo-hero-copy {
-    padding-top: 2rem;
-  }
+html[data-theme='hume'] .leo-hero-copy h1 {
+  margin-top: 40px;
 }
 
 html[data-theme='hume'] .landing-hero-brand-leo,
@@ -163,12 +158,6 @@ html[data-theme='hume'] .landing-preview-frame {
   border-color: rgba(34, 34, 34, 0.12);
   background: var(--color-paper);
   box-shadow: 0 25px 50px -12px rgba(34, 34, 34, 0.08);
-}
-
-@media (min-width: 1024px) {
-  html[data-theme='hume'] .landing-preview-frame {
-    margin-top: -3rem;
-  }
 }
 
 html[data-theme='leo-dark'] .landing-preview-frame {
@@ -455,12 +444,6 @@ html[data-theme='hume'] .landing-hero-particles-leo {
 
 html[data-theme='leo-dark'] .landing-hero-bg-hume {
   display: none;
-}
-
-@media (max-width: 639px) {
-  html[data-theme='hume'] .landing-hero-title-offset {
-    margin-top: 30px;
-  }
 }
 
 .landing-cta-btn {
@@ -1067,11 +1050,20 @@ html[data-theme='leo-dark'] .landing-preview-start-btn:hover {
 }
 
 /* Landing hero — один размер и iris-перелив в обеих темах (как hume.ai) */
-.landing-hero-brand {
+.landing-hero-brand,
+.landing-hero-brand-leo {
   font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
   font-weight: 500;
   letter-spacing: -0.03em;
-  line-height: 1.05;
+  /* >1 so descenders (g, y) aren’t clipped by line-box / overflow */
+  line-height: 1.2;
+}
+
+.landing-hero-brand-word {
+  font-family: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
   background: linear-gradient(
     90deg,
     #b88fd8 0%,
@@ -1088,17 +1080,75 @@ html[data-theme='leo-dark'] .landing-preview-start-btn:hover {
   animation: gradientText 7s linear infinite;
 }
 
-.landing-hero-brand-leo {
-  font-family: var(--font-fellix), ui-sans-serif, system-ui, sans-serif;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
+.landing-hero-brand-word-leo {
+  font-family: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
   background: linear-gradient(90deg, #ffffff 0%, #22c55e 50%, #ffffff 100%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: gradientText 5s linear infinite;
+}
+
+/* Falling “plaque” slot for rotating LEO suffix (Med / IT / Tech …) */
+.landing-hero-brand-slot {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  /* Padding keeps descenders (g, y) inside the clip box */
+  padding-top: 0.08em;
+  padding-bottom: 0.22em;
+  margin-top: -0.08em;
+  margin-bottom: -0.1em;
+  vertical-align: baseline;
+  perspective: 420px;
+  text-align: center;
+}
+
+.landing-hero-brand-tile {
+  display: inline-block;
+  transform-origin: 50% 0%;
+  will-change: transform, opacity;
+}
+
+.landing-hero-brand-tile--out {
+  animation: heroBrandFallOut 0.55s cubic-bezier(0.4, 0, 0.8, 0.4) forwards;
+}
+
+.landing-hero-brand-tile--in {
+  animation: heroBrandFallIn 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes heroBrandFallOut {
+  from {
+    transform: translateY(0) rotateX(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(118%) rotateX(-28deg);
+    opacity: 0;
+  }
+}
+
+@keyframes heroBrandFallIn {
+  from {
+    transform: translateY(-118%) rotateX(28deg);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) rotateX(0deg);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-hero-brand-tile--out,
+  .landing-hero-brand-tile--in {
+    animation: none;
+  }
 }
 
 @keyframes float {

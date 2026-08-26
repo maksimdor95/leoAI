@@ -1,0 +1,331 @@
+{
+  "version": 1,
+  "notes": "LEO Med source registry. Phase 1: HH/SJ + 7 high TG active. Do not mix into Jack IT tg_job_channels.json.",
+  "geography_default": "RU",
+  "sources": [
+    {
+      "id": "hh.ru",
+      "type": "api",
+      "kind": "board",
+      "title": "HeadHunter",
+      "url": "https://hh.ru",
+      "priority": "primary",
+      "legality": "api",
+      "roles_coverage": [
+        "doctor",
+        "mid",
+        "junior"
+      ],
+      "geo": "RU",
+      "status": "active",
+      "notes": "Already in LEO job-matching; needs medicine filter + role map"
+    },
+    {
+      "id": "superjob.ru",
+      "type": "api",
+      "kind": "board",
+      "title": "SuperJob",
+      "url": "https://www.superjob.ru",
+      "priority": "primary",
+      "legality": "api",
+      "roles_coverage": [
+        "doctor",
+        "mid",
+        "junior"
+      ],
+      "geo": "RU",
+      "status": "active",
+      "notes": "Already in LEO; medicine filter pending"
+    },
+    {
+      "id": "rabota.ru",
+      "type": "html",
+      "kind": "board",
+      "title": "Работа.ру",
+      "url": "https://www.rabota.ru",
+      "priority": "secondary",
+      "legality": "tos_review",
+      "roles_coverage": [
+        "doctor",
+        "mid",
+        "junior"
+      ],
+      "geo": "RU",
+      "status": "planned"
+    },
+    {
+      "id": "zarplata.ru",
+      "type": "html",
+      "kind": "board",
+      "title": "Зарплата.ру",
+      "url": "https://www.zarplata.ru",
+      "priority": "secondary",
+      "legality": "tos_review",
+      "roles_coverage": [
+        "doctor",
+        "mid",
+        "junior"
+      ],
+      "geo": "RU",
+      "status": "planned"
+    },
+    {
+      "id": "avito_jobs",
+      "type": "html",
+      "kind": "board",
+      "title": "Авито Работа",
+      "url": "https://www.avito.ru/all/vakansii",
+      "priority": "secondary",
+      "legality": "tos_review",
+      "roles_coverage": [
+        "doctor",
+        "mid",
+        "junior"
+      ],
+      "geo": "RU",
+      "status": "planned",
+      "notes": "Avito connector exists for IT; med filter separate"
+    },
+    {
+      "id": "trudvsem.ru",
+      "type": "html",
+      "kind": "board",
+      "title": "Работа России (trudvsem)",
+      "url": "https://trudvsem.ru",
+      "priority": "secondary",
+      "legality": "public",
+      "roles_coverage": [
+        "doctor",
+        "mid",
+        "junior"
+      ],
+      "geo": "RU",
+      "status": "planned",
+      "notes": "Discovery: где искать работу врачом"
+    },
+    {
+      "id": "emed.market",
+      "type": "html",
+      "kind": "board",
+      "title": "EMED.MARKET",
+      "url": "https://emed.market",
+      "priority": "secondary",
+      "legality": "tos_review",
+      "roles_coverage": [
+        "doctor",
+        "mid"
+      ],
+      "geo": "RU",
+      "status": "planned",
+      "notes": "Med-specialized marketplace"
+    },
+    {
+      "id": "tg_superjob_medicina",
+      "type": "tg",
+      "kind": "channel",
+      "title": "SuperJob медицина",
+      "url": "https://t.me/superjob_medicina",
+      "username": "superjob_medicina",
+      "priority": "high",
+      "legality": "public_preview",
+      "roles_coverage": [
+        "doctor",
+        "mid"
+      ],
+      "geo": "RU",
+      "status": "active",
+      "contact": "@superjob_telegram"
+    },
+    {
+      "id": "tg_rabota_mediki",
+      "type": "tg",
+      "kind": "channel",
+      "title": "Работа медики (Москва)",
+      "url": "https://t.me/rabota_mediki",
+      "username": "rabota_mediki",
+      "priority": "high",
+      "legality": "public_preview",
+      "roles_coverage": [
+        "doctor",
+        "mid"
+      ],
+      "geo": "Moscow",
+      "status": "active",
+      "contact": "@nslepova"
+    },
+    {
+      "id": "tg_rabota_medsestra",
+      "type": "tg",
+      "kind": "channel",
+      "title": "Работа медсестра",
+      "url": "https://t.me/rabota_medsestra",
+      "username": "rabota_medsestra",
+      "priority": "high",
+      "legality": "public_preview",
+      "roles_coverage": [
+        "mid"
+      ],
+      "geo": "RU",
+      "status": "active",
+      "contact": "@nslepova"
+    },
+    {
+      "id": "tg_Rabotat_v_meditsina1",
+      "type": "tg",
+      "kind": "channel",
+      "title": "Работать в медицине",
+      "url": "https://t.me/Rabotat_v_meditsina1",
+      "username": "Rabotat_v_meditsina1",
+      "priority": "medium",
+      "legality": "public_preview",
+      "roles_coverage": [
+        "doctor",
+        "mid",
+        "junior"
+      ],
+      "geo": "RU",
+      "status": "planned",
+      "contact": "@Jober_Supporting"
+    },
+    {
+      "id": "tg_Med_Job_4_you",
+      "type": "tg",
+      "kind": "channel",
+      "title": "Med Job 4 you",
+      "url": "https://t.me/Med_Job_4_you",
+      "username": "Med_Job_4_you",
+      "priority": "high",
+      "legality": "public_preview",
+      "roles_coverage": [
+        "doctor",
+        "mid",
+        "junior"
+      ],
+      "geo": "RU",
+      "status": "active",
+      "contact": "@VictoriaKVI"
+    },
+    {
+      "id": "tg_csorglaborantmladpersonal",
+      "type": "tg",
+      "kind": "channel",
+      "title": "ЦСО / рентген / младший персонал",
+      "url": "https://t.me/csorglaborantmladpersonal",
+      "username": "csorglaborantmladpersonal",
+      "priority": "high",
+      "legality": "public_preview",
+      "roles_coverage": [
+        "mid",
+        "junior"
+      ],
+      "geo": "RU",
+      "status": "active",
+      "notes": "Junior / CSO niche"
+    },
+    {
+      "id": "tg_job_in_med",
+      "type": "tg",
+      "kind": "channel",
+      "title": "job_in_med",
+      "url": "https://t.me/job_in_med",
+      "username": "job_in_med",
+      "priority": "high",
+      "legality": "public_preview",
+      "roles_coverage": [
+        "doctor",
+        "mid"
+      ],
+      "geo": "RU",
+      "status": "active",
+      "contact": "@uninstall99"
+    },
+    {
+      "id": "tg_job_in_zdrav",
+      "type": "tg",
+      "kind": "channel",
+      "title": "job_in_zdrav",
+      "url": "https://t.me/job_in_zdrav",
+      "username": "job_in_zdrav",
+      "priority": "high",
+      "legality": "public_preview",
+      "roles_coverage": [
+        "doctor",
+        "mid"
+      ],
+      "geo": "RU",
+      "status": "active",
+      "contact": "@uninstall99",
+      "notes": "Main group sibling of job_in_med"
+    },
+    {
+      "id": "tg_hh_vacancy_medicine",
+      "type": "tg",
+      "kind": "channel",
+      "title": "HH vacancy medicine",
+      "url": "https://t.me/hh_vacancy_medicine",
+      "username": "hh_vacancy_medicine",
+      "priority": "low",
+      "legality": "public_preview",
+      "roles_coverage": [
+        "doctor",
+        "mid",
+        "junior"
+      ],
+      "geo": "RU",
+      "status": "planned",
+      "contact": "site_adv@hh.ru",
+      "notes": "Likely overlaps HH API — secondary"
+    },
+    {
+      "id": "tg_med_vacancy",
+      "type": "tg",
+      "kind": "channel",
+      "title": "Med vacancy (remote)",
+      "url": "https://t.me/med_vacancy",
+      "username": "med_vacancy",
+      "priority": "medium",
+      "legality": "public_preview",
+      "roles_coverage": [
+        "doctor",
+        "mid"
+      ],
+      "geo": "remote",
+      "status": "planned",
+      "notes": "Remote shelf"
+    },
+    {
+      "id": "tg_rehabilitation_vacancies",
+      "type": "tg",
+      "kind": "channel",
+      "title": "Rehabilitation vacancies",
+      "url": "https://t.me/rehabilitation_vacancies",
+      "username": "rehabilitation_vacancies",
+      "priority": "low",
+      "legality": "public_preview",
+      "roles_coverage": [
+        "doctor",
+        "mid"
+      ],
+      "geo": "RU",
+      "status": "planned",
+      "notes": "Addiction / rehab niche — Phase 2+"
+    },
+    {
+      "id": "tg_medsmena",
+      "type": "tg",
+      "kind": "channel",
+      "title": "Medsmena",
+      "url": "https://t.me/medsmena",
+      "username": "medsmena",
+      "priority": "medium",
+      "legality": "public_preview",
+      "roles_coverage": [
+        "doctor",
+        "mid",
+        "junior"
+      ],
+      "geo": "RU",
+      "status": "planned"
+    }
+  ]
+}

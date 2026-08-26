@@ -10,6 +10,21 @@ import { ScenarioDefinition } from '../types/scenario';
  * 4. Навыки (hard/soft/языки)
  * 5. Предпочтения по поиску
  */
+/**
+ * Развилка LEO Med: одинаковый вопрос, разные точки возврата, если кандидат не медик.
+ * Спец: docs/MED_VERTICAL_BRIEF.md
+ */
+const MED_CONFIRM_COPY = {
+  type: 'question',
+  label: 'LEO Med: подтверждение специальности',
+  instruction:
+    'Мы распознали в ответе кандидата медицинскую специальность (medRoleTitle). Назови эту должность и спроси, верно ли, что он ищет работу в медицине по ней. Попроси ответить «да» или «нет».',
+  fallbackText:
+    'Похоже, вы ищете работу в медицине. Верно? Ответьте «да» — соберу профиль по медицинской номенклатуре, «нет» — продолжим обычный подбор.',
+  placeholder: 'Ответьте «да» или «нет»',
+  collectKey: 'medConfirmed',
+} as const;
+
 export const JACK_SCENARIO: ScenarioDefinition = {
   id: 'jack-profile-v2',
   version: '2025-01-09',
@@ -59,7 +74,10 @@ export const JACK_SCENARIO: ScenarioDefinition = {
         'Отлично, запускаю быстрый подбор. Какую роль вы ищете? Например: Product Manager, аналитик, бэкенд-разработчик.',
       placeholder: 'Например: Senior Product Manager, удалёнка',
       collectKey: 'desired_role',
-      next: 'quick_experience',
+      next: {
+        default: 'quick_experience',
+        when: [{ condition: "medDetected === 'да'", to: 'med_confirm' }],
+      },
     },
     {
       id: 'quick_experience',
@@ -104,6 +122,131 @@ export const JACK_SCENARIO: ScenarioDefinition = {
           action: 'start_detailed_analysis',
         },
       ],
+      next: null,
+    },
+
+    // ============================================
+    // БЛОК 0.55: LEO Med — ветка медработника
+    // Вход: авто-детект медицинской должности по ответу на «желаемая роль».
+    // Спец: docs/MED_VERTICAL_BRIEF.md
+    // ============================================
+    {
+      ...MED_CONFIRM_COPY,
+      id: 'med_confirm',
+      next: {
+        default: 'quick_experience',
+        when: [{ condition: "medConfirmed === 'да'", to: 'med_skills' }],
+      },
+    },
+    {
+      ...MED_CONFIRM_COPY,
+      id: 'med_confirm_career',
+      next: {
+        default: 'total_experience',
+        when: [{ condition: "medConfirmed === 'да'", to: 'med_skills' }],
+      },
+    },
+    {
+      ...MED_CONFIRM_COPY,
+      id: 'med_confirm_pref',
+      next: {
+        default: 'desired_location',
+        when: [{ condition: "medConfirmed === 'да'", to: 'med_skills' }],
+      },
+    },
+    {
+      id: 'med_skills',
+      type: 'question',
+      label: 'LEO Med: навыки и обязанности',
+      instruction:
+        'Перечисли кандидату навыки из medSkillsPrefill и обязанности из medDutiesPrefill — это заготовка по его специальности, не медицинская рекомендация. Спроси, что убрать или добавить, либо подтвердить целиком. Если medSkillsPrefill и medDutiesPrefill пусты, вместо списка попроси самому перечислить ключевые навыки и манипуляции.',
+      fallbackText:
+        'Перечислите ключевые навыки и манипуляции по вашей специальности через запятую. Если я уже показал список — напишите «всё верно» либо что убрать и что добавить.',
+      placeholder: 'Например: всё верно; или: убрать эндоскопию, добавить УЗИ',
+      collectKey: 'medSkillsFeedback',
+      next: 'med_experience',
+    },
+    {
+      id: 'med_experience',
+      type: 'question',
+      label: 'LEO Med: опыт',
+      instruction:
+        'Спроси про опыт работы по медицинской специальности: сколько лет, в каких учреждениях, какой профиль отделения.',
+      fallbackText:
+        'Расскажите об опыте: сколько лет по специальности, в каких учреждениях работали и какой профиль отделения?',
+      placeholder: 'Например: 7 лет, городская больница, кардиология',
+      collectKey: 'careerSummary',
+      next: 'med_documents',
+    },
+    {
+      id: 'med_documents',
+      type: 'question',
+      label: 'LEO Med: документы и аккредитации',
+      instruction:
+        'Спроси про документы и аккредитации: сертификат специалиста, аккредитация и срок её действия, квалификационная категория, дополнительные курсы. Уточни, что перечислять надо только то, что есть.',
+      fallbackText:
+        'Какие у вас документы и аккредитации? Например: сертификат специалиста, аккредитация до 2028, первая категория. Перечислите только то, что есть.',
+      placeholder: 'Например: аккредитация до 2028, высшая категория',
+      collectKey: 'medDocuments',
+      next: 'med_city',
+    },
+    {
+      id: 'med_city',
+      type: 'question',
+      label: 'LEO Med: город',
+      instruction: 'Спроси, в каком городе или регионе кандидат ищет работу.',
+      fallbackText: 'В каком городе ищете работу?',
+      placeholder: 'Например: Москва',
+      collectKey: 'desired_location',
+      next: 'med_employment',
+    },
+    {
+      id: 'med_employment',
+      type: 'question',
+      label: 'LEO Med: формат занятости',
+      instruction:
+        'Спроси формат занятости и перечисли варианты: постоянная работа, совместительство, подработка, временная занятость.',
+      fallbackText:
+        'Какой формат занятости вам подходит: постоянная работа, совместительство, подработка или временная?',
+      placeholder: 'Например: совместительство',
+      collectKey: 'medEmployment',
+      next: 'med_consent',
+    },
+    {
+      id: 'med_consent',
+      type: 'question',
+      label: 'LEO Med: согласие на обработку ПДн',
+      instruction:
+        'Попроси согласие на обработку персональных данных по 152-ФЗ для создания и хранения профиля LEO Med и подбора вакансий. Подчеркни: профиль не передаётся клиникам и работодателям, согласие можно отозвать. Попроси ответить «да» или «нет».',
+      fallbackText:
+        'Чтобы сохранить профиль, нужно ваше согласие на обработку персональных данных (152-ФЗ): создание и хранение профиля LEO Med для подбора вакансий. Профиль не передаётся клиникам и работодателям — на это будет отдельное согласие. Отозвать можно в любой момент. Даёте согласие? Ответьте «да» или «нет».',
+      placeholder: 'Ответьте «да» или «нет»',
+      collectKey: 'medConsent',
+      next: {
+        default: 'med_ready',
+        when: [{ condition: "medConsent === 'нет'", to: 'med_no_consent' }],
+      },
+    },
+    {
+      id: 'med_ready',
+      type: 'info_card',
+      label: 'LEO Med: профиль сохранён',
+      title: '✅ Профиль медицинского специалиста сохранён',
+      description:
+        'Профиль по медицинской номенклатуре готов, подбираю вакансии по вашей специальности. Согласие на обработку данных можно отозвать в настройках профиля.',
+      cards: [],
+      commands: [{ id: 'med_open_vacancies', label: 'Вакансии', action: 'open_vacancies' }],
+      next: null,
+    },
+    {
+      id: 'med_no_consent',
+      type: 'info_card',
+      label: 'LEO Med: без согласия',
+      title: 'Профиль не сохранён',
+      description:
+        'Без согласия на обработку данных профиль не сохраняем. Вакансии по вашей специальности покажу и так — вернуться к согласию можно в любой момент.',
+      cards: [],
+      commands: [{ id: 'med_open_vacancies_anon', label: 'Вакансии', action: 'open_vacancies' }],
       next: null,
     },
 
@@ -197,7 +340,10 @@ export const JACK_SCENARIO: ScenarioDefinition = {
         'Расскажите кратко о вашем карьерном пути: с чего начинали и куда пришли? Например: «Начинал аналитиком, вырос до руководителя продукта в финтехе».',
       placeholder: 'Например: 7 лет в продакт-менеджменте, от аналитика до руководителя...',
       collectKey: 'careerSummary',
-      next: 'total_experience',
+      next: {
+        default: 'total_experience',
+        when: [{ condition: "medDetected === 'да'", to: 'med_confirm_career' }],
+      },
     },
     {
       id: 'total_experience',
@@ -565,7 +711,10 @@ export const JACK_SCENARIO: ScenarioDefinition = {
       fallbackText: 'Какую должность вы сейчас рассматриваете?',
       placeholder: 'Например: Head of Product, CPO, Senior PM',
       collectKey: 'desired_role',
-      next: 'desired_location',
+      next: {
+        default: 'desired_location',
+        when: [{ condition: "medDetected === 'да'", to: 'med_confirm_pref' }],
+      },
     },
     {
       id: 'desired_location',

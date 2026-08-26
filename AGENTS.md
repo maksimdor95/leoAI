@@ -31,6 +31,10 @@ AI-платформа карьерного развития: **Jack** (подб�
 - Hygiene revalidate: cron `revalidate-jobs` @:45 — HH + SJ + Getmatch + Habr + Geekjob + career_*; archive только явный gone (404/410); `JOB_REVALIDATE_SOURCES` для поэтапного rollout
 - Match: softCap≤97; LLM rerank top-N (`MATCH_LLM_RERANK_*`, meta `matchLayers.llmRerank`); Redis cache (`MATCH_CACHE_*`, `?fresh=1`); slim/capped response (`MATCH_RETURN_*`)
 - Insight (вакансии): one-click add gaps → `skills_hard`/`skills_soft` + rematch; `profileSignals.missingSkillsDetails`; courses carousel from static catalog; phase-4 `next_actions`
+- LEO Med (Phase 0–3): `services/job-matching/src/services/med/` + `data/med/`; taxonomy `med_taxonomy.json` from `docs/med/taxonomy_meditsina_rf.md`; `ENABLE_MED_VERTICAL`; `GET\|POST /api/jobs/med/*`
+- LEO Med вход — только чат: авто-детект по `desired_role` (`GET /api/jobs/med/map-role`) → ветка шагов `med_*` в `jackScenario` → consent A → `med_specialists`; вакансии в той же панели (`getMatchedJobs` берёт `findMedFeed` при `medRoleId`). Отдельных страниц `/med` нет
+- LEO Med taxonomy source: `docs/med/taxonomy_meditsina_rf.md` (Phase 2 input)
+- LEO Med DoD: skill `.cursor/skills/leo-med-phase-dod/` (`verify` / `ready` после каждой Phase)
 
 ## Команды
 

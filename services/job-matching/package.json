@@ -13,7 +13,8 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "test:db": "ts-node-dev --transpile-only src/test-connection.ts",
     "init:db": "ts-node-dev --transpile-only src/init-db.ts",
-    "worker:scrape": "ts-node --transpile-only src/workers/runScrapeWorker.ts"
+    "worker:scrape": "ts-node --transpile-only src/workers/runScrapeWorker.ts",
+    "med:generate-taxonomy": "node src/services/med/scripts/generateMedTaxonomy.cjs"
   },
   "keywords": [
     "job-matching",

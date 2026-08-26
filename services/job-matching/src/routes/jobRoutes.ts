@@ -31,6 +31,17 @@ router.get('/interactions/viewed', authenticateToken, getViewedJobIds);
 router.get('/catalog', requireJobCatalogAccess, jobsController.listJobCatalog);
 
 /**
+ * LEO Med Phase 1 — roles catalog + feed by profession (before /:jobId).
+ */
+router.get('/med/roles', jobsController.listMedRolesHandler);
+router.get('/med/feed', jobsController.getMedFeed);
+router.get('/med/map-role', jobsController.mapMedRoleHandler);
+router.get('/med/taxonomy', jobsController.getMedTaxonomy);
+router.post('/med/profiles', jobsController.createMedProfile);
+router.get('/med/profiles/stats', jobsController.getMedProfileStats);
+router.get('/med/profiles/:id', jobsController.getMedProfile);
+
+/**
  * GET /api/jobs/hh/salary-evaluation/:areaId
  * HH salary bank proxy (protected with admin/debug token middleware).
  */
@@ -70,6 +81,12 @@ router.post('/refresh', requireJobCatalogAccess, jobsController.refreshJobs);
  * even when the monolithic HH scrape is unstable.
  */
 router.post('/scrape/extended', requireJobCatalogAccess, jobsController.scrapeExtendedJobs);
+
+/**
+ * POST /api/jobs/scrape/med
+ * LEO Med ingest (HH+SJ medicine + active Med TG). Requires ENABLE_MED_VERTICAL=true.
+ */
+router.post('/scrape/med', requireJobCatalogAccess, jobsController.scrapeMedJobs);
 
 /**
  * POST /api/jobs/scrape/for-user/:userId

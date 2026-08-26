@@ -724,7 +724,17 @@ function matchLocation(
     return { points: 8, reason: 'Локация не указана' };
   }
 
-  const jobLocations = job.location.map((loc: string) => loc.toLowerCase());
+  const rawJobLocation = job.location as unknown;
+  const jobLocationList: string[] = Array.isArray(rawJobLocation)
+    ? rawJobLocation.map((loc) => String(loc))
+    : rawJobLocation && typeof rawJobLocation === 'object'
+      ? Object.values(rawJobLocation as Record<string, unknown>)
+          .filter((v) => typeof v === 'string' && v.trim())
+          .map((v) => String(v))
+      : typeof rawJobLocation === 'string' && rawJobLocation.trim()
+        ? [rawJobLocation]
+        : [];
+  const jobLocations = jobLocationList.map((loc: string) => loc.toLowerCase());
   const userLocationsLower = userLocations.map((loc: string) => loc.toLowerCase());
 
   for (const userLoc of userLocationsLower) {
