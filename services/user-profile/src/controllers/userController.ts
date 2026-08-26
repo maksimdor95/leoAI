@@ -211,6 +211,76 @@ export class UserController {
     }
   }
 
+  static async uploadAvatar(
+    req: AuthRequest & { file?: { buffer: Buffer; originalname: string; mimetype: string } },
+    res: Response
+  ) {
+    try {
+      if (!req.userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      if (!req.file?.buffer) {
+        return res.status(400).json({
+          error: 'Файл не передан. Используйте поле file (multipart/form-data).',
+        });
+      }
+      const user = await UserService.uploadAvatar(req.userId, {
+        buffer: req.file.buffer,
+        originalname: req.file.originalname,
+      });
+      return res.status(200).json({
+        message: 'Avatar updated',
+        user,
+      });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      logger.error('Upload avatar error:', error);
+      if (message === 'User not found') {
+        return res.status(404).json({ error: message });
+      }
+      return res.status(400).json({ error: message });
+    }
+  }
+
+  static async deleteAvatar(req: AuthRequest, res: Response) {
+    try {
+      if (!req.userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      const user = await UserService.deleteAvatar(req.userId);
+      return res.json({ message: 'Avatar removed', user });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      logger.error('Delete avatar error:', error);
+      if (message === 'User not found') {
+        return res.status(404).json({ error: message });
+      }
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /** Public: serve avatar image for <img src>. */
+  static async getAvatar(req: Request, res: Response) {
+    try {
+      const { userId } = req.params;
+      if (!userId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
+        return res.status(400).json({ error: 'Invalid user id' });
+      }
+      const file = await UserService.resolveAvatarFile(userId);
+      if (!file) {
+        return res.status(404).json({ error: 'Avatar not found' });
+      }
+      res.setHeader('Content-Type', file.contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      // Allow <img> from Next.js origin in local dev (different port).
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      return res.sendFile(file.absolutePath);
+    } catch (error: unknown) {
+      logger.error('Get avatar error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
   static async oauthStart(req: Request, res: Response) {
     if (req.params.provider === 'hh') {
       return HhIntegrationController.oauthStart(req as AuthRequest, res);

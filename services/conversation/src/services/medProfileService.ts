@@ -137,6 +137,42 @@ export interface MedSkillsSelection {
 }
 
 /**
+ * Текст вопроса med_skills с явным списком из таксономии (map-role prefill).
+ * Не зависит от LLM: список уже есть в collectedData после детекта роли.
+ * null — prefill пуст, пусть сработает обычный fallback / LLM.
+ */
+export function buildMedSkillsQuestionText(collected: Record<string, unknown>): string | null {
+  const skills = String(collected.medSkillsPrefill ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const duties = String(collected.medDutiesPrefill ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (skills.length === 0 && duties.length === 0) return null;
+
+  const role =
+    typeof collected.medRoleTitle === 'string' && collected.medRoleTitle.trim()
+      ? collected.medRoleTitle.trim()
+      : 'вашей специальности';
+
+  const lines: string[] = [
+    `По должности «${role}» собрал черновик из таксономии (это не медрекомендация). Проверьте список.`,
+  ];
+  if (skills.length > 0) {
+    lines.push('Навыки / манипуляции:');
+    for (const item of skills) lines.push(`• ${item}`);
+  }
+  if (duties.length > 0) {
+    lines.push('Обязанности:');
+    for (const item of duties) lines.push(`• ${item}`);
+  }
+  lines.push('Напишите «всё верно» либо что убрать и что добавить.');
+  return lines.join('\n');
+}
+
+/**
  * Свободная правка предзаполненного списка таксономии.
  * «всё верно» — оставляем как есть; упоминание с формулировкой удаления — вычёркиваем;
  * остальное считаем добавлением от пользователя.

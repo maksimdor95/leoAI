@@ -531,14 +531,22 @@ export class CareerService {
         ? (track.profile_data as ProfileDataPayload)
         : {};
 
+    // fields: shallow merge (incremental chat answers).
+    // enriched: replace when provided — deep-merge left stale achievements /
+    // role_family from a previous persona on the same track (e.g. product → med).
     const merged: ProfileDataPayload = {
       fields: { ...(existing.fields ?? {}), ...(payload.fields ?? {}) },
-      enriched: {
-        ...(existing.enriched ?? { version: 1 as const, enrichedAt: new Date().toISOString(), source: 'jack-profile-v2' as const }),
-        ...(payload.enriched ?? {}),
-        version: 1,
-        enrichedAt: payload.enriched?.enrichedAt ?? new Date().toISOString(),
-      },
+      enriched: payload.enriched
+        ? {
+            ...payload.enriched,
+            version: 1,
+            enrichedAt: payload.enriched.enrichedAt ?? new Date().toISOString(),
+          }
+        : existing.enriched ?? {
+            version: 1 as const,
+            enrichedAt: new Date().toISOString(),
+            source: 'jack-profile-v2' as const,
+          },
     };
 
     const result = await pool.query<CareerTrack>(

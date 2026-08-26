@@ -155,13 +155,21 @@ export const JACK_SCENARIO: ScenarioDefinition = {
       },
     },
     {
+      ...MED_CONFIRM_COPY,
+      id: 'med_confirm_resume',
+      next: {
+        default: 'resume_ready',
+        when: [{ condition: "medConfirmed === 'да'", to: 'med_skills' }],
+      },
+    },
+    {
       id: 'med_skills',
       type: 'question',
       label: 'LEO Med: навыки и обязанности',
       instruction:
         'Перечисли кандидату навыки из medSkillsPrefill и обязанности из medDutiesPrefill — это заготовка по его специальности, не медицинская рекомендация. Спроси, что убрать или добавить, либо подтвердить целиком. Если medSkillsPrefill и medDutiesPrefill пусты, вместо списка попроси самому перечислить ключевые навыки и манипуляции.',
       fallbackText:
-        'Перечислите ключевые навыки и манипуляции по вашей специальности через запятую. Если я уже показал список — напишите «всё верно» либо что убрать и что добавить.',
+        'Перечислите ключевые навыки и манипуляции по вашей специальности через запятую. Напишите список или «всё верно», если править нечего.',
       placeholder: 'Например: всё верно; или: убрать эндоскопию, добавить УЗИ',
       collectKey: 'medSkillsFeedback',
       next: 'med_experience',
@@ -233,9 +241,16 @@ export const JACK_SCENARIO: ScenarioDefinition = {
       label: 'LEO Med: профиль сохранён',
       title: '✅ Профиль медицинского специалиста сохранён',
       description:
-        'Профиль по медицинской номенклатуре готов, подбираю вакансии по вашей специальности. Согласие на обработку данных можно отозвать в настройках профиля.',
+        'Профиль по медицинской номенклатуре готов, подбираю вакансии по вашей специальности. Согласие на обработку данных можно отозвать в настройках профиля. «Уточнить пустые поля» — короткие вопросы только по незаполненным пунктам.',
       cards: [],
-      commands: [{ id: 'med_open_vacancies', label: 'Вакансии', action: 'open_vacancies' }],
+      commands: [
+        { id: 'med_open_vacancies', label: 'Вакансии', action: 'open_vacancies' },
+        {
+          id: 'med_fill_gaps',
+          label: 'Уточнить пустые поля',
+          action: 'fill_profile_gaps',
+        },
+      ],
       next: null,
     },
     {
@@ -246,7 +261,14 @@ export const JACK_SCENARIO: ScenarioDefinition = {
       description:
         'Без согласия на обработку данных профиль не сохраняем. Вакансии по вашей специальности покажу и так — вернуться к согласию можно в любой момент.',
       cards: [],
-      commands: [{ id: 'med_open_vacancies_anon', label: 'Вакансии', action: 'open_vacancies' }],
+      commands: [
+        { id: 'med_open_vacancies_anon', label: 'Вакансии', action: 'open_vacancies' },
+        {
+          id: 'med_fill_gaps_anon',
+          label: 'Уточнить пустые поля',
+          action: 'fill_profile_gaps',
+        },
+      ],
       next: null,
     },
 

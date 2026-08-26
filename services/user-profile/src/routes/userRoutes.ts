@@ -4,12 +4,26 @@
  */
 
 import { Router } from 'express';
+import multer from 'multer';
 import { UserController } from '../controllers/userController';
 import { HhIntegrationController } from '../controllers/hhIntegrationController';
 import { authenticateToken } from '../middleware/auth';
 import { authRateLimit, passwordResetRateLimit } from '../middleware/ipRateLimit';
 
 const router = Router();
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = /^image\/(jpeg|png|webp|gif)$/i.test(file.mimetype);
+    if (!ok) {
+      cb(new Error('Допустимы только изображения JPEG, PNG, WebP или GIF'));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 // Public routes
 router.post('/', authRateLimit, UserController.registerValidation, UserController.register);
@@ -34,8 +48,26 @@ router.get('/oauth/:provider/callback', UserController.oauthCallback);
 router.get('/integrations/hh', authenticateToken, HhIntegrationController.getStatus);
 router.delete('/integrations/hh', authenticateToken, HhIntegrationController.revoke);
 
+// Public avatar image (for <img src>)
+router.get('/:userId/avatar', UserController.getAvatar);
+
 // Protected routes (require authentication)
 router.get('/profile', authenticateToken, UserController.getProfile);
 router.put('/profile', authenticateToken, UserController.updateProfile);
+router.post(
+  '/profile/avatar',
+  authenticateToken,
+  (req, res, next) => {
+    avatarUpload.single('file')(req, res, (err: unknown) => {
+      if (err) {
+        const message = err instanceof Error ? err.message : 'Upload failed';
+        return res.status(400).json({ error: message });
+      }
+      return next();
+    });
+  },
+  UserController.uploadAvatar
+);
+router.delete('/profile/avatar', authenticateToken, UserController.deleteAvatar);
 
 export default router;

@@ -95,6 +95,52 @@ export const userAPI = {
     const response = await api.put('/api/users/profile', data);
     return response.data;
   },
+
+  uploadAvatar: async (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${API_URL}/api/users/profile/avatar`, {
+      method: 'POST',
+      credentials: 'include',
+      body: form,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error((data as { error?: string }).error || `HTTP ${res.status}`) as Error & {
+        response?: { data?: { error?: string }; status?: number };
+      };
+      err.response = { data: data as { error?: string }, status: res.status };
+      throw err;
+    }
+    return data as {
+      message: string;
+      user: {
+        id: string;
+        email: string;
+        first_name?: string;
+        last_name?: string;
+        avatar_url?: string;
+        created_at?: string;
+        updated_at?: string;
+      };
+    };
+  },
+
+  deleteAvatar: async () => {
+    const response = await api.delete('/api/users/profile/avatar');
+    return response.data as {
+      message: string;
+      user: {
+        id: string;
+        email: string;
+        first_name?: string;
+        last_name?: string;
+        avatar_url?: string;
+        created_at?: string;
+        updated_at?: string;
+      };
+    };
+  },
 };
 
 // Conversation API

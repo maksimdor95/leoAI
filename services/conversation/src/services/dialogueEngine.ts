@@ -92,11 +92,12 @@ import { logger } from '../utils/logger';
 import { triggerProfileDrivenScrape } from './integrationService';
 import {
   applyMedSkillsFeedback,
+  buildMedSkillsQuestionText,
   detectMedRole,
   normalizeMedEmployment,
   saveMedSpecialistProfile,
 } from './medProfileService';
-import { enrichAndPersistProfile } from './profileEnrichmentService';
+import { enrichAndPersistProfile, persistMedCareerTrack } from './profileEnrichmentService';
 
 // ============================================
 // РЕГИСТР СЦЕНАРИЕВ
@@ -412,6 +413,7 @@ const PROFILE_GAP_ALWAYS_SKIP = new Set([
   'med_confirm',
   'med_confirm_career',
   'med_confirm_pref',
+  'med_confirm_resume',
   'med_consent',
 ]);
 
@@ -540,6 +542,42 @@ export async function applyImportedCollectedData(
         collectedData: enriched,
         completedSteps: completed,
       });
+    }
+
+    // LEO Med: должность из резюме → та же развилка, что у quick/full (не IT resume_ready).
+    const roleRaw = enriched.desired_role ?? enriched.desiredRole;
+    if (typeof roleRaw === 'string' && roleRaw.trim() && !isMedPathMode(enriched)) {
+      const detection = await detectMedRole(roleRaw);
+      if (detection) {
+        const medCollected = {
+          ...enriched,
+          medDetected: 'да',
+          medRoleId: detection.medRoleId,
+          medRoleTitle: detection.medRoleTitle,
+          medLevel: detection.medLevel,
+          medSkillIds: detection.medSkillIds,
+          medDutyIds: detection.medDutyIds,
+          medSkillsPrefill: detection.medSkillsPrefill,
+          medDutiesPrefill: detection.medDutiesPrefill,
+        };
+        session.metadata.collectedData = medCollected;
+        logger.info(
+          `Resume import: medical role detected (${detection.medRoleId}), advancing to med_confirm_resume`
+        );
+        return prepareAssistantMessageForStepId(
+          session,
+          effectiveScenarioId,
+          'med_confirm_resume',
+          {
+            ...scenarioUpdates,
+            collectedData: medCollected,
+            completedSteps: completed,
+          }
+        );
+      }
+      enriched.medDetected = 'нет';
+      enriched.medRoleId = '';
+      session.metadata.collectedData = enriched;
     }
 
     logger.info('Resume import: profile ready, advancing to resume_ready');
@@ -855,6 +893,22 @@ async function buildQuestionMessage(
   const fillGapsMode = session.metadata.flags?.[FILL_PROFILE_GAPS_FLAG] === true;
   // Greeting + gap-fill: never invent a different topic (LLM once asked for resume upload on salary).
   const useFallbackOnly = step.id === 'greeting' || fillGapsMode;
+
+  // LEO Med: список навыков/обязанностей уже в collectedData после map-role — не ждём LLM.
+  if (step.id === 'med_skills') {
+    const withList = buildMedSkillsQuestionText(session.metadata.collectedData || {});
+    if (withList) {
+      return {
+        id: uuidv4(),
+        type: MessageType.QUESTION,
+        role: MessageRole.ASSISTANT,
+        timestamp: new Date().toISOString(),
+        sessionId: session.id,
+        question: withList,
+        placeholder: localized.placeholder ?? step.placeholder,
+      };
+    }
+  }
 
   if (!useFallbackOnly) {
     try {
@@ -1342,13 +1396,21 @@ async function handleFillProfileGapsCommand(
   const effectiveScenarioId = scenarioId || DEFAULT_SCENARIO_ID;
   const scenario = getScenario(effectiveScenarioId);
   const completed = Array.from(
-    new Set([...(session.metadata.completedSteps || []), 'resume_ready', 'quick_ready'])
+    new Set([
+      ...(session.metadata.completedSteps || []),
+      'resume_ready',
+      'quick_ready',
+      'med_ready',
+      'med_no_consent',
+    ])
   );
   session.metadata.completedSteps = completed;
 
   const gapStepId = findFirstProfileGapStepId(scenario, session.metadata.collectedData);
   if (!gapStepId) {
-    const stayOn = fallbackStepId || 'resume_ready';
+    const stayOn =
+      fallbackStepId ||
+      (isMedPathMode(session.metadata.collectedData) ? 'med_ready' : 'resume_ready');
     session.metadata.flags = {
       ...(session.metadata.flags || {}),
       [FILL_PROFILE_GAPS_FLAG]: false,
@@ -1360,8 +1422,9 @@ async function handleFillProfileGapsCommand(
         role: MessageRole.ASSISTANT,
         timestamp: new Date().toISOString(),
         sessionId: session.id,
-        content:
-          'Ключевые поля профиля уже заполнены. Нажмите «Показать рекомендации», чтобы открыть подбор вакансий. Поправить данные можно во вкладке «Профиль».',
+        content: isMedPathMode(session.metadata.collectedData)
+          ? 'Ключевые поля профиля уже заполнены. Нажмите «Вакансии», чтобы открыть подбор. Поправить данные можно во вкладке «Профиль».'
+          : 'Ключевые поля профиля уже заполнены. Нажмите «Показать рекомендации», чтобы открыть подбор вакансий. Поправить данные можно во вкладке «Профиль».',
       },
       metadataUpdates: {
         ...scenarioUpdates,
@@ -1419,6 +1482,38 @@ async function handleResumeReadyReply(
     },
     metadataUpdates: scenarioUpdates,
     nextStepId: null,
+  };
+}
+
+async function handleMedReadyReply(
+  session: ConversationSession,
+  scenarioId: string,
+  userMessageContent: string,
+  scenarioUpdates: PreparedStepResult['metadataUpdates']
+): Promise<PreparedStepResult> {
+  const lower = userMessageContent.toLowerCase();
+  const stayOn = session.metadata.currentStepId || 'med_ready';
+  if (
+    wantsDetailedProfileAnalysis(userMessageContent) ||
+    lower.includes('пробел') ||
+    lower.includes('заполнить') ||
+    lower.includes('уточнить')
+  ) {
+    return handleFillProfileGapsCommand(session, scenarioId, scenarioUpdates, stayOn);
+  }
+
+  return {
+    message: {
+      id: uuidv4(),
+      type: MessageType.TEXT,
+      role: MessageRole.ASSISTANT,
+      timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      content:
+        'Нажмите «Вакансии», чтобы открыть подбор по специальности. Или «Уточнить пустые поля» — короткие вопросы только по незаполненным пунктам. Поправить данные — вкладка «Профиль».',
+    },
+    metadataUpdates: scenarioUpdates,
+    nextStepId: stayOn,
   };
 }
 
@@ -3099,6 +3194,21 @@ export async function handleUserReply(
         }
       }
       return handleResumeReadyReply(session, scenarioId, userMessageContent, scenarioUpdates);
+    } else if (currentStep.id === 'med_ready' || currentStep.id === 'med_no_consent') {
+      if (session.metadata.flags?.[FILL_PROFILE_GAPS_FLAG] === true) {
+        const gapId = findFirstProfileGapStepId(
+          getScenario(scenarioId),
+          session.metadata.collectedData
+        );
+        if (gapId && gapId !== currentStep.id) {
+          logger.warn(
+            `fillProfileGaps: recovered stale ${currentStep.id}, resuming gap step ${gapId}`
+          );
+          session.metadata.currentStepId = gapId;
+          return handleUserReply(session, userMessageContent, authToken);
+        }
+      }
+      return handleMedReadyReply(session, scenarioId, userMessageContent, scenarioUpdates);
     } else {
       // For other info_card steps, automatically advance (existing behavior)
       const nextStepId = resolveNextStep(currentStep.next, session.metadata.collectedData);
@@ -3698,6 +3808,20 @@ export async function handleUserReply(
         if (profileId) {
           applyCollectedPatch(session, metadataUpdates, { medProfileId: profileId });
         }
+        // Mirror med persona into career_tracks so /account shows a separate direction chip.
+        if (authToken) {
+          const sessionId = session.id;
+          const token = authToken;
+          void (async () => {
+            try {
+              const live = await getSession(sessionId);
+              if (!live) return;
+              await persistMedCareerTrack(live, token);
+            } catch (err: unknown) {
+              logger.warn(`medConsent: career track persist failed: ${String(err)}`);
+            }
+          })();
+        }
       }
 
       // Enrichment is multi-call YandexGPT — do not block the next question (UI stuck on
@@ -3764,9 +3888,11 @@ export async function handleUserReply(
       nextStepId = gapId;
       logger.info(`fillProfileGaps: next gap step ${gapId}`);
     } else {
-      const readyStep = isResumePathMode(session.metadata.collectedData)
-        ? 'resume_ready'
-        : 'quick_ready';
+      const readyStep = isMedPathMode(session.metadata.collectedData)
+        ? 'med_ready'
+        : isResumePathMode(session.metadata.collectedData)
+          ? 'resume_ready'
+          : 'quick_ready';
       nextStepId = readyStep;
       metadataUpdates.flags = {
         ...(metadataUpdates.flags || {}),

@@ -1346,6 +1346,44 @@ html[data-theme='leo-dark'] .landing-preview-start-btn:hover {
   box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.18) !important;
 }
 
+/* Account page identity edit: Ant hover/focus must not flash white on dark theme */
+.leo-account-page--dark .ant-input,
+.leo-account-page--dark .ant-input-outlined {
+  color: #f8fafc !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.leo-account-page--dark .ant-input::placeholder {
+  color: rgba(148, 163, 184, 0.9) !important;
+}
+
+.leo-account-page--dark .ant-input:hover,
+.leo-account-page--dark .ant-input-outlined:hover {
+  color: #f8fafc !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(148, 163, 184, 0.45) !important;
+}
+
+.leo-account-page--dark .ant-input:focus,
+.leo-account-page--dark .ant-input-focused,
+.leo-account-page--dark .ant-input-outlined:focus,
+.leo-account-page--dark .ant-input-outlined.ant-input-focused {
+  color: #f8fafc !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(74, 222, 128, 0.7) !important;
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.18) !important;
+}
+
+.leo-account-page--dark .ant-input:-webkit-autofill,
+.leo-account-page--dark .ant-input:-webkit-autofill:hover,
+.leo-account-page--dark .ant-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc;
+  transition: background-color 99999s ease-out;
+  box-shadow: 0 0 0 1000px rgba(15, 23, 42, 0.95) inset !important;
+}
+
 /* Auth modal: shared button resets (both themes) */
 .auth-modal button.auth-text-btn {
   margin: 0;

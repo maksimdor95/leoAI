@@ -16,6 +16,7 @@ import { JACK_SCENARIO } from '../../scenario/jackScenario';
 import { MessageRole, MessageType } from '../../types/message';
 import { ConversationSession } from '../../types/session';
 import { ScenarioNextValue } from '../../types/scenario';
+import { detectMedRole } from '../medProfileService';
 
 // Mock the logger
 jest.mock('../../utils/logger', () => ({
@@ -25,6 +26,16 @@ jest.mock('../../utils/logger', () => ({
     error: jest.fn(),
   },
 }));
+
+jest.mock('../medProfileService', () => {
+  const actual = jest.requireActual('../medProfileService') as Record<string, unknown>;
+  return {
+    ...actual,
+    detectMedRole: jest.fn().mockResolvedValue(null),
+  };
+});
+
+const detectMedRoleMock = detectMedRole as jest.MockedFunction<typeof detectMedRole>;
 
 describe('dialogueEngine', () => {
   describe('evaluateCondition', () => {
@@ -208,6 +219,7 @@ describe('dialogueEngine', () => {
     });
 
     it('merges imported resume fields into session collectedData on resume path', async () => {
+      detectMedRoleMock.mockResolvedValueOnce(null);
       const session = {
         id: 's-resume',
         userId: 'u1',
@@ -231,6 +243,40 @@ describe('dialogueEngine', () => {
       expect(session.metadata.collectedData?.desired_role).toBe('Product Manager');
       expect(session.metadata.currentStepId).toBe('resume_ready');
       expect(session.metadata.completedSteps).toContain('resume_upload');
+    });
+
+    it('routes medical resume import to med_confirm_resume instead of IT resume_ready', async () => {
+      detectMedRoleMock.mockResolvedValueOnce({
+        medRoleId: 'doctor_vrach_terapevt',
+        medRoleTitle: 'Врач-терапевт',
+        medLevel: 'doctor',
+        medSkillIds: ['s1'],
+        medDutyIds: ['d1'],
+        medSkillsPrefill: 'ЭКГ',
+        medDutiesPrefill: 'Осмотр',
+      });
+      const session = {
+        id: 's-med-resume',
+        userId: 'u1',
+        metadata: {
+          product: 'jack',
+          scenarioId: 'jack-profile-v2',
+          currentStepId: 'resume_upload',
+          collectedData: { scenarioMode: 'готовое резюме' },
+          completedSteps: [],
+        },
+        messages: [],
+      } as unknown as ConversationSession;
+
+      await applyImportedCollectedData(session, {
+        desired_role: 'терапевт',
+        careerSummary: '7 лет в поликлинике',
+        desired_location: 'Москва',
+      });
+
+      expect(session.metadata.collectedData?.medDetected).toBe('да');
+      expect(session.metadata.collectedData?.medRoleId).toBe('doctor_vrach_terapevt');
+      expect(session.metadata.currentStepId).toBe('med_confirm_resume');
     });
 
     it('finds first empty profile gap after resume without restarting scenarios', () => {

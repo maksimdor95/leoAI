@@ -1,6 +1,6 @@
 import { JACK_SCENARIO } from '../../scenario/jackScenario';
 import { isMedPathMode, resolveNextStep, shouldSkipStepForProfileGaps } from '../dialogueEngine';
-import { applyMedSkillsFeedback, normalizeMedEmployment } from '../medProfileService';
+import { applyMedSkillsFeedback, buildMedSkillsQuestionText, normalizeMedEmployment } from '../medProfileService';
 import { normalizeYesNo, resolveCollectValueForStep } from '../../utils/numericStepAnswers';
 
 jest.mock('../../utils/logger', () => ({
@@ -36,6 +36,8 @@ describe('LEO Med branch inside Jack scenario', () => {
     expect(nextOf('med_confirm_pref', { medConfirmed: 'нет' })).toBe('desired_location');
     expect(nextOf('med_confirm_career', { medConfirmed: 'да' })).toBe('med_skills');
     expect(nextOf('med_confirm_career', { medConfirmed: 'нет' })).toBe('total_experience');
+    expect(nextOf('med_confirm_resume', { medConfirmed: 'да' })).toBe('med_skills');
+    expect(nextOf('med_confirm_resume', { medConfirmed: 'нет' })).toBe('resume_ready');
   });
 
   it('walks the med profile steps up to consent', () => {
@@ -74,6 +76,19 @@ describe('LEO Med branch inside Jack scenario', () => {
 describe('med taxonomy prefill editing', () => {
   const ids = ['s1', 's2', 's3'];
   const labels = ['ЭКГ', 'Ведение документации', 'Осмотр пациента'];
+
+  it('builds med_skills question with taxonomy list without LLM', () => {
+    const text = buildMedSkillsQuestionText({
+      medRoleTitle: 'Врач-терапевт',
+      medSkillsPrefill: 'ЭКГ, Осмотр пациента',
+      medDutiesPrefill: 'Собрать жалобы, Назначить лечение',
+    });
+    expect(text).toContain('Врач-терапевт');
+    expect(text).toContain('• ЭКГ');
+    expect(text).toContain('• Собрать жалобы');
+    expect(text).toContain('всё верно');
+    expect(buildMedSkillsQuestionText({})).toBeNull();
+  });
 
   it('keeps the whole prefill on confirmation', () => {
     expect(applyMedSkillsFeedback(ids, labels, 'всё верно')).toEqual({

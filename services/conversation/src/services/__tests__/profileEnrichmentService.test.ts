@@ -105,13 +105,14 @@ describe('enrichAndPersistProfile race safety', () => {
       .mockResolvedValueOnce(liveAfterGaps); // after metadata patch: persist fields
     mockUpdateSessionMetadata.mockResolvedValue(undefined);
 
-    // Career track resolve
+    // Career track resolve — sole generic track is reused + renamed for this role
     mockedAxios.get.mockImplementation(async (url: string) => {
       if (String(url).includes('/api/career/tracks')) {
-        return { data: { tracks: [{ id: 'track-1', is_default: true }] } };
+        return { data: { tracks: [{ id: 'track-1', is_default: true, name: 'Основной' }] } };
       }
       return { data: {} };
     });
+    mockedAxios.patch.mockResolvedValue({ data: { track: { id: 'track-1' } } });
 
     const result = await enrichAndPersistProfile(stale, 'token', 'merge_collected');
     expect(result).not.toBeNull();
@@ -138,8 +139,209 @@ describe('enrichAndPersistProfile race safety', () => {
       expect.any(Object)
     );
 
+    // Session linked to the career track (persona)
+    expect(mockUpdateSessionMetadata).toHaveBeenCalledWith('sess-1', {
+      collectedData: { career_track_id: 'track-1' },
+    });
+
     // In-memory stale snapshot must not become the Redis write payload for step/flags
     expect(mockUpdateSessionMetadata.mock.calls[0][1]).not.toHaveProperty('currentStepId');
     expect(mockUpdateSessionMetadata.mock.calls[0][1]).not.toHaveProperty('flags');
+  });
+
+  it('creates a new track when desired role differs from existing personas', async () => {
+    const session = baseSession({
+      metadata: {
+        ...baseSession().metadata,
+        collectedData: { desired_role: 'UX Researcher' },
+      },
+    });
+    mockGetSession.mockResolvedValue(session);
+    mockUpdateSessionMetadata.mockResolvedValue(undefined);
+
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (String(url).includes('/api/career/tracks')) {
+        return {
+          data: {
+            tracks: [
+              {
+                id: 'track-product',
+                is_default: true,
+                name: 'Product',
+                target_role: 'Head of Product',
+              },
+            ],
+          },
+        };
+      }
+      return { data: {} };
+    });
+    mockedAxios.post.mockImplementation(async (url: string, body?: unknown) => {
+      if (String(url).includes('derive-profile-signals')) {
+        return { data: { signals: { role_family: 'research' } } };
+      }
+      if (String(url).includes('enrich-profile')) {
+        return {
+          data: {
+            enriched: {
+              version: 1,
+              enrichedAt: '2026-01-01T00:00:00.000Z',
+              source: 'jack-profile-v2',
+              role_family: 'research',
+              job_preferences: { target_role: 'UX Researcher' },
+              profile_completeness: 0.5,
+            },
+          },
+        };
+      }
+      if (String(url).endsWith('/api/career/tracks')) {
+        expect(body).toEqual(
+          expect.objectContaining({
+            name: 'Research',
+            target_role: 'UX Researcher',
+            is_default: false,
+          })
+        );
+        return { data: { track: { id: 'track-research' } } };
+      }
+      if (String(url).includes('/api/career/profile')) {
+        return { data: {} };
+      }
+      return { data: {} };
+    });
+
+    const result = await enrichAndPersistProfile(session, 'token', 'desired_start');
+    expect(result).not.toBeNull();
+    expect(mockedAxios.put).toHaveBeenCalledWith(
+      expect.stringContaining('/tracks/track-research/profile-data'),
+      expect.any(Object),
+      expect.any(Object)
+    );
+    expect(mockUpdateSessionMetadata).toHaveBeenCalledWith('sess-1', {
+      collectedData: { career_track_id: 'track-research' },
+    });
+  });
+});
+
+describe('persistMedCareerTrack', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedAxios.get.mockResolvedValue({ data: {} });
+    mockedAxios.post.mockResolvedValue({ data: {} });
+    mockedAxios.put.mockResolvedValue({ data: {} });
+    mockedAxios.patch.mockResolvedValue({ data: {} });
+    mockUpdateSessionMetadata.mockResolvedValue(undefined);
+  });
+
+  it('does not overwrite sole track that already has a target_role', async () => {
+    const { persistMedCareerTrack } = await import('../profileEnrichmentService');
+    const session = baseSession({
+      metadata: {
+        ...baseSession().metadata,
+        collectedData: {
+          medRoleId: 'doctor_therapist',
+          medRoleTitle: 'Врач-терапевт',
+          medSkillLabels: ['АД'],
+        },
+      },
+    });
+
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (String(url).includes('/api/career/tracks')) {
+        return {
+          data: {
+            tracks: [
+              {
+                id: 'track-product',
+                is_default: true,
+                name: 'Основной',
+                target_role: 'Head of Product',
+              },
+            ],
+          },
+        };
+      }
+      return { data: {} };
+    });
+    mockedAxios.post.mockImplementation(async (url: string, body?: unknown) => {
+      if (String(url).endsWith('/api/career/tracks')) {
+        expect(body).toEqual(
+          expect.objectContaining({
+            target_role: 'Врач-терапевт',
+            is_default: false,
+          })
+        );
+        return { data: { track: { id: 'track-med-new' } } };
+      }
+      return { data: {} };
+    });
+
+    const trackId = await persistMedCareerTrack(session, 'token');
+    expect(trackId).toBe('track-med-new');
+    expect(mockedAxios.patch).not.toHaveBeenCalled();
+  });
+
+  it('creates a medicine career track from med collectedData', async () => {
+    const { persistMedCareerTrack } = await import('../profileEnrichmentService');
+    const session = baseSession({
+      metadata: {
+        ...baseSession().metadata,
+        collectedData: {
+          medRoleId: 'doctor_therapist',
+          medRoleTitle: 'Врач-терапевт',
+          medSkillLabels: ['АД', 'ЭКГ'],
+          desired_location: 'Москва',
+          careerSummary: '10 лет в поликлинике',
+        },
+      },
+    });
+
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (String(url).includes('/api/career/tracks')) {
+        return {
+          data: {
+            tracks: [
+              {
+                id: 'track-product',
+                is_default: true,
+                name: 'Product',
+                target_role: 'Head of Product',
+              },
+            ],
+          },
+        };
+      }
+      return { data: {} };
+    });
+    mockedAxios.post.mockImplementation(async (url: string, body?: unknown) => {
+      if (String(url).endsWith('/api/career/tracks')) {
+        expect(body).toEqual(
+          expect.objectContaining({
+            target_role: 'Врач-терапевт',
+            is_default: false,
+          })
+        );
+        return { data: { track: { id: 'track-med' } } };
+      }
+      if (String(url).includes('/api/career/profile')) {
+        return { data: {} };
+      }
+      return { data: {} };
+    });
+
+    const trackId = await persistMedCareerTrack(session, 'token');
+    expect(trackId).toBe('track-med');
+    expect(mockedAxios.put).toHaveBeenCalledWith(
+      expect.stringContaining('/tracks/track-med/profile-data'),
+      expect.objectContaining({
+        profile_data: expect.objectContaining({
+          enriched: expect.objectContaining({
+            role_family: 'medicine',
+            job_preferences: expect.objectContaining({ target_role: 'Врач-терапевт' }),
+          }),
+        }),
+      }),
+      expect.any(Object)
+    );
   });
 });

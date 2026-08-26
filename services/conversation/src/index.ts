@@ -1415,6 +1415,7 @@ io.use(async (socket, next) => {
 });
 
 io.on('connection', async (socket) => {
+  try {
   const user = socket.data.user as { userId: string; email: string } | undefined;
   if (!user) {
     logger.warn('Socket connection established without authenticated user');
@@ -1496,6 +1497,31 @@ io.on('connection', async (socket) => {
   // Join session room
   socket.join(`session:${hydratedSession.id}`);
   socket.emit('session:joined', { sessionId: hydratedSession.id });
+
+  // Backfill: med chat finished before career-track mirror existed.
+  const collected = (hydratedSession.metadata.collectedData || {}) as Record<string, unknown>;
+  const hasMedPersona =
+    (typeof collected.medProfileId === 'string' && collected.medProfileId) ||
+    (typeof collected.medRoleId === 'string' &&
+      Boolean(collected.medRoleId) &&
+      (collected.medConsent === 'да' || collected.medConfirmed === 'да'));
+  const hasTrack =
+    typeof collected.career_track_id === 'string' && Boolean(collected.career_track_id);
+  const socketToken =
+    typeof socket.handshake.auth?.token === 'string' ? socket.handshake.auth.token : undefined;
+  if (hasMedPersona && !hasTrack && socketToken) {
+    const sessionId = hydratedSession.id;
+    void (async () => {
+      try {
+        const { persistMedCareerTrack } = await import('./services/profileEnrichmentService');
+        const live = await getSession(sessionId);
+        if (!live) return;
+        await persistMedCareerTrack(live, socketToken);
+      } catch (err: unknown) {
+        logger.warn(`med career track backfill failed session=${sessionId}: ${String(err)}`);
+      }
+    })();
+  }
 
   // Store session ID in socket data for use in event handlers
   socket.data.sessionId = hydratedSession.id;
@@ -1681,6 +1707,15 @@ io.on('connection', async (socket) => {
   socket.on('disconnect', () => {
     logger.info(`User disconnected: ${user.userId}`);
   });
+  } catch (err: unknown) {
+    logger.error(`WebSocket connection setup failed: ${String(err)}`);
+    try {
+      socket.emit('error', { message: 'Не удалось подключить сессию. Обновите страницу.' });
+    } catch {
+      /* ignore emit failures on broken socket */
+    }
+    socket.disconnect();
+  }
 });
 
 // Start server

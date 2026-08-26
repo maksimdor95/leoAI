@@ -14,6 +14,9 @@ type PostgresError = {
 const isPostgresError = (error: unknown): error is PostgresError =>
   typeof error === 'object' && error !== null && 'code' in error;
 
+const USER_COLUMNS =
+  'id, email, password_hash, google_id, yandex_id, first_name, last_name, avatar_path, created_at, updated_at';
+
 export class UserRepository {
   /**
    * Create users table if it doesn't exist
@@ -38,6 +41,7 @@ export class UserRepository {
 
       ALTER TABLE jack.users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255);
       ALTER TABLE jack.users ADD COLUMN IF NOT EXISTS yandex_id VARCHAR(255);
+      ALTER TABLE jack.users ADD COLUMN IF NOT EXISTS avatar_path VARCHAR(512);
       CREATE INDEX IF NOT EXISTS idx_users_email ON jack.users(email);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id_unique
         ON jack.users(google_id) WHERE google_id IS NOT NULL;
@@ -62,7 +66,7 @@ export class UserRepository {
     const query = `
       INSERT INTO jack.users (email, password_hash, first_name, last_name)
       VALUES ($1, $2, $3, $4)
-      RETURNING id, email, password_hash, google_id, yandex_id, first_name, last_name, created_at, updated_at
+      RETURNING ${USER_COLUMNS}
     `;
 
     const values = [
@@ -90,7 +94,7 @@ export class UserRepository {
    */
   static async findByEmail(email: string): Promise<User | null> {
     const query = `
-      SELECT id, email, password_hash, google_id, yandex_id, first_name, last_name, created_at, updated_at
+      SELECT ${USER_COLUMNS}
       FROM jack.users
       WHERE email = $1
     `;
@@ -109,7 +113,7 @@ export class UserRepository {
    */
   static async findById(id: string): Promise<User | null> {
     const query = `
-      SELECT id, email, password_hash, google_id, yandex_id, first_name, last_name, created_at, updated_at
+      SELECT ${USER_COLUMNS}
       FROM jack.users
       WHERE id = $1
     `;
@@ -143,6 +147,10 @@ export class UserRepository {
       fields.push(`last_name = $${paramCount++}`);
       values.push(userData.last_name);
     }
+    if (userData.avatar_path !== undefined) {
+      fields.push(`avatar_path = $${paramCount++}`);
+      values.push(userData.avatar_path);
+    }
 
     if (fields.length === 0) {
       throw new Error('No fields to update');
@@ -155,7 +163,7 @@ export class UserRepository {
       UPDATE jack.users
       SET ${fields.join(', ')}
       WHERE id = $${paramCount}
-      RETURNING id, email, password_hash, google_id, yandex_id, first_name, last_name, created_at, updated_at
+      RETURNING ${USER_COLUMNS}
     `;
 
     try {
@@ -172,7 +180,7 @@ export class UserRepository {
 
   static async findByGoogleId(googleId: string): Promise<User | null> {
     const query = `
-      SELECT id, email, password_hash, google_id, yandex_id, first_name, last_name, created_at, updated_at
+      SELECT ${USER_COLUMNS}
       FROM jack.users
       WHERE google_id = $1
     `;
@@ -183,7 +191,7 @@ export class UserRepository {
 
   static async findByYandexId(yandexId: string): Promise<User | null> {
     const query = `
-      SELECT id, email, password_hash, google_id, yandex_id, first_name, last_name, created_at, updated_at
+      SELECT ${USER_COLUMNS}
       FROM jack.users
       WHERE yandex_id = $1
     `;
@@ -203,7 +211,7 @@ export class UserRepository {
     const query = `
       INSERT INTO jack.users (email, password_hash, first_name, last_name, google_id, yandex_id)
       VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, email, password_hash, google_id, yandex_id, first_name, last_name, created_at, updated_at
+      RETURNING ${USER_COLUMNS}
     `;
     const values = [
       userData.email,
