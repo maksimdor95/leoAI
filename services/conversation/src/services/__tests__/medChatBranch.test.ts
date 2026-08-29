@@ -87,6 +87,8 @@ describe('med taxonomy prefill editing', () => {
     expect(text).toContain('• ЭКГ');
     expect(text).toContain('• Собрать жалобы');
     expect(text).toContain('всё верно');
+    expect(text).toMatch(/\n\nНавыки \/ манипуляции:\n• ЭКГ\n• Осмотр пациента/);
+    expect(text).toMatch(/\n\nОбязанности:\n• Собрать жалобы\n• Назначить лечение/);
     expect(buildMedSkillsQuestionText({})).toBeNull();
   });
 

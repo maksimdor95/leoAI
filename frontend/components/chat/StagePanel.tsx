@@ -16,6 +16,85 @@ import { useHumeTheme } from '@/lib/useHumeTheme';
 
 const VACANCY_PROFILE_CARD_TITLE = 'Профиль вакансии и план подготовки';
 
+/** Список с «•»: заголовки секций жирные, пункты мельче и тоньше. */
+function StageQuestionText({ text, isHume }: { text: string; isHume: boolean }) {
+  const lines = text.split('\n');
+  const hasBullets = lines.some((line) => line.trimStart().startsWith('•'));
+
+  if (!hasBullets) {
+    return (
+      <h2
+        className={
+          isHume
+            ? 'hume-stage-heading text-left w-full break-words whitespace-pre-line leading-snug'
+            : 'leo-stage-heading text-left w-full break-words whitespace-pre-line text-sm font-semibold leading-snug text-white sm:text-base'
+        }
+      >
+        {text}
+      </h2>
+    );
+  }
+
+  return (
+    <div
+      className={
+        isHume
+          ? 'hume-stage-heading text-left w-full space-y-1 break-words'
+          : 'leo-stage-heading text-left w-full space-y-1 break-words text-white'
+      }
+      role="heading"
+      aria-level={2}
+    >
+      {lines.map((line, index) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          return <div key={`gap-${index}`} className="h-1.5" aria-hidden />;
+        }
+        if (trimmed.startsWith('•')) {
+          return (
+            <p
+              key={`item-${index}`}
+              className={
+                isHume
+                  ? 'hume-body-sm !text-[12px] !font-normal leading-snug pl-0.5'
+                  : 'text-xs font-normal leading-snug text-slate-300 sm:text-[13px]'
+              }
+            >
+              {trimmed}
+            </p>
+          );
+        }
+        if (trimmed.endsWith(':')) {
+          return (
+            <p
+              key={`section-${index}`}
+              className={
+                isHume
+                  ? 'text-sm font-semibold leading-snug pt-0.5'
+                  : 'text-sm font-semibold leading-snug text-white pt-0.5'
+              }
+            >
+              {trimmed}
+            </p>
+          );
+        }
+        return (
+          <p
+            key={`para-${index}`}
+            className={
+              isHume
+                ? 'text-sm font-medium leading-snug'
+                : 'text-sm font-medium leading-snug text-white'
+            }
+          >
+            {trimmed}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export type PrepModeStageContent = {
   modeLabel: string;
   content: string;
@@ -63,7 +142,14 @@ type StagePanelProps = {
     disabled?: boolean;
   };
   /** Быстрые ответы-чипы под вопросом (например, выбор сценария подбора). */
-  quickReplies?: Array<{ label: string; value: string; hint?: string; fullWidth?: boolean }>;
+  quickReplies?: Array<{
+    label: string;
+    value: string;
+    hint?: string;
+    fullWidth?: boolean;
+    /** If set, opens URL instead of sending a chat answer. */
+    href?: string;
+  }>;
   onQuickReply?: (value: string) => void;
   /** Прогресс детального пути Jack: «Вопрос 12 из 36». */
   detailedProgressLabel?: string | null;
@@ -170,15 +256,7 @@ export function StagePanel({
                 </span>
               ) : null}
             </div>
-            <h2
-              className={
-                isHume
-                  ? 'hume-stage-heading text-left w-full break-words leading-snug'
-                  : 'leo-stage-heading text-left w-full break-words text-sm font-semibold leading-snug text-white sm:text-base'
-              }
-            >
-              {question.question}
-            </h2>
+            <StageQuestionText text={question.question} isHume={isHume} />
             {question.placeholder && (
               <p
                 className={
@@ -194,9 +272,15 @@ export function StagePanel({
               <div className="flex w-full flex-wrap gap-1.5 pt-0.5">
                 {quickReplies.map((reply) => (
                   <button
-                    key={reply.value}
+                    key={`${reply.label}:${reply.value}:${reply.href ?? ''}`}
                     type="button"
-                    onClick={() => onQuickReply(reply.value)}
+                    onClick={() => {
+                      if (reply.href) {
+                        window.open(reply.href, '_blank', 'noopener,noreferrer');
+                        return;
+                      }
+                      onQuickReply(reply.value);
+                    }}
                     className={[
                       isHume
                         ? 'group/qr inline-flex flex-col items-start rounded-xl border border-[rgba(34,34,34,0.12)] bg-[var(--color-paper)] px-3 py-2 text-left transition-colors hover:border-[rgba(34,34,34,0.18)] hover:bg-[var(--color-bone)] active:scale-[0.98]'

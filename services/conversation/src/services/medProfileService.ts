@@ -161,14 +161,14 @@ export function buildMedSkillsQuestionText(collected: Record<string, unknown>): 
     `По должности «${role}» собрал черновик из таксономии (это не медрекомендация). Проверьте список.`,
   ];
   if (skills.length > 0) {
-    lines.push('Навыки / манипуляции:');
+    lines.push('', 'Навыки / манипуляции:');
     for (const item of skills) lines.push(`• ${item}`);
   }
   if (duties.length > 0) {
-    lines.push('Обязанности:');
+    lines.push('', 'Обязанности:');
     for (const item of duties) lines.push(`• ${item}`);
   }
-  lines.push('Напишите «всё верно» либо что убрать и что добавить.');
+  lines.push('', 'Напишите «всё верно» либо что убрать и что добавить.');
   return lines.join('\n');
 }
 

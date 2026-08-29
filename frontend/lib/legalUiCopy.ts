@@ -48,9 +48,19 @@ const privacy: Record<AppLocale, LegalDocument> = {
         ],
       },
       {
+        title: '4.1. LEO Med — профиль медицинского специалиста',
+        text: [
+          'В сценарии подбора вакансий LEO Med мы можем сохранять профиль соискателя (должность, навыки, обязанности, опыт, документы/аккредитации, город, тип занятости) только после явного согласия на обработку персональных данных (согласие A).',
+          'Согласие A нужно для создания и хранения профиля в LEO Med и подбора вакансий. Оно не означает передачу профиля клиникам или иным работодателям.',
+          'Показ или передача профиля медицинским организациям-работодателям возможны только после отдельного согласия (согласие B), когда такая функция появится в продукте.',
+          'Отозвать согласие и запросить удаление профиля можно через настройки аккаунта, Telegram-поддержку или email hello@leo-ai.ru.',
+          'Факт согласия фиксируется с датой и версией текста согласия.',
+        ],
+      },
+      {
         title: '5. Хранение и безопасность',
         text: [
-          'Мы храним данные столько, сколько это необходимо для работы сервиса, поддержки пользователя, выполнения юридических обязанностей и защиты от споров.',
+          'Мы храним данные столько, сколько это необходимо для работы сервиса, поддержки пользователя, выполнения юридических обязанностей и защиты от споров. Профиль LEO Med хранится до отзыва согласия или удаления профиля, если иное не требуется законом.',
           'Мы применяем разумные технические и организационные меры защиты, но ни один способ передачи или хранения данных не является абсолютно безопасным.',
         ],
       },
@@ -109,9 +119,19 @@ const privacy: Record<AppLocale, LegalDocument> = {
         ],
       },
       {
+        title: '4.1. LEO Med specialist profile',
+        text: [
+          'In the LEO Med job-matching flow we may store a specialist profile (role, skills, duties, experience, documents/accreditations, city, employment type) only after explicit consent to personal data processing (consent A).',
+          'Consent A covers creating and storing the profile in LEO Med for job matching. It does not authorize sharing the profile with clinics or other employers.',
+          'Showing or transferring the profile to healthcare employers requires a separate consent (consent B) when that product feature exists.',
+          'You may withdraw consent and request profile deletion via account settings, Telegram support, or hello@leo-ai.ru.',
+          'Consent is logged with a timestamp and consent text version.',
+        ],
+      },
+      {
         title: '5. Retention and security',
         text: [
-          'We retain data as long as needed to operate the service, support users, meet legal obligations, and protect against disputes.',
+          'We retain data as long as needed to operate the service, support users, meet legal obligations, and protect against disputes. A LEO Med profile is kept until consent is withdrawn or the profile is deleted, unless law requires otherwise.',
           'We apply reasonable technical and organizational safeguards, but no method of transmission or storage is completely secure.',
         ],
       },

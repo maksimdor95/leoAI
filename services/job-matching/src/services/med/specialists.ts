@@ -6,7 +6,7 @@ import pool from '../../config/database';
 import { getMedRoleById } from './catalog';
 import type { MedRoleLevel } from './types';
 
-export const CONSENT_A_VERSION = 'med-a-2026-08-26';
+export const CONSENT_A_VERSION = 'med-a-2026-08-29';
 export const CONSENT_B_VERSION = 'med-b-2026-08-26';
 
 export const MED_EMPLOYMENT_TYPES = [

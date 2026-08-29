@@ -2573,6 +2573,12 @@ const PREP_COMPLETE_CARD_TITLE = 'Подготовка завершена!';
         return [
           { label: 'Даю согласие', value: 'Да', hint: 'Хранение профиля, 152-ФЗ' },
           { label: 'Не сейчас', value: 'Нет', hint: 'Профиль не сохраняем' },
+          {
+            label: 'Политика',
+            value: '__privacy__',
+            hint: 'Откроется /privacy',
+            href: '/privacy',
+          },
         ];
       }
       if (sessionCurrentStepId && sessionCurrentStepId !== 'greeting') {
