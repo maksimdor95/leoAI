@@ -9,6 +9,11 @@ html {
   scroll-behavior: smooth;
   height: 100%;
   overflow-x: hidden;
+  overscroll-behavior-y: none;
+}
+
+body {
+  overscroll-behavior-y: none;
 }
 
 html[data-theme='leo-dark'] body {
@@ -103,19 +108,19 @@ html[data-theme='leo-dark'] .leo-hero-shell {
 }
 
 html[data-theme='hume'] .leo-hero-content {
-  padding-top: 1.5rem;
-  padding-bottom: 4rem;
+  padding-top: 0.75rem;
+  padding-bottom: 3rem;
 }
 
 @media (min-width: 640px) {
   html[data-theme='hume'] .leo-hero-content {
-    padding-top: 2rem;
+    padding-top: 1rem;
   }
 }
 
 @media (min-width: 1024px) {
   html[data-theme='hume'] .leo-hero-content {
-    padding-top: 4rem;
+    padding-top: 1.25rem;
   }
 }
 
@@ -130,13 +135,13 @@ html[data-theme='leo-dark'] .leo-hero-copy {
   padding-top: 0;
 }
 
-/* Light theme: brand sits below the wave canvas */
+/* Light theme: brand sits just under the wave line, not mid-void */
 html[data-theme='hume'] .leo-hero-copy {
-  padding-top: 40px;
+  padding-top: 0.5rem;
 }
 
 html[data-theme='hume'] .leo-hero-copy h1 {
-  margin-top: 40px;
+  margin-top: 0.25rem;
 }
 
 html[data-theme='hume'] .landing-hero-brand-leo,
