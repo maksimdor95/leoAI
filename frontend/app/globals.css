@@ -12,10 +12,6 @@ html {
   overscroll-behavior-y: none;
 }
 
-body {
-  overscroll-behavior-y: none;
-}
-
 html[data-theme='leo-dark'] body {
   background-color: #050913;
   color: #fff;
@@ -204,6 +200,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+  overscroll-behavior-y: none;
 }
 
 #__next {
