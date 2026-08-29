@@ -17,7 +17,8 @@ export const HERO_BRAND_SUFFIXES = [
   'Data',
 ] as const;
 
-const ROTATE_MS = 20_000;
+/** Hero suffix cadence — 20s felt “stuck” on Med; keep animation readable. */
+const ROTATE_MS = 3_500;
 const ANIM_MS = 560;
 
 function pickRandomSuffix(current: string): string {
@@ -85,7 +86,9 @@ export function HeroBrandRotator({ suffix, phase, textClassName }: HeroBrandRota
 
   return (
     <span className="landing-hero-brand-slot">
-      <span className={`${tileClass} ${textClassName}`}>{suffix}</span>
+      <span key={suffix} className={`${tileClass} ${textClassName}`}>
+        {suffix}
+      </span>
     </span>
   );
 }
