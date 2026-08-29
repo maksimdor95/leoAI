@@ -18,12 +18,8 @@ type HumeHeroWaveCanvasProps = {
   onCanvasBroken?: () => void;
 };
 
-const HUME_BG_STOPS: [number, string][] = [
-  [0, '#F0F0F0'],
-  [0.4, '#F5F8E0'],
-  [0.7, '#FFF0D8'],
-  [1, '#EDD8F0'],
-];
+/** Same as Hume `--color-bone` so the wave band blends into the page (no gray void). */
+const HUME_PAGE_BG = '#fff9f3';
 
 const STRAND_COUNT = 22;
 const CROSS_STRAND_COUNT = 11;
@@ -69,11 +65,7 @@ function strokeGradient(
 }
 
 function paintHumeBackground(ctx: CanvasRenderingContext2D, w: number, h: number): void {
-  const bg = ctx.createLinearGradient(0, 0, w, h);
-  for (const [stop, color] of HUME_BG_STOPS) {
-    bg.addColorStop(stop, color);
-  }
-  ctx.fillStyle = bg;
+  ctx.fillStyle = HUME_PAGE_BG;
   ctx.fillRect(0, 0, w, h);
 }
 
